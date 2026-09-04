@@ -100,12 +100,12 @@ export function Settings() {
   }
 
   return (
-    <div className="h-full flex-1 overflow-y-auto px-8 pb-10 pt-10">
-      <div className="drag-region mb-6">
+    <div className="pointer-events-none h-full flex-1 overflow-y-auto px-8 pb-10 pt-10">
+      <div className="drag-region pointer-events-auto mb-6">
         <h1 className="text-[20px] font-semibold text-label-primary">{t("settings.title")}</h1>
       </div>
 
-      <div className="no-drag mx-auto max-w-lg">
+      <div className="no-drag pointer-events-auto mx-auto max-w-lg">
         <SettingsSection title={t("settings.storage")}>
           <SettingsRow label={t("settings.storageLocation")} description={storageInfo?.path ?? settings?.storagePath}>
             <Button size="sm" variant="secondary" onClick={() => openDataFolder("storage")}>

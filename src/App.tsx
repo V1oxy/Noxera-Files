@@ -1,6 +1,7 @@
 import { FolderPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { BackgroundLogo } from "@/components/BackgroundLogo";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { ProjectModal } from "@/components/ProjectModal";
@@ -60,33 +61,38 @@ function MainShell() {
         settingsActive={view === "settings"}
       />
 
-      {view === "settings" ? (
-        <Settings />
-      ) : selectedProject ? (
-        <ProjectView
-          key={selectedProject.id}
-          project={selectedProject}
-          navResetSignal={navResetNonce}
-          onProjectUpdated={() => refreshProjects()}
-          onProjectDeleted={async () => {
-            setSelectedProjectId(null);
-            await refreshProjects();
-          }}
-        />
-      ) : (
-        <div className="flex flex-1 items-center justify-center">
-          <EmptyState
-            icon={FolderPlus}
-            title={t("projects.emptyTitle")}
-            description={t("projects.emptyDescription")}
-            action={
-              <Button variant="primary" onClick={() => setCreateOpen(true)}>
-                {t("sidebar.newProject")}
-              </Button>
-            }
+      <div className="relative isolate flex flex-1 flex-col overflow-hidden">
+        <BackgroundLogo />
+
+        {view === "settings" ? (
+          <Settings />
+        ) : selectedProject ? (
+          <ProjectView
+            key={selectedProject.id}
+            project={selectedProject}
+            navResetSignal={navResetNonce}
+            onProjectUpdated={() => refreshProjects()}
+            onProjectDeleted={async () => {
+              setSelectedProjectId(null);
+              await refreshProjects();
+            }}
           />
-        </div>
-      )}
+        ) : (
+          <div className="pointer-events-none flex flex-1 items-center justify-center">
+            <EmptyState
+              className="pointer-events-auto"
+              icon={FolderPlus}
+              title={t("projects.emptyTitle")}
+              description={t("projects.emptyDescription")}
+              action={
+                <Button variant="primary" onClick={() => setCreateOpen(true)}>
+                  {t("sidebar.newProject")}
+                </Button>
+              }
+            />
+          </div>
+        )}
+      </div>
 
       <ProjectModal
         open={createOpen}

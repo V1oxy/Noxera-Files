@@ -134,7 +134,7 @@ export function ExpandableDescription({
 
       {expanded ? (
         <div
-          className="overflow-y-auto overflow-x-hidden pr-1"
+          className="no-drag overflow-y-auto overflow-x-hidden pr-1"
           style={{ maxHeight: expandedMaxHeight }}
         >
           <p

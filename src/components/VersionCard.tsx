@@ -1,4 +1,4 @@
-import { Check, Download, Pencil, RotateCcw, Trash2, X } from "lucide-react";
+import { Check, Download, ExternalLink, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/Button";
@@ -11,13 +11,14 @@ import { formatBytes, formatFullDateTime } from "@/utils/format";
 interface VersionCardProps {
   version: FileVersion;
   isCurrent: boolean;
+  onOpen: (version: FileVersion) => void;
   onDownload: (version: FileVersion) => void;
   onRestore: (version: FileVersion) => void;
   onDelete: (version: FileVersion) => void;
   onEditDescription: (version: FileVersion, description: string) => Promise<void>;
 }
 
-export function VersionCard({ version, isCurrent, onDownload, onRestore, onDelete, onEditDescription }: VersionCardProps) {
+export function VersionCard({ version, isCurrent, onOpen, onDownload, onRestore, onDelete, onEditDescription }: VersionCardProps) {
   const { t, locale, translateError } = useLanguage();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(version.description ?? "");
@@ -78,7 +79,7 @@ export function VersionCard({ version, isCurrent, onDownload, onRestore, onDelet
             disabled={saving}
             rows={3}
             placeholder={t("version.descriptionInputPlaceholder")}
-            className="max-h-40 min-h-[4.5rem] w-full resize-y overflow-y-auto rounded-apple-sm border border-surface-border bg-black/[0.03] p-2 text-[12.5px] leading-relaxed text-label-primary placeholder:text-label-tertiary outline-none focus:border-accent/50 focus:bg-surface-content disabled:opacity-50 dark:bg-white/[0.05]"
+            className="max-h-40 min-h-[4.5rem] w-full resize-y overflow-y-auto rounded-apple-sm bg-black/[0.03] p-2 text-[12.5px] leading-relaxed text-label-primary placeholder:text-label-tertiary outline-none focus-visible:outline-none focus:bg-surface-content disabled:opacity-50 dark:bg-white/[0.05]"
             style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
           />
           {error && <p className="mt-1.5 text-[11.5px] text-danger">{error}</p>}
@@ -114,7 +115,11 @@ export function VersionCard({ version, isCurrent, onDownload, onRestore, onDelet
         </div>
       )}
 
-      <div className="mt-2.5 flex gap-1.5">
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <Button size="sm" variant="secondary" onClick={() => onOpen(version)}>
+          <ExternalLink size={13} />
+          {t("menu.open")}
+        </Button>
         <Button size="sm" variant="secondary" onClick={() => onDownload(version)}>
           <Download size={13} />
           {t("common.download")}

@@ -11,6 +11,7 @@ interface VersionHistoryProps {
   loading: boolean;
   onClose: () => void;
   onUploadNewVersion: () => void;
+  onOpen: (version: FileVersion) => void;
   onDownload: (version: FileVersion) => void;
   onRestore: (version: FileVersion) => void;
   onDelete: (version: FileVersion) => void;
@@ -23,6 +24,7 @@ export function VersionHistory({
   loading,
   onClose,
   onUploadNewVersion,
+  onOpen,
   onDownload,
   onRestore,
   onDelete,
@@ -67,6 +69,7 @@ export function VersionHistory({
                 key={v.id}
                 version={v}
                 isCurrent={v.id === detail.currentVersionId}
+                onOpen={onOpen}
                 onDownload={onDownload}
                 onRestore={onRestore}
                 onDelete={onDelete}

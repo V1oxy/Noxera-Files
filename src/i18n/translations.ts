@@ -104,6 +104,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "delete.folderMessage": "This folder and everything inside it (subfolders and files, with all their versions) will be deleted from this computer. This action cannot be undone.",
     "delete.projectTitle": "Delete Project?",
     "delete.projectMessage": "The project and all associated files will be deleted from this computer. This action cannot be undone.",
+    "delete.typeToConfirm": 'Please type "{name}" to confirm.',
 
     // Rename modals
     "rename.fileTitle": "Rename File",
@@ -288,6 +289,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "delete.folderMessage": "Эта папка и всё её содержимое (вложенные папки и файлы со всеми версиями) будут удалены с компьютера. Это действие нельзя отменить.",
     "delete.projectTitle": "Удалить проект?",
     "delete.projectMessage": "Проект и все связанные с ним файлы будут удалены с компьютера. Это действие нельзя отменить.",
+    "delete.typeToConfirm": "Введите «{name}», чтобы подтвердить.",
 
     // Rename modals
     "rename.fileTitle": "Переименование файла",

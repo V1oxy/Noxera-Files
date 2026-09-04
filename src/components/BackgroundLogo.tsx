@@ -2,10 +2,17 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 /**
  * Decorative "noxera" wordmark tucked into the bottom-right corner of the
- * files panel - part of the background, not a UI control, so it stays very
- * low opacity and never sits above interactive rows (z-0, behind the
- * scrollable list). It's still a real link: hovering brightens it slightly
- * and clicking opens the marketing site.
+ * main content area - part of the background, not a UI control, so it
+ * stays very low opacity. Rendered once at the app shell level (not inside
+ * a particular view) so it shows up the same way whether a project is open,
+ * the project list is empty, or Settings is showing.
+ *
+ * It sits earlier in document order than the view content next to it, so
+ * any real (positioned) row/card painted in that same corner still shows on
+ * top of it - the surrounding scroll containers are pointer-events-none
+ * (with pointer-events-auto restored on their actual content) precisely so
+ * clicks in the genuinely empty background still reach this link instead of
+ * being swallowed by an invisible scrollable div.
  */
 export function BackgroundLogo() {
   return (
@@ -16,7 +23,7 @@ export function BackgroundLogo() {
       onClick={() => {
         void openUrl("https://noxera.ru/");
       }}
-      className="no-drag pointer-events-auto absolute bottom-4 right-4 -z-10 w-32 text-label-primary opacity-[0.05] transition-opacity duration-200 hover:opacity-[0.14] focus-visible:opacity-[0.14]"
+      className="no-drag pointer-events-auto absolute bottom-4 right-4 z-0 w-32 text-label-primary opacity-[0.05] transition-opacity duration-200 hover:opacity-[0.14] focus-visible:opacity-[0.14]"
     >
       <svg viewBox="0 0 430.88893 70" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
         <path

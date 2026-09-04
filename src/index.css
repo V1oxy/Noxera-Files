@@ -15,8 +15,8 @@
   --label-secondary: rgba(60, 60, 67, 0.6);
   --label-tertiary: rgba(60, 60, 67, 0.35);
 
-  --accent: #007aff;
-  --accent-hover: #0066d6;
+  --accent: #7bc133;
+  --accent-hover: #619928;
   --danger: #ff3b30;
   --danger-hover: #e0342b;
 
@@ -40,8 +40,8 @@
   --label-secondary: rgba(235, 235, 245, 0.6);
   --label-tertiary: rgba(235, 235, 245, 0.35);
 
-  --accent: #0a84ff;
-  --accent-hover: #3d9aff;
+  --accent: #8ace45;
+  --accent-hover: #9ed665;
   --danger: #ff453a;
   --danger-hover: #ff6259;
 

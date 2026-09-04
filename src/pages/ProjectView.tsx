@@ -208,6 +208,18 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
     }
   }
 
+  async function handleOpenVersion(version: FileVersion) {
+    try {
+      await openVersion(version.id);
+    } catch (e) {
+      showToast({
+        title: t("toast.openFileError"),
+        description: e instanceof ApiError ? translateError(e.message) : undefined,
+        variant: "error",
+      });
+    }
+  }
+
   async function handleDownloadFile(file: FileEntry) {
     if (!file.currentVersion) return;
     await handleDownloadVersion(file.currentVersion);
@@ -394,6 +406,7 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
           if (paths.length === 0) return;
           setUploadTarget({ mode: "new-version", file: detail, sourcePath: paths[0] });
         }}
+        onOpen={handleOpenVersion}
         onDownload={handleDownloadVersion}
         onRestore={(v) => setRestoreTarget(v)}
         onDelete={(v) => setDeleteVersionTarget(v)}
@@ -502,6 +515,7 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         open={deleteProjectOpen}
         title={t("delete.projectTitle")}
         message={t("delete.projectMessage")}
+        confirmValue={project.name}
         onCancel={() => setDeleteProjectOpen(false)}
         onConfirm={handleDeleteProject}
       />
