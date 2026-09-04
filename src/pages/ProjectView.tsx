@@ -58,13 +58,46 @@ interface ProjectViewProps {
   onProjectDeleted: () => void;
 }
 
+// Rows sit `space-y-0.5` (2px) apart, and a real mouse/trackpad release
+// lands in that gap - or right on a row's rounded-corner edge - often
+// enough that a strict elementFromPoint hit-test would silently resolve to
+// "no target" there, even though the row was highlighted as active a
+// moment earlier. That made a drop right at a folder's edge fall back to
+// the project root instead of that folder - looking like the highlight and
+// the "add to project root" behavior were firing at once. This tolerance
+// is deliberately smaller than half the inter-row gap so two rows' padded
+// boxes can never both claim the same point; findNearestDropTarget also
+// picks the closest candidate rather than the first match, so even a point
+// that (due to rounding) falls inside more than one padded box resolves to
+// the row it's actually nearest to.
+const ROW_HIT_PADDING = 3;
+
 function resolveDropTarget(logicalX: number, logicalY: number): DropTarget {
   const el = document.elementFromPoint(logicalX, logicalY);
-  const target = el?.closest("[data-drop-target]") as HTMLElement | null;
-  const type = target?.dataset.dropTarget as "file" | "folder" | undefined;
-  const id = target?.dataset.rowId;
+  const direct = el?.closest("[data-drop-target]") as HTMLElement | null;
+  const fromElement = direct ?? findNearestDropTarget(logicalX, logicalY);
+  const type = fromElement?.dataset.dropTarget as "file" | "folder" | undefined;
+  const id = fromElement?.dataset.rowId;
   if (!type || !id) return null;
   return { type, id };
+}
+
+function findNearestDropTarget(logicalX: number, logicalY: number): HTMLElement | null {
+  const candidates = document.querySelectorAll<HTMLElement>("[data-drop-target][data-row-id]");
+  let best: HTMLElement | null = null;
+  let bestDistance = Infinity;
+  for (const candidate of candidates) {
+    const rect = candidate.getBoundingClientRect();
+    const dx = Math.max(rect.left - logicalX, 0, logicalX - rect.right);
+    const dy = Math.max(rect.top - logicalY, 0, logicalY - rect.bottom);
+    if (dx > ROW_HIT_PADDING || dy > ROW_HIT_PADDING) continue;
+    const distance = dx * dx + dy * dy;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = candidate;
+    }
+  }
+  return best;
 }
 
 export function ProjectView({ project, navResetSignal, onProjectUpdated, onProjectDeleted }: ProjectViewProps) {
