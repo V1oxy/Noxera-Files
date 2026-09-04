@@ -12,12 +12,27 @@ interface UploadModalProps {
   fileLabel: string;
   versionLabel: string;
   isNewFile: boolean;
+  /** Set when more than one file was dropped onto a "new version" target - lets the user pick which one to use. */
+  candidatePaths?: string[];
+  selectedPath?: string;
+  onSelectPath?: (path: string) => void;
   upload: (description: string | undefined, operationId: string) => Promise<FileEntry>;
   onSuccess: (entry: FileEntry) => void;
   onCancel: () => void;
 }
 
-export function UploadModal({ open, fileLabel, versionLabel, isNewFile, upload, onSuccess, onCancel }: UploadModalProps) {
+export function UploadModal({
+  open,
+  fileLabel,
+  versionLabel,
+  isNewFile,
+  candidatePaths,
+  selectedPath,
+  onSelectPath,
+  upload,
+  onSuccess,
+  onCancel,
+}: UploadModalProps) {
   const { t, translateError } = useLanguage();
   const [description, setDescription] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -65,10 +80,37 @@ export function UploadModal({ open, fileLabel, versionLabel, isNewFile, upload, 
       <ModalHeader title={isNewFile ? t("upload.titleAddFile") : t("upload.titleNewVersion")} />
       <ModalBody>
         <div className="space-y-3">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">{t("upload.file")}</p>
-            <p className="mt-0.5 truncate text-[13px] text-label-primary">{fileLabel}</p>
-          </div>
+          {candidatePaths && candidatePaths.length > 1 ? (
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">
+                {t("upload.pickFile")}
+              </p>
+              <div className="mt-1.5 space-y-1 rounded-apple-sm border border-surface-border p-1">
+                {candidatePaths.map((path) => {
+                  const name = path.split(/[/\\]/).pop() ?? path;
+                  const selected = path === selectedPath;
+                  return (
+                    <button
+                      key={path}
+                      type="button"
+                      disabled={uploading}
+                      onClick={() => onSelectPath?.(path)}
+                      className={`flex w-full items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[12.5px] transition-colors disabled:opacity-50 ${
+                        selected ? "bg-accent text-white" : "text-label-primary hover:bg-black/[0.05] dark:hover:bg-white/[0.08]"
+                      }`}
+                    >
+                      <span className="truncate">{name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">{t("upload.file")}</p>
+              <p className="mt-0.5 truncate text-[13px] text-label-primary">{fileLabel}</p>
+            </div>
+          )}
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">{t("upload.version")}</p>
             <p className="mt-0.5 text-[13px] text-label-primary">{versionLabel}</p>

@@ -77,6 +77,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "upload.titleAddFile": "Add File",
     "upload.titleNewVersion": "Upload New Version",
     "upload.file": "File",
+    "upload.pickFile": "Multiple files were dropped - choose which one becomes the new version:",
     "upload.version": "Version",
     "upload.whatChanged": "What changed?",
     "upload.whatChangedPlaceholder": "Describe what changed in this version",
@@ -184,6 +185,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "settings.launchAtStartup": "Launch at system startup",
     "settings.logs": "Logs",
     "settings.openLogsFolder": "Open Logs Folder",
+    "settings.madeBy": "Made by",
   },
 
   ru: {
@@ -262,6 +264,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "upload.titleAddFile": "Добавить файл",
     "upload.titleNewVersion": "Загрузка новой версии",
     "upload.file": "Файл",
+    "upload.pickFile": "Перетащено несколько файлов - выберите, какой станет новой версией:",
     "upload.version": "Версия",
     "upload.whatChanged": "Что изменилось?",
     "upload.whatChangedPlaceholder": "Опишите, что изменилось в этой версии",
@@ -369,6 +372,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "settings.launchAtStartup": "Запускать при старте системы",
     "settings.logs": "Журналы",
     "settings.openLogsFolder": "Открыть папку с журналами",
+    "settings.madeBy": "Разработано",
   },
 };
 

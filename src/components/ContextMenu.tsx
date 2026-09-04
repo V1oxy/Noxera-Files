@@ -55,7 +55,14 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         <div key={item.label}>
           {item.dividerBefore && <div className="my-1 h-px bg-surface-border" />}
           <button
-            onClick={() => {
+            onClick={(e) => {
+              // ContextMenu is portaled to document.body, but React bubbles
+              // synthetic events along the *component* tree, not the DOM
+              // tree - without stopping it here, this click would also
+              // bubble up through whichever row rendered this menu (e.g.
+              // FileRow's onClick opens version history on every click,
+              // including this one) and fire alongside the intended action.
+              e.stopPropagation();
               onClose();
               item.onClick();
             }}

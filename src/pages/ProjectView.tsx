@@ -43,7 +43,7 @@ import type { FileEntry, FileVersion, Folder, Project, SortDirection, SortField 
 
 type UploadTarget =
   | { mode: "new-file"; sourcePath: string; folderId: string | null }
-  | { mode: "new-version"; file: FileEntry; sourcePath: string };
+  | { mode: "new-version"; file: FileEntry; sourcePath: string; candidatePaths?: string[] };
 
 type DropTarget = { type: "file" | "folder"; id: string } | null;
 
@@ -115,11 +115,34 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
     setBreadcrumb((prev) => (prev.length > 0 ? [{ ...prev[0], name: project.name }, ...prev.slice(1)] : prev));
   }, [project.name]);
 
+  // Any modal other than Version History itself: while one of these is open,
+  // a native OS drag-and-drop shouldn't pop open yet another (unrelated,
+  // wrongly-targeted) upload modal on top of it - elementFromPoint would
+  // otherwise hit the modal's backdrop, resolve to no drop target, and
+  // silently start a brand new "upload as new file" flow, stacking without
+  // limit if the user keeps dragging.
+  const blockingModalOpen =
+    uploadTarget !== null ||
+    restoreTarget !== null ||
+    deleteVersionTarget !== null ||
+    deleteFileTarget !== null ||
+    renameTarget !== null ||
+    newFolderOpen ||
+    renameFolderTarget !== null ||
+    deleteFolderTarget !== null ||
+    editProjectOpen ||
+    deleteProjectOpen;
+
   useEffect(() => {
     const unlisten = getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === "over") {
         setIsDragActive(true);
-        const target = resolveDropTarget(event.payload.position.x, event.payload.position.y);
+        // Version History's backdrop covers the whole window, so
+        // elementFromPoint can never see the file rows underneath it -
+        // while it's open, any drop anywhere is for that file's next version.
+        const target = historyFileId
+          ? ({ type: "file", id: historyFileId } as DropTarget)
+          : resolveDropTarget(event.payload.position.x, event.payload.position.y);
         dropTargetRef.current = target;
         setDropTarget(target);
       } else if (event.payload.type === "leave") {
@@ -131,6 +154,7 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         const target = dropTargetRef.current;
         dropTargetRef.current = null;
         setDropTarget(null);
+        if (blockingModalOpen) return;
         void handleIncomingPaths(event.payload.paths, target);
       }
     });
@@ -138,7 +162,7 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
       unlisten.then((f) => f());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.id, currentFolderId, files, detail]);
+  }, [project.id, currentFolderId, files, detail, historyFileId, blockingModalOpen]);
 
   async function handleIncomingPaths(paths: string[], target: DropTarget) {
     if (paths.length === 0) return;
@@ -146,7 +170,12 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
     if (target?.type === "file") {
       const targetFile = files.find((f) => f.id === target.id) ?? (detail?.id === target.id ? detail : null);
       if (targetFile) {
-        setUploadTarget({ mode: "new-version", file: targetFile, sourcePath: paths[0] });
+        setUploadTarget({
+          mode: "new-version",
+          file: targetFile,
+          sourcePath: paths[0],
+          candidatePaths: paths.length > 1 ? paths : undefined,
+        });
         return;
       }
     }
@@ -428,6 +457,11 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         }
         versionLabel={uploadTarget?.mode === "new-file" ? "v1" : `v${uploadTarget?.file.nextVersionNumber ?? 1}`}
         isNewFile={uploadTarget?.mode === "new-file"}
+        candidatePaths={uploadTarget?.mode === "new-version" ? uploadTarget.candidatePaths : undefined}
+        selectedPath={uploadTarget?.sourcePath}
+        onSelectPath={(sourcePath) =>
+          setUploadTarget((prev) => (prev && prev.mode === "new-version" ? { ...prev, sourcePath } : prev))
+        }
         upload={async (description, operationId) => {
           if (!uploadTarget) throw new Error("No upload target");
           if (uploadTarget.mode === "new-file") {

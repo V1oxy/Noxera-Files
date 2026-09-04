@@ -39,7 +39,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   }
 
   return (
-    <div className="drag-region flex h-screen w-screen items-center justify-center bg-surface-bg">
+    <div className="drag-region flex flex-1 items-center justify-center bg-surface-bg">
       <div className="no-drag w-[420px] rounded-apple-lg border border-surface-border bg-surface-content p-8 shadow-modal">
         {step === "welcome" ? (
           <div className="flex flex-col items-center text-center">

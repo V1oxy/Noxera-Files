@@ -1,11 +1,11 @@
 import { FolderPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { BackgroundLogo } from "@/components/BackgroundLogo";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { ProjectModal } from "@/components/ProjectModal";
 import { Sidebar } from "@/components/Sidebar";
+import { TitleBar } from "@/components/TitleBar";
 import { ToastContainer } from "@/components/Toast";
 import { LanguageProvider, useLanguage } from "@/hooks/useLanguage";
 import { ThemeProvider, useTheme } from "@/hooks/useTheme";
@@ -44,7 +44,7 @@ function MainShell() {
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-surface-content">
+    <div className="flex flex-1 overflow-hidden bg-surface-content">
       <Sidebar
         projects={projects}
         selectedProjectId={selectedProjectId}
@@ -62,8 +62,6 @@ function MainShell() {
       />
 
       <div className="relative isolate flex flex-1 flex-col overflow-hidden">
-        <BackgroundLogo />
-
         {view === "settings" ? (
           <Settings />
         ) : selectedProject ? (
@@ -78,9 +76,8 @@ function MainShell() {
             }}
           />
         ) : (
-          <div className="pointer-events-none flex flex-1 items-center justify-center">
+          <div className="flex flex-1 items-center justify-center">
             <EmptyState
-              className="pointer-events-auto"
               icon={FolderPlus}
               title={t("projects.emptyTitle")}
               description={t("projects.emptyDescription")}
@@ -120,15 +117,34 @@ function AppInner() {
       .catch(() => setReady(false));
   }, []);
 
-  if (ready === null) {
-    return <div className="h-screen w-screen bg-surface-bg" />;
-  }
+  useEffect(() => {
+    // This is a desktop app, not a web page - suppress the WebView's native
+    // context menu (Reload / Save as / Print) everywhere except text fields,
+    // where the OS's own Cut/Copy/Paste menu is still useful. Rows that
+    // provide their own context menu (FileRow, FolderRow) already call
+    // preventDefault() themselves, so this is a no-op for them.
+    function handleContextMenu(e: MouseEvent) {
+      if (e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      e.preventDefault();
+    }
+    document.addEventListener("contextmenu", handleContextMenu);
+    return () => document.removeEventListener("contextmenu", handleContextMenu);
+  }, []);
 
-  if (!ready) {
-    return <Onboarding onComplete={() => setReady(true)} />;
-  }
-
-  return <MainShell />;
+  return (
+    <div className="flex h-screen w-screen flex-col overflow-hidden">
+      <TitleBar />
+      {ready === null ? (
+        <div className="flex-1 bg-surface-bg" />
+      ) : !ready ? (
+        <Onboarding onComplete={() => setReady(true)} />
+      ) : (
+        <MainShell />
+      )}
+    </div>
+  );
 }
 
 export default function App() {

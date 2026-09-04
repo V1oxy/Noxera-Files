@@ -15,10 +15,14 @@
   --label-secondary: rgba(60, 60, 67, 0.6);
   --label-tertiary: rgba(60, 60, 67, 0.35);
 
-  --accent: #7bc133;
-  --accent-hover: #619928;
-  --danger: #ff3b30;
-  --danger-hover: #e0342b;
+  --accent-rgb: 86 135 36;
+  --accent-hover-rgb: 68 107 28;
+  --accent: rgb(var(--accent-rgb));
+  --accent-hover: rgb(var(--accent-hover-rgb));
+  --danger-rgb: 255 59 48;
+  --danger-hover-rgb: 224 52 43;
+  --danger: rgb(var(--danger-rgb));
+  --danger-hover: rgb(var(--danger-hover-rgb));
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 1px rgba(0, 0, 0, 0.03);
   --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.08);
@@ -40,10 +44,14 @@
   --label-secondary: rgba(235, 235, 245, 0.6);
   --label-tertiary: rgba(235, 235, 245, 0.35);
 
-  --accent: #8ace45;
-  --accent-hover: #9ed665;
-  --danger: #ff453a;
-  --danger-hover: #ff6259;
+  --accent-rgb: 118 186 49;
+  --accent-hover-rgb: 135 205 64;
+  --accent: rgb(var(--accent-rgb));
+  --accent-hover: rgb(var(--accent-hover-rgb));
+  --danger-rgb: 255 69 58;
+  --danger-hover-rgb: 255 98 89;
+  --danger: rgb(var(--danger-rgb));
+  --danger-hover: rgb(var(--danger-hover-rgb));
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 1px rgba(0, 0, 0, 0.2);
   --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.3);
@@ -107,6 +115,11 @@ textarea {
 *:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
 }
 
 .no-drag {

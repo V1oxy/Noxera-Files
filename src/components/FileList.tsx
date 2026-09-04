@@ -125,7 +125,7 @@ export function FileList({
   }, []);
 
   return (
-    <div className="relative isolate flex h-full flex-col">
+    <div className="relative isolate flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 pt-4">
         <div className="min-w-[100px] max-w-xs flex-1 basis-40">
           <SearchBar ref={searchRef} value={search} onChange={onSearchChange} placeholder={t("files.searchPlaceholder")} />
@@ -187,12 +187,11 @@ export function FileList({
         </Button>
       </div>
 
-      <div className="pointer-events-none flex-1 overflow-y-auto px-4 pb-6 pt-2">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 pt-2">
         {loading && <p className="px-2 py-4 text-[12.5px] text-label-secondary">{t("files.loading")}</p>}
 
         {!loading && isEmpty && search === "" && (
           <EmptyState
-            className="pointer-events-auto"
             title={t("files.emptyTitle")}
             description={t("files.emptyDescription")}
             action={
@@ -206,7 +205,6 @@ export function FileList({
 
         {!loading && isEmpty && search !== "" && (
           <EmptyState
-            className="pointer-events-auto"
             title={t("files.noMatchTitle")}
             description={t("files.noMatchDescription", { search })}
           />
@@ -218,7 +216,7 @@ export function FileList({
             modifiers={[restrictToVerticalAxis, restrictToParentElement]}
             onDragEnd={handleDragEnd}
           >
-            <div className="pointer-events-auto space-y-0.5">
+            <div className="space-y-0.5">
               <SortableContext items={folderOrder.map((f) => f.id)} strategy={verticalListSortingStrategy}>
                 {folderOrder.map((folder) => (
                   <SortableRow key={folder.id} id={folder.id}>

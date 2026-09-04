@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
@@ -34,6 +34,14 @@ export function DeleteModal({
   const [error, setError] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
 
+  useEffect(() => {
+    if (open) {
+      setTyped("");
+      setError(null);
+      setBusy(false);
+    }
+  }, [open]);
+
   function handleCancel() {
     if (busy) return;
     setError(null);
@@ -49,8 +57,9 @@ export function DeleteModal({
       await onConfirm();
       setTyped("");
     } catch (e) {
-      setBusy(false);
       setError(e instanceof ApiError ? translateError(e.message) : t("common.actionErrorFallback"));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -76,7 +85,7 @@ export function DeleteModal({
               autoCorrect="off"
               spellCheck={false}
               placeholder={confirmValue}
-              className="no-drag mt-1.5 w-full rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 py-1.5 text-[13px] text-label-primary placeholder:text-label-tertiary/70 outline-none focus:border-accent/50 focus:bg-surface-content disabled:opacity-50 dark:bg-white/[0.05]"
+              className="no-drag mt-1.5 w-full rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 py-1.5 text-[13px] text-label-primary placeholder:text-label-tertiary/70 outline-none focus-visible:outline-none focus:bg-surface-content disabled:opacity-50 dark:bg-white/[0.05]"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !confirmDisabled) handleConfirm();
               }}

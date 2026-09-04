@@ -1,3 +1,16 @@
+/**
+ * accent/danger are stored as "R G B" CSS custom properties (see
+ * src/index.css) so this can build a proper rgb(var(...) / <alpha-value>)
+ * function - the plain `var(--accent)` string Tailwind used before couldn't
+ * be combined with opacity modifiers like `bg-accent/[0.12]` or
+ * `ring-accent/50`, so those utilities silently failed to generate and fell
+ * back to Tailwind's own defaults (e.g. the ring utility's built-in blue).
+ */
+function withOpacity(cssVar) {
+  return ({ opacityValue }) =>
+    opacityValue === undefined ? `rgb(var(${cssVar}))` : `rgb(var(${cssVar}) / ${opacityValue})`;
+}
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ["selector", '[data-theme="dark"]'],
@@ -19,8 +32,8 @@ export default {
       },
       colors: {
         accent: {
-          DEFAULT: "var(--accent)",
-          hover: "var(--accent-hover)",
+          DEFAULT: withOpacity("--accent-rgb"),
+          hover: withOpacity("--accent-hover-rgb"),
         },
         surface: {
           bg: "var(--surface-bg)",
@@ -37,8 +50,8 @@ export default {
           tertiary: "var(--label-tertiary)",
         },
         danger: {
-          DEFAULT: "var(--danger)",
-          hover: "var(--danger-hover)",
+          DEFAULT: withOpacity("--danger-rgb"),
+          hover: withOpacity("--danger-hover-rgb"),
         },
       },
       borderRadius: {
