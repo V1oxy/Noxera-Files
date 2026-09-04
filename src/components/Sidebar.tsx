@@ -22,6 +22,7 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onReorderProjects: (orderedIds: string[]) => void;
   settingsActive: boolean;
+  updateAvailable?: boolean;
 }
 
 export function Sidebar({
@@ -32,6 +33,7 @@ export function Sidebar({
   onOpenSettings,
   onReorderProjects,
   settingsActive,
+  updateAvailable,
 }: SidebarProps) {
   const { t } = useLanguage();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -110,14 +112,22 @@ export function Sidebar({
       <div className="no-drag border-t border-surface-border px-3 py-3">
         <button
           onClick={onOpenSettings}
-          className={`flex w-full items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
+          className={`relative flex w-full items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
             settingsActive
               ? "bg-accent/[0.14] text-accent font-medium"
               : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
           }`}
         >
-          <SettingsIcon size={15} strokeWidth={1.75} className={settingsActive ? "text-accent" : "text-label-secondary"} />
-          {t("sidebar.settings")}
+          <span className="relative shrink-0">
+            <SettingsIcon size={15} strokeWidth={1.75} className={settingsActive ? "text-accent" : "text-label-secondary"} />
+            {updateAvailable && (
+              <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent ring-2 ring-surface-sidebar" />
+            )}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{t("sidebar.settings")}</span>
+          {updateAvailable && (
+            <span className="shrink-0 text-[10.5px] font-medium text-accent">{t("settings.updateBadge")}</span>
+          )}
         </button>
       </div>
     </aside>

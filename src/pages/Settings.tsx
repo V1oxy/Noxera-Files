@@ -1,5 +1,20 @@
-import { Archive, Check, FolderOpen, Globe, HardDrive, Laptop, Moon, ScrollText, Sun } from "lucide-react";
-import { useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import {
+  Archive,
+  Check,
+  CheckCircle2,
+  DownloadCloud,
+  FolderOpen,
+  Globe,
+  HardDrive,
+  Laptop,
+  Moon,
+  RefreshCw,
+  RotateCw,
+  ScrollText,
+  Sun,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -9,6 +24,7 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { useSettings } from "@/hooks/useSettings";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/hooks/useToast";
+import { useUpdater } from "@/hooks/useUpdater";
 import { ApiError, createBackup, openDataFolder, updateSettings } from "@/services/api";
 import type { LanguageMode, ThemeMode } from "@/types";
 
@@ -51,7 +67,16 @@ export function Settings() {
   const { accentColor, setAccentColor } = useAccentColor();
   const { language, setLanguage, t, translateError } = useLanguage();
   const { showToast } = useToast();
+  const { status: updateStatus, update, progress, errorMessage, checkForUpdate, downloadAndInstall, restart } =
+    useUpdater();
   const [backing, setBacking] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => {});
+  }, []);
 
   const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
     { value: "system", label: t("settings.theme.system"), icon: Laptop },
@@ -217,6 +242,62 @@ export function Settings() {
               {t("settings.openLogsFolder")}
             </Button>
           </SettingsRow>
+        </SettingsSection>
+
+        <SettingsSection title={t("settings.updates")}>
+          <SettingsRow label={t("settings.version")} description={appVersion ? `v${appVersion}` : undefined}>
+            {(updateStatus === "idle" || updateStatus === "upToDate" || updateStatus === "error") && (
+              <Button size="sm" variant="secondary" onClick={() => void checkForUpdate()}>
+                <RefreshCw size={13} />
+                {t("settings.checkForUpdates")}
+              </Button>
+            )}
+            {updateStatus === "checking" && (
+              <span className="flex items-center gap-1.5 text-[12px] text-label-secondary">
+                <RefreshCw size={13} className="animate-spin" />
+                {t("settings.checking")}
+              </span>
+            )}
+          </SettingsRow>
+
+          {updateStatus === "upToDate" && (
+            <SettingsRow label={t("settings.upToDate")}>
+              <CheckCircle2 size={16} className="text-accent" />
+            </SettingsRow>
+          )}
+
+          {updateStatus === "error" && (
+            <SettingsRow label={t("settings.updateCheckError")} description={errorMessage ?? undefined} />
+          )}
+
+          {updateStatus === "available" && update && (
+            <SettingsRow
+              label={t("settings.updateAvailable", { version: update.version })}
+              description={t("settings.updateAvailableDescription")}
+            >
+              <Button size="sm" variant="primary" onClick={() => void downloadAndInstall()}>
+                <DownloadCloud size={13} />
+                {t("settings.downloadAndInstall")}
+              </Button>
+            </SettingsRow>
+          )}
+
+          {updateStatus === "downloading" && (
+            <SettingsRow label={t("settings.downloading")} description={`${progress}%`}>
+              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-black/[0.08] dark:bg-white/[0.12]">
+                <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${progress}%` }} />
+              </div>
+            </SettingsRow>
+          )}
+
+          {updateStatus === "readyToRestart" && (
+            <SettingsRow label={t("settings.readyToRestart")} description={t("settings.readyToRestartDescription")}>
+              <Button size="sm" variant="primary" onClick={restart}>
+                <RotateCw size={13} />
+                {t("settings.restartNow")}
+              </Button>
+            </SettingsRow>
+          )}
         </SettingsSection>
 
         <SiteFooter />

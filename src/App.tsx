@@ -12,6 +12,7 @@ import { LanguageProvider, useLanguage } from "@/hooks/useLanguage";
 import { ThemeProvider, useTheme } from "@/hooks/useTheme";
 import { useProjects } from "@/hooks/useProjects";
 import { ToastProvider } from "@/hooks/useToast";
+import { UpdaterProvider, useUpdater } from "@/hooks/useUpdater";
 import { Onboarding } from "@/pages/Onboarding";
 import { type PendingFileOpen, ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
@@ -22,6 +23,7 @@ function MainShell() {
   const { setTheme } = useTheme();
   const { setLanguage, t } = useLanguage();
   const { setAccentColor } = useAccentColor();
+  const { status: updateStatus } = useUpdater();
   const { projects, refresh: refreshProjects } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [view, setView] = useState<"project" | "settings">("project");
@@ -74,6 +76,7 @@ function MainShell() {
           void reorderProjects(orderedIds).then(() => refreshProjects());
         }}
         settingsActive={view === "settings"}
+        updateAvailable={updateStatus === "available" || updateStatus === "readyToRestart"}
       />
 
       <div className="relative isolate flex flex-1 flex-col overflow-hidden">
@@ -171,7 +174,9 @@ export default function App() {
       <AccentColorProvider>
         <LanguageProvider>
           <ToastProvider>
-            <AppInner />
+            <UpdaterProvider>
+              <AppInner />
+            </UpdaterProvider>
           </ToastProvider>
         </LanguageProvider>
       </AccentColorProvider>
