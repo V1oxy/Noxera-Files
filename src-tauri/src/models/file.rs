@@ -26,6 +26,16 @@ pub struct FileDetail {
     pub versions: Vec<FileVersion>,
 }
 
+/// One match from a cross-project search - the file plus the name of the
+/// project it lives in, so results can be shown without a separate lookup.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalFileHit {
+    #[serde(flatten)]
+    pub file: FileEntry,
+    pub project_name: String,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum SortField {

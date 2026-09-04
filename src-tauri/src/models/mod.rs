@@ -4,7 +4,7 @@ pub mod project;
 pub mod settings;
 pub mod version;
 
-pub use file::{FileDetail, FileEntry, SortDirection, SortField};
+pub use file::{FileDetail, FileEntry, GlobalFileHit, SortDirection, SortField};
 pub use folder::{Folder, FolderPathEntry};
 pub use project::Project;
 pub use settings::{AppSettings, SettingsUpdate, StorageConfig};

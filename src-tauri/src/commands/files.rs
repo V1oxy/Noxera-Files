@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::database::{files as files_db, folders as folders_db, versions as versions_db};
-use crate::models::{FileDetail, FileEntry, SortDirection, SortField};
+use crate::models::{FileDetail, FileEntry, GlobalFileHit, SortDirection, SortField};
 use crate::state::AppState;
 use crate::storage::remove_dir_all_if_exists;
 use crate::utils::{now_iso, AppError, AppResult};
@@ -29,6 +29,19 @@ pub fn get_files(
             field,
             dir,
         )?)
+    })
+}
+
+#[tauri::command]
+pub fn search_files_global(state: State<AppState>, search: String) -> AppResult<Vec<GlobalFileHit>> {
+    if search.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    with_ready(&state, |conn, _| {
+        Ok(files_db::search_all_projects(conn, &search)?
+            .into_iter()
+            .map(|(file, project_name)| GlobalFileHit { file, project_name })
+            .collect())
     })
 }
 

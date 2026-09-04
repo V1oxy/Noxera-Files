@@ -12,11 +12,13 @@ import { NewFolderModal } from "@/components/NewFolderModal";
 import { ProjectModal } from "@/components/ProjectModal";
 import { RenameModal } from "@/components/RenameModal";
 import { RestoreModal } from "@/components/RestoreModal";
+import type { SearchScope } from "@/components/SearchScopeToggle";
 import { UploadModal } from "@/components/UploadModal";
 import { VersionHistory } from "@/components/VersionHistory";
 import { VersionInfoModal } from "@/components/VersionInfoModal";
 import { useFiles } from "@/hooks/useFiles";
 import { useFolders } from "@/hooks/useFolders";
+import { useGlobalSearch } from "@/hooks/useGlobalSearch";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/useToast";
 import { useVersions } from "@/hooks/useVersions";
@@ -28,6 +30,7 @@ import {
   deleteProject as apiDeleteProject,
   deleteVersion as apiDeleteVersion,
   downloadVersion,
+  getFolderPath,
   importFolder,
   moveFile,
   moveFolder,
@@ -43,7 +46,7 @@ import {
   uploadFile,
   uploadNewVersion,
 } from "@/services/api";
-import type { FileEntry, FileVersion, Folder, Project, SortDirection, SortField } from "@/types";
+import type { FileEntry, FileVersion, Folder, GlobalFileHit, Project, SortDirection, SortField } from "@/types";
 
 type UploadTarget =
   | { mode: "new-file"; sourcePath: string; folderId: string | null }
@@ -51,11 +54,22 @@ type UploadTarget =
 
 type DropTarget = { type: "file" | "folder"; id: string } | null;
 
+export interface PendingFileOpen {
+  requestId: number;
+  fileId: string;
+  folderId: string | null;
+}
+
 interface ProjectViewProps {
   project: Project;
   navResetSignal?: number;
   onProjectUpdated: (project: Project) => void;
   onProjectDeleted: () => void;
+  /** A file to jump to from a global search result - may belong to this project already, or the caller may have just switched here to reach it. */
+  pendingFileOpen: PendingFileOpen | null;
+  onPendingFileOpenHandled: () => void;
+  /** A global search result was clicked - the caller (MainShell) owns project selection and decides whether that requires switching projects. */
+  onNavigateToFile: (hit: GlobalFileHit) => void;
 }
 
 // Rows sit `space-y-0.5` (2px) apart, and a real mouse/trackpad release
@@ -100,7 +114,15 @@ function findNearestDropTarget(logicalX: number, logicalY: number): HTMLElement 
   return best;
 }
 
-export function ProjectView({ project, navResetSignal, onProjectUpdated, onProjectDeleted }: ProjectViewProps) {
+export function ProjectView({
+  project,
+  navResetSignal,
+  onProjectUpdated,
+  onProjectDeleted,
+  pendingFileOpen,
+  onPendingFileOpenHandled,
+  onNavigateToFile,
+}: ProjectViewProps) {
   const { showToast } = useToast();
   const { t, translateError } = useLanguage();
 
@@ -108,16 +130,21 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbEntry[]>([{ id: null, name: project.name }]);
 
   const [search, setSearch] = useState("");
+  const [searchScope, setSearchScope] = useState<SearchScope>("project");
   const [sortField, setSortField] = useState<SortField>("lastModified");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
   const { files, loading: filesLoading, refresh: refreshFiles } = useFiles(
     project.id,
     currentFolderId,
-    search,
+    searchScope === "project" ? search : "",
     sortField,
     sortDir,
   );
   const { folders, refresh: refreshFolders } = useFolders(project.id, currentFolderId);
+  const { results: globalResults, loading: globalSearchLoading } = useGlobalSearch(
+    search,
+    searchScope === "global",
+  );
 
   const [historyFileId, setHistoryFileId] = useState<string | null>(null);
   const { detail, loading: historyLoading, refresh: refreshHistory } = useVersions(historyFileId);
@@ -171,6 +198,7 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
     setCurrentFolderId(null);
     setBreadcrumb([{ id: null, name: project.name }]);
     setSearch("");
+    setSearchScope("project");
     // Re-run (even though project.id is unchanged) whenever the sidebar
     // entry for this project is clicked again, so it always jumps back to
     // the project root instead of staying wherever the user had navigated.
@@ -180,6 +208,50 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
   useEffect(() => {
     setBreadcrumb((prev) => (prev.length > 0 ? [{ ...prev[0], name: project.name }, ...prev.slice(1)] : prev));
   }, [project.name]);
+
+  // Clearing the search box is the natural "back to normal" gesture - an
+  // emptied box left sitting in "All projects" would just show the prompt
+  // state until the user also remembered to switch the scope back by hand.
+  useEffect(() => {
+    if (search === "") setSearchScope("project");
+  }, [search]);
+
+  // A file clicked from a global search result: MainShell already ensured
+  // `project` is the right one (switching it first if needed, which remounts
+  // this component fresh) by the time this fires. Reconstructing the
+  // breadcrumb only takes an id -> name path lookup; Version History itself
+  // opens by file id alone regardless of which folder is on screen, so if
+  // that lookup fails the file still opens, just landing at project root.
+  useEffect(() => {
+    if (!pendingFileOpen) return;
+    let cancelled = false;
+    (async () => {
+      if (pendingFileOpen.folderId) {
+        try {
+          const path = await getFolderPath(pendingFileOpen.folderId);
+          if (cancelled) return;
+          setBreadcrumb([{ id: null, name: project.name }, ...path.map((f) => ({ id: f.id, name: f.name }))]);
+          setCurrentFolderId(pendingFileOpen.folderId);
+        } catch {
+          if (cancelled) return;
+          setBreadcrumb([{ id: null, name: project.name }]);
+          setCurrentFolderId(null);
+        }
+      } else {
+        setBreadcrumb([{ id: null, name: project.name }]);
+        setCurrentFolderId(null);
+      }
+      if (cancelled) return;
+      setSearch("");
+      setSearchScope("project");
+      setHistoryFileId(pendingFileOpen.fileId);
+      onPendingFileOpenHandled();
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFileOpen]);
 
   // Any modal other than Version History itself: while one of these is open,
   // a native OS drag-and-drop shouldn't pop open yet another (unrelated,
@@ -557,6 +629,11 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         loading={filesLoading}
         search={search}
         onSearchChange={setSearch}
+        searchScope={searchScope}
+        onSearchScopeChange={setSearchScope}
+        globalResults={globalResults}
+        globalSearchLoading={globalSearchLoading}
+        onOpenGlobalResult={onNavigateToFile}
         sortField={sortField}
         sortDir={sortDir}
         onSortChange={(f, d) => {

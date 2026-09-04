@@ -105,6 +105,35 @@ pub fn list_for_project(
     }
 }
 
+/// Matches by name across every project's files at once, newest-modified
+/// first. Same Unicode-aware, fetch-then-filter approach as the per-project
+/// search above and for the same reason (SQLite's NOCASE only folds ASCII).
+/// Two queries (all files, then a project id -> name map) rather than a
+/// join, so this can reuse SELECT_BASE/map_row as-is instead of forking a
+/// second copy of that column list.
+pub fn search_all_projects(conn: &Connection, search: &str) -> rusqlite::Result<Vec<(FileEntry, String)>> {
+    let needle = search.trim().to_lowercase();
+    let sql = format!("{SELECT_BASE} ORDER BY f.updated_at DESC");
+    let mut stmt = conn.prepare(&sql)?;
+    let files = stmt
+        .query_map([], map_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let mut names_stmt = conn.prepare("SELECT id, name FROM projects")?;
+    let project_names: std::collections::HashMap<String, String> = names_stmt
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+
+    Ok(files
+        .into_iter()
+        .filter(|f| f.name.to_lowercase().contains(&needle))
+        .filter_map(|f| {
+            let project_name = project_names.get(&f.project_id)?.clone();
+            Some((f, project_name))
+        })
+        .collect())
+}
+
 pub fn get(conn: &Connection, file_id: &str) -> rusqlite::Result<Option<FileEntry>> {
     let sql = format!("{SELECT_BASE} WHERE f.id = ?1");
     conn.query_row(&sql, params![file_id], map_row).optional()

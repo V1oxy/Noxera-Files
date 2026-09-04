@@ -13,9 +13,10 @@ import { ThemeProvider, useTheme } from "@/hooks/useTheme";
 import { useProjects } from "@/hooks/useProjects";
 import { ToastProvider } from "@/hooks/useToast";
 import { Onboarding } from "@/pages/Onboarding";
-import { ProjectView } from "@/pages/ProjectView";
+import { type PendingFileOpen, ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
 import { createProject, getSettings, isInitialized, reorderProjects } from "@/services/api";
+import type { GlobalFileHit } from "@/types";
 
 function MainShell() {
   const { setTheme } = useTheme();
@@ -26,6 +27,7 @@ function MainShell() {
   const [view, setView] = useState<"project" | "settings">("project");
   const [createOpen, setCreateOpen] = useState(false);
   const [navResetNonce, setNavResetNonce] = useState(0);
+  const [pendingFileOpen, setPendingFileOpen] = useState<PendingFileOpen | null>(null);
 
   useEffect(() => {
     getSettings()
@@ -45,6 +47,16 @@ function MainShell() {
   }, [projects, selectedProjectId]);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+
+  function handleNavigateToFile(hit: GlobalFileHit) {
+    if (hit.projectId !== selectedProjectId) {
+      setSelectedProjectId(hit.projectId);
+      setView("project");
+    }
+    // requestId makes this fire even for a repeat click on the same file
+    // (ProjectView's effect keys off it, not fileId/folderId alone).
+    setPendingFileOpen({ requestId: Date.now(), fileId: hit.id, folderId: hit.folderId });
+  }
 
   return (
     <div className="flex flex-1 overflow-hidden bg-surface-content">
@@ -77,6 +89,9 @@ function MainShell() {
               setSelectedProjectId(null);
               await refreshProjects();
             }}
+            pendingFileOpen={pendingFileOpen}
+            onPendingFileOpenHandled={() => setPendingFileOpen(null)}
+            onNavigateToFile={handleNavigateToFile}
           />
         ) : (
           <div className="flex flex-1 items-center justify-center">

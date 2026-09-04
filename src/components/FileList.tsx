@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/core";
 import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowDownWideNarrow, ArrowUpWideNarrow, ChevronDown, FolderPlus, Upload } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpWideNarrow, ChevronDown, FolderPlus, SearchX, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/Button";
@@ -17,10 +17,12 @@ import { DraggableRow } from "@/components/DraggableRow";
 import { EmptyState } from "@/components/EmptyState";
 import { FileRow } from "@/components/FileRow";
 import { FolderRow } from "@/components/FolderRow";
+import { GlobalSearchResultRow } from "@/components/GlobalSearchResultRow";
 import { SearchBar } from "@/components/SearchBar";
+import { SearchScopeToggle, type SearchScope } from "@/components/SearchScopeToggle";
 import { SortableRow } from "@/components/SortableRow";
 import { useLanguage } from "@/hooks/useLanguage";
-import type { FileEntry, Folder, SortDirection, SortField } from "@/types";
+import type { FileEntry, Folder, GlobalFileHit, SortDirection, SortField } from "@/types";
 
 const SORT_KEYS: Record<SortField, string> = {
   custom: "sort.custom",
@@ -36,6 +38,11 @@ interface FileListProps {
   loading: boolean;
   search: string;
   onSearchChange: (v: string) => void;
+  searchScope: SearchScope;
+  onSearchScopeChange: (scope: SearchScope) => void;
+  globalResults: GlobalFileHit[];
+  globalSearchLoading: boolean;
+  onOpenGlobalResult: (hit: GlobalFileHit) => void;
   sortField: SortField;
   sortDir: SortDirection;
   onSortChange: (field: SortField, dir: SortDirection) => void;
@@ -66,6 +73,11 @@ export function FileList({
   loading,
   search,
   onSearchChange,
+  searchScope,
+  onSearchScopeChange,
+  globalResults,
+  globalSearchLoading,
+  onOpenGlobalResult,
   sortField,
   sortDir,
   onSortChange,
@@ -171,6 +183,9 @@ export function FileList({
           <SearchBar ref={searchRef} value={search} onChange={onSearchChange} placeholder={t("files.searchPlaceholder")} />
         </div>
 
+        <SearchScopeToggle scope={searchScope} onChange={onSearchScopeChange} />
+
+        {searchScope === "project" && (
         <div className="relative shrink-0">
           <button
             onClick={() => setSortMenuOpen((v) => !v)}
@@ -214,6 +229,7 @@ export function FileList({
             </>
           )}
         </div>
+        )}
 
         <div className="min-w-2 flex-1" />
 
@@ -228,6 +244,34 @@ export function FileList({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-6 pt-2">
+        {searchScope === "global" ? (
+          <>
+            {globalSearchLoading && (
+              <p className="px-2 py-4 text-[12.5px] text-label-secondary">{t("files.loading")}</p>
+            )}
+
+            {!globalSearchLoading && search.trim() === "" && (
+              <EmptyState
+                icon={SearchX}
+                title={t("search.globalPromptTitle")}
+                description={t("search.globalPromptDescription")}
+              />
+            )}
+
+            {!globalSearchLoading && search.trim() !== "" && globalResults.length === 0 && (
+              <EmptyState title={t("files.noMatchTitle")} description={t("files.noMatchDescription", { search })} />
+            )}
+
+            {!globalSearchLoading && globalResults.length > 0 && (
+              <div className="space-y-0.5">
+                {globalResults.map((hit) => (
+                  <GlobalSearchResultRow key={hit.id} hit={hit} onOpen={onOpenGlobalResult} />
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
         {loading && <p className="px-2 py-4 text-[12.5px] text-label-secondary">{t("files.loading")}</p>}
 
         {!loading && isEmpty && search === "" && (
@@ -317,6 +361,8 @@ export function FileList({
               />
             ))}
           </div>
+        )}
+          </>
         )}
       </div>
 

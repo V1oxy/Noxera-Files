@@ -14,6 +14,7 @@ import type {
   FileVersion,
   Folder,
   FolderPathEntry,
+  GlobalFileHit,
   ImportFolderResult,
   Project,
   SortDirection,
@@ -94,6 +95,9 @@ export const getFiles = (
     sortField: opts?.sortField ?? null,
     sortDir: opts?.sortDir ?? null,
   });
+
+export const searchFilesGlobal = (search: string) =>
+  call<GlobalFileHit[]>("search_files_global", { search });
 
 export const getFile = (fileId: string) => call<FileDetail>("get_file", { fileId });
 export const renameFile = (fileId: string, newName: string) =>

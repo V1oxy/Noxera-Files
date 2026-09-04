@@ -64,6 +64,10 @@ export interface FileDetail extends FileEntry {
   versions: FileVersion[];
 }
 
+export interface GlobalFileHit extends FileEntry {
+  projectName: string;
+}
+
 export type SortField = "name" | "lastModified" | "created" | "size" | "custom";
 export type SortDirection = "asc" | "desc";
 

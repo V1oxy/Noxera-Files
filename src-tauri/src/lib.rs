@@ -53,6 +53,7 @@ pub fn run() {
             commands::projects::reorder_projects,
             commands::projects::delete_project,
             commands::files::get_files,
+            commands::files::search_files_global,
             commands::files::get_file,
             commands::files::rename_file,
             commands::files::reorder_files,
