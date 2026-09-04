@@ -1,35 +1,46 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Pencil, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { Breadcrumb, type BreadcrumbEntry } from "@/components/Breadcrumb";
 import { Button } from "@/components/Button";
 import { DeleteModal } from "@/components/DeleteModal";
 import { FileList } from "@/components/FileList";
+import { NewFolderModal } from "@/components/NewFolderModal";
 import { ProjectModal } from "@/components/ProjectModal";
 import { RenameModal } from "@/components/RenameModal";
 import { RestoreModal } from "@/components/RestoreModal";
 import { UploadModal } from "@/components/UploadModal";
 import { VersionHistory } from "@/components/VersionHistory";
 import { useFiles } from "@/hooks/useFiles";
+import { useFolders } from "@/hooks/useFolders";
+import { useLanguage } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/useToast";
 import { useVersions } from "@/hooks/useVersions";
 import {
   ApiError,
+  createFolder as apiCreateFolder,
   deleteFile as apiDeleteFile,
+  deleteFolder as apiDeleteFolder,
   deleteProject as apiDeleteProject,
   deleteVersion as apiDeleteVersion,
   downloadVersion,
   openVersion,
   pickFilesToUpload,
   renameFile as apiRenameFile,
+  renameFolder as apiRenameFolder,
   restoreVersion as apiRestoreVersion,
   updateProject,
   uploadFile,
   uploadNewVersion,
 } from "@/services/api";
-import type { FileEntry, Project, SortDirection, SortField, FileVersion } from "@/types";
+import type { FileEntry, FileVersion, Folder, Project, SortDirection, SortField } from "@/types";
 
-type UploadTarget = { mode: "new-file"; sourcePath: string } | { mode: "new-version"; file: FileEntry; sourcePath: string };
+type UploadTarget =
+  | { mode: "new-file"; sourcePath: string; folderId: string | null }
+  | { mode: "new-version"; file: FileEntry; sourcePath: string };
+
+type DropTarget = { type: "file" | "folder"; id: string } | null;
 
 interface ProjectViewProps {
   project: Project;
@@ -37,13 +48,34 @@ interface ProjectViewProps {
   onProjectDeleted: () => void;
 }
 
+function resolveDropTarget(physicalX: number, physicalY: number): DropTarget {
+  const dpr = window.devicePixelRatio || 1;
+  const el = document.elementFromPoint(physicalX / dpr, physicalY / dpr);
+  const target = el?.closest("[data-drop-target]") as HTMLElement | null;
+  const type = target?.dataset.dropTarget as "file" | "folder" | undefined;
+  const id = target?.dataset.rowId;
+  if (!type || !id) return null;
+  return { type, id };
+}
+
 export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: ProjectViewProps) {
   const { showToast } = useToast();
+  const { t, translateError } = useLanguage();
+
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [breadcrumb, setBreadcrumb] = useState<BreadcrumbEntry[]>([{ id: null, name: project.name }]);
 
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("lastModified");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
-  const { files, loading: filesLoading, refresh: refreshFiles } = useFiles(project.id, search, sortField, sortDir);
+  const { files, loading: filesLoading, refresh: refreshFiles } = useFiles(
+    project.id,
+    currentFolderId,
+    search,
+    sortField,
+    sortDir,
+  );
+  const { folders, refresh: refreshFolders } = useFolders(project.id, currentFolderId);
 
   const [historyFileId, setHistoryFileId] = useState<string | null>(null);
   const { detail, loading: historyLoading, refresh: refreshHistory } = useVersions(historyFileId);
@@ -53,57 +85,104 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
   const [deleteVersionTarget, setDeleteVersionTarget] = useState<FileVersion | null>(null);
   const [deleteFileTarget, setDeleteFileTarget] = useState<FileEntry | null>(null);
   const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [renameFolderTarget, setRenameFolderTarget] = useState<Folder | null>(null);
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState<Folder | null>(null);
   const [editProjectOpen, setEditProjectOpen] = useState(false);
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [dropTarget, setDropTarget] = useState<DropTarget>(null);
+  const dropTargetRef = useRef<DropTarget>(null);
 
   useEffect(() => {
+    setCurrentFolderId(null);
+    setBreadcrumb([{ id: null, name: project.name }]);
     setSearch("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
+
+  useEffect(() => {
+    setBreadcrumb((prev) => (prev.length > 0 ? [{ ...prev[0], name: project.name }, ...prev.slice(1)] : prev));
+  }, [project.name]);
 
   useEffect(() => {
     const unlisten = getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === "over") {
         setIsDragActive(true);
+        const target = resolveDropTarget(event.payload.position.x, event.payload.position.y);
+        dropTargetRef.current = target;
+        setDropTarget(target);
       } else if (event.payload.type === "leave") {
         setIsDragActive(false);
+        dropTargetRef.current = null;
+        setDropTarget(null);
       } else if (event.payload.type === "drop") {
         setIsDragActive(false);
-        void handleIncomingPaths(event.payload.paths);
+        const target = dropTargetRef.current;
+        dropTargetRef.current = null;
+        setDropTarget(null);
+        void handleIncomingPaths(event.payload.paths, target);
       }
     });
     return () => {
       unlisten.then((f) => f());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.id]);
+  }, [project.id, currentFolderId, files, detail]);
 
-  async function handleIncomingPaths(paths: string[]) {
+  async function handleIncomingPaths(paths: string[], target: DropTarget) {
     if (paths.length === 0) return;
+
+    if (target?.type === "file") {
+      const targetFile = files.find((f) => f.id === target.id) ?? (detail?.id === target.id ? detail : null);
+      if (targetFile) {
+        setUploadTarget({ mode: "new-version", file: targetFile, sourcePath: paths[0] });
+        return;
+      }
+    }
+
+    const folderId = target?.type === "folder" ? target.id : currentFolderId;
+
     if (paths.length === 1) {
-      setUploadTarget({ mode: "new-file", sourcePath: paths[0] });
+      setUploadTarget({ mode: "new-file", sourcePath: paths[0], folderId });
       return;
     }
+
     let succeeded = 0;
     for (const p of paths) {
       try {
-        await uploadFile(project.id, p);
+        await uploadFile(project.id, folderId, p);
         succeeded++;
       } catch {
         // continue with the rest of the batch
       }
     }
-    await refreshFiles();
-    showToast({ title: `${succeeded} file${succeeded === 1 ? "" : "s"} uploaded` });
+    await Promise.all([refreshFiles(), refreshFolders()]);
+    showToast({ title: t("toast.filesUploaded", { count: succeeded }) });
   }
 
   async function handleUploadClick() {
     const paths = await pickFilesToUpload(true);
-    await handleIncomingPaths(paths);
+    await handleIncomingPaths(paths, null);
   }
 
   function openHistory(file: FileEntry) {
     setHistoryFileId(file.id);
+  }
+
+  function openFolder(folder: Folder) {
+    setSearch("");
+    setBreadcrumb((prev) => [...prev, { id: folder.id, name: folder.name }]);
+    setCurrentFolderId(folder.id);
+  }
+
+  function navigateBreadcrumb(id: string | null) {
+    setSearch("");
+    setBreadcrumb((prev) => {
+      const idx = prev.findIndex((e) => e.id === id);
+      return idx === -1 ? prev : prev.slice(0, idx + 1);
+    });
+    setCurrentFolderId(id);
   }
 
   async function handleOpenFile(file: FileEntry) {
@@ -112,8 +191,8 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
       await openVersion(file.currentVersion.id);
     } catch (e) {
       showToast({
-        title: "Unable to open the file",
-        description: e instanceof ApiError ? e.message : undefined,
+        title: t("toast.openFileError"),
+        description: e instanceof ApiError ? translateError(e.message) : undefined,
         variant: "error",
       });
     }
@@ -127,11 +206,11 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
   async function handleDownloadVersion(version: FileVersion) {
     try {
       const saved = await downloadVersion(version.id, version.originalFilename);
-      if (saved) showToast({ title: "Download complete" });
+      if (saved) showToast({ title: t("toast.downloadComplete") });
     } catch (e) {
       showToast({
-        title: "Unable to download the file",
-        description: e instanceof ApiError ? e.message : undefined,
+        title: t("toast.downloadFileError"),
+        description: e instanceof ApiError ? translateError(e.message) : undefined,
         variant: "error",
       });
     }
@@ -149,7 +228,10 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
     await apiRestoreVersion(historyFileId, restoreTarget.id, description);
     setRestoreTarget(null);
     await Promise.all([refreshHistory(), refreshFiles()]);
-    showToast({ title: `Version v${restoredNumber} restored`, description: "New version created" });
+    showToast({
+      title: t("toast.versionRestored", { version: restoredNumber }),
+      description: t("toast.newVersionCreated"),
+    });
   }
 
   async function handleDeleteVersion() {
@@ -163,7 +245,7 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
       await refreshHistory();
     }
     await refreshFiles();
-    showToast({ title: `Version v${deletedNumber} deleted` });
+    showToast({ title: t("toast.versionDeleted", { version: deletedNumber }) });
   }
 
   async function handleDeleteFile() {
@@ -171,7 +253,7 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
     await apiDeleteFile(deleteFileTarget.id);
     setDeleteFileTarget(null);
     await refreshFiles();
-    showToast({ title: "File deleted" });
+    showToast({ title: t("toast.fileDeleted") });
   }
 
   async function handleRename(newName: string) {
@@ -179,7 +261,30 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
     await apiRenameFile(renameTarget.id, newName);
     setRenameTarget(null);
     await refreshFiles();
-    showToast({ title: "File renamed" });
+    showToast({ title: t("toast.fileRenamed") });
+  }
+
+  async function handleCreateFolder(name: string) {
+    await apiCreateFolder(project.id, currentFolderId, name);
+    setNewFolderOpen(false);
+    await refreshFolders();
+    showToast({ title: t("toast.folderCreated") });
+  }
+
+  async function handleRenameFolder(newName: string) {
+    if (!renameFolderTarget) return;
+    await apiRenameFolder(renameFolderTarget.id, newName);
+    setRenameFolderTarget(null);
+    await refreshFolders();
+    showToast({ title: t("toast.folderRenamed") });
+  }
+
+  async function handleDeleteFolder() {
+    if (!deleteFolderTarget) return;
+    await apiDeleteFolder(deleteFolderTarget.id);
+    setDeleteFolderTarget(null);
+    await refreshFolders();
+    showToast({ title: t("toast.folderDeleted") });
   }
 
   async function handleSaveProject(name: string, description: string) {
@@ -213,7 +318,10 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
         </div>
       </div>
 
+      <Breadcrumb entries={breadcrumb} onNavigate={navigateBreadcrumb} />
+
       <FileList
+        folders={search ? [] : folders}
         files={files}
         loading={filesLoading}
         search={search}
@@ -225,13 +333,18 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
           setSortDir(d);
         }}
         onUploadClick={handleUploadClick}
+        onNewFolderClick={() => setNewFolderOpen(true)}
         isDragActive={isDragActive}
+        dropTarget={dropTarget}
         onOpen={handleOpenFile}
         onDownload={handleDownloadFile}
         onUploadNewVersion={handleUploadNewVersionClick}
         onViewHistory={openHistory}
         onRename={(f) => setRenameTarget(f)}
         onDelete={(f) => setDeleteFileTarget(f)}
+        onOpenFolder={openFolder}
+        onRenameFolder={(f) => setRenameFolderTarget(f)}
+        onDeleteFolder={(f) => setDeleteFolderTarget(f)}
       />
 
       <VersionHistory
@@ -261,7 +374,7 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
         upload={async (description, operationId) => {
           if (!uploadTarget) throw new Error("No upload target");
           if (uploadTarget.mode === "new-file") {
-            return uploadFile(project.id, uploadTarget.sourcePath, description, operationId);
+            return uploadFile(project.id, uploadTarget.folderId, uploadTarget.sourcePath, description, operationId);
           }
           return uploadNewVersion(uploadTarget.file.id, uploadTarget.sourcePath, description, operationId);
         }}
@@ -270,8 +383,8 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
           await refreshFiles();
           if (historyFileId === entry.id) await refreshHistory();
           showToast({
-            title: "File uploaded",
-            description: `Version v${entry.currentVersion?.versionNumber} created`,
+            title: t("toast.fileUploaded"),
+            description: t("toast.versionCreated", { version: entry.currentVersion?.versionNumber ?? "" }),
           });
         }}
         onCancel={() => setUploadTarget(null)}
@@ -286,16 +399,16 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
 
       <DeleteModal
         open={deleteVersionTarget !== null}
-        title={`Delete v${deleteVersionTarget?.versionNumber}?`}
-        message="The file of this version will be deleted from the computer. This action cannot be undone."
+        title={t("delete.versionTitle", { version: deleteVersionTarget?.versionNumber ?? "" })}
+        message={t("delete.versionMessage")}
         onCancel={() => setDeleteVersionTarget(null)}
         onConfirm={handleDeleteVersion}
       />
 
       <DeleteModal
         open={deleteFileTarget !== null}
-        title={`Delete "${deleteFileTarget?.name}"?`}
-        message="This file and all of its versions will be deleted from this computer. This action cannot be undone."
+        title={t("delete.fileTitle", { name: deleteFileTarget?.name ?? "" })}
+        message={t("delete.fileMessage")}
         onCancel={() => setDeleteFileTarget(null)}
         onConfirm={handleDeleteFile}
       />
@@ -303,8 +416,35 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
       <RenameModal
         open={renameTarget !== null}
         currentName={renameTarget?.name ?? ""}
+        title={t("rename.fileTitle")}
+        emptyError={t("rename.fileEmptyError")}
+        errorFallback={t("rename.fileErrorFallback")}
         onCancel={() => setRenameTarget(null)}
         onConfirm={handleRename}
+      />
+
+      <NewFolderModal
+        open={newFolderOpen}
+        onCancel={() => setNewFolderOpen(false)}
+        onConfirm={handleCreateFolder}
+      />
+
+      <RenameModal
+        open={renameFolderTarget !== null}
+        currentName={renameFolderTarget?.name ?? ""}
+        title={t("rename.folderTitle")}
+        emptyError={t("rename.folderEmptyError")}
+        errorFallback={t("rename.folderErrorFallback")}
+        onCancel={() => setRenameFolderTarget(null)}
+        onConfirm={handleRenameFolder}
+      />
+
+      <DeleteModal
+        open={deleteFolderTarget !== null}
+        title={t("delete.folderTitle", { name: deleteFolderTarget?.name ?? "" })}
+        message={t("delete.folderMessage")}
+        onCancel={() => setDeleteFolderTarget(null)}
+        onConfirm={handleDeleteFolder}
       />
 
       <ProjectModal
@@ -316,8 +456,8 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
 
       <DeleteModal
         open={deleteProjectOpen}
-        title="Delete Project?"
-        message="The project and all associated files will be deleted from this computer. This action cannot be undone."
+        title={t("delete.projectTitle")}
+        message={t("delete.projectMessage")}
         onCancel={() => setDeleteProjectOpen(false)}
         onConfirm={handleDeleteProject}
       />

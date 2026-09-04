@@ -11,6 +11,7 @@ import { useState } from "react";
 
 import { ContextMenu } from "@/components/ContextMenu";
 import { FileTypeIcon } from "@/components/FileTypeIcon";
+import { useLanguage } from "@/hooks/useLanguage";
 import type { FileEntry } from "@/types";
 import { formatBytes, formatModified } from "@/utils/format";
 
@@ -23,7 +24,12 @@ interface FileRowActions {
   onDelete: (file: FileEntry) => void;
 }
 
-export function FileRow({ file, ...actions }: { file: FileEntry } & FileRowActions) {
+export function FileRow({
+  file,
+  isDropTarget,
+  ...actions
+}: { file: FileEntry; isDropTarget?: boolean } & FileRowActions) {
+  const { t, locale } = useLanguage();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   function openMenuAt(x: number, y: number) {
@@ -32,12 +38,16 @@ export function FileRow({ file, ...actions }: { file: FileEntry } & FileRowActio
 
   return (
     <div
+      data-drop-target="file"
+      data-row-id={file.id}
       onContextMenu={(e) => {
         e.preventDefault();
         openMenuAt(e.clientX, e.clientY);
       }}
       onDoubleClick={() => actions.onViewHistory(file)}
-      className="group flex items-center gap-3 rounded-apple-sm px-3 py-2.5 transition-colors hover:bg-surface-card-hover"
+      className={`group flex items-center gap-3 rounded-apple-sm px-3 py-2.5 transition-colors hover:bg-surface-card-hover ${
+        isDropTarget ? "bg-accent/[0.12] ring-1 ring-accent/50" : ""
+      }`}
     >
       <FileTypeIcon filename={file.currentVersion?.originalFilename ?? file.name} size={22} />
 
@@ -52,8 +62,11 @@ export function FileRow({ file, ...actions }: { file: FileEntry } & FileRowActio
         </div>
         <p className="mt-0.5 truncate text-[11.5px] text-label-secondary">
           {file.currentVersion
-            ? `Modified ${formatModified(file.currentVersion.createdAt)} · ${formatBytes(file.currentVersion.fileSize)}`
-            : "No versions"}
+            ? t("files.modified", {
+                date: formatModified(file.currentVersion.createdAt, locale, t("common.today"), t("common.yesterday")),
+                size: formatBytes(file.currentVersion.fileSize),
+              })
+            : t("files.noVersions")}
         </p>
       </div>
 
@@ -73,12 +86,12 @@ export function FileRow({ file, ...actions }: { file: FileEntry } & FileRowActio
           y={menu.y}
           onClose={() => setMenu(null)}
           items={[
-            { label: "Open", icon: ExternalLink, onClick: () => actions.onOpen(file) },
-            { label: "Download", icon: Download, onClick: () => actions.onDownload(file) },
-            { label: "Upload New Version", icon: Upload, onClick: () => actions.onUploadNewVersion(file) },
-            { label: "Version History", icon: History, onClick: () => actions.onViewHistory(file), dividerBefore: true },
-            { label: "Rename", icon: Pencil, onClick: () => actions.onRename(file), dividerBefore: true },
-            { label: "Delete", icon: Trash2, onClick: () => actions.onDelete(file), danger: true, dividerBefore: true },
+            { label: t("menu.open"), icon: ExternalLink, onClick: () => actions.onOpen(file) },
+            { label: t("menu.download"), icon: Download, onClick: () => actions.onDownload(file) },
+            { label: t("menu.uploadNewVersion"), icon: Upload, onClick: () => actions.onUploadNewVersion(file) },
+            { label: t("menu.versionHistory"), icon: History, onClick: () => actions.onViewHistory(file), dividerBefore: true },
+            { label: t("menu.rename"), icon: Pencil, onClick: () => actions.onRename(file), dividerBefore: true },
+            { label: t("menu.delete"), icon: Trash2, onClick: () => actions.onDelete(file), danger: true, dividerBefore: true },
           ]}
         />
       )}

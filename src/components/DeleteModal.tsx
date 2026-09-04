@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/Button";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
+import { useLanguage } from "@/hooks/useLanguage";
 import { ApiError } from "@/services/api";
 
 interface DeleteModalProps {
@@ -17,10 +18,11 @@ export function DeleteModal({
   open,
   title,
   message,
-  confirmLabel = "Delete",
+  confirmLabel,
   onCancel,
   onConfirm,
 }: DeleteModalProps) {
+  const { t, translateError } = useLanguage();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +39,7 @@ export function DeleteModal({
       await onConfirm();
     } catch (e) {
       setBusy(false);
-      setError(e instanceof ApiError ? e.message : "Unable to complete this action.");
+      setError(e instanceof ApiError ? translateError(e.message) : t("common.actionErrorFallback"));
     }
   }
 
@@ -50,10 +52,10 @@ export function DeleteModal({
       </ModalBody>
       <ModalFooter>
         <Button variant="secondary" onClick={handleCancel} disabled={busy}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button variant="danger" onClick={handleConfirm} disabled={busy}>
-          {confirmLabel}
+          {confirmLabel ?? t("common.delete")}
         </Button>
       </ModalFooter>
     </Modal>

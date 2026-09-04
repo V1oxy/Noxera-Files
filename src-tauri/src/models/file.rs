@@ -7,6 +7,7 @@ use super::version::FileVersion;
 pub struct FileEntry {
     pub id: String,
     pub project_id: String,
+    pub folder_id: Option<String>,
     pub name: String,
     pub current_version_id: Option<String>,
     pub next_version_number: i64,

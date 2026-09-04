@@ -1,4 +1,5 @@
 pub mod files;
+pub mod folders;
 pub mod projects;
 pub mod schema;
 pub mod settings;
@@ -16,6 +17,8 @@ pub fn open(db_path: &Path) -> rusqlite::Result<Connection> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
-    conn.execute_batch(schema::SCHEMA_SQL)?;
+    conn.execute_batch(schema::TABLES_SQL)?;
+    schema::migrate(&conn)?;
+    conn.execute_batch(schema::INDEXES_SQL)?;
     Ok(conn)
 }

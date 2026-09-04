@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
+import { useLanguage } from "@/hooks/useLanguage";
 import { ApiError } from "@/services/api";
 import type { Project } from "@/types";
 
@@ -13,6 +14,7 @@ interface ProjectModalProps {
 }
 
 export function ProjectModal({ open, project, onCancel, onConfirm }: ProjectModalProps) {
+  const { t, translateError } = useLanguage();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,7 +36,7 @@ export function ProjectModal({ open, project, onCancel, onConfirm }: ProjectModa
 
   async function handleConfirm() {
     if (!name.trim()) {
-      setError("Project name cannot be empty.");
+      setError(t("project.emptyError"));
       return;
     }
     setBusy(true);
@@ -43,18 +45,18 @@ export function ProjectModal({ open, project, onCancel, onConfirm }: ProjectModa
       await onConfirm(name.trim(), description.trim());
     } catch (e) {
       setBusy(false);
-      setError(e instanceof ApiError ? e.message : "Unable to save this project.");
+      setError(e instanceof ApiError ? translateError(e.message) : t("project.errorFallback"));
     }
   }
 
   return (
     <Modal open={open} onClose={handleCancel} width={420}>
-      <ModalHeader title={project ? "Edit Project" : "New Project"} />
+      <ModalHeader title={project ? t("project.editTitle") : t("project.newTitle")} />
       <ModalBody>
         <div className="space-y-3">
           <div>
             <label className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">
-              Name
+              {t("project.name")}
             </label>
             <input
               autoFocus
@@ -67,7 +69,7 @@ export function ProjectModal({ open, project, onCancel, onConfirm }: ProjectModa
           </div>
           <div>
             <label className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">
-              Description
+              {t("project.description")}
             </label>
             <textarea
               value={description}
@@ -82,10 +84,10 @@ export function ProjectModal({ open, project, onCancel, onConfirm }: ProjectModa
       </ModalBody>
       <ModalFooter>
         <Button variant="secondary" onClick={handleCancel} disabled={busy}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button variant="primary" onClick={handleConfirm} disabled={busy}>
-          {project ? "Save" : "Create"}
+          {project ? t("common.save") : t("common.create")}
         </Button>
       </ModalFooter>
     </Modal>

@@ -2,6 +2,7 @@ import { FolderOpen, Layers } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
+import { useLanguage } from "@/hooks/useLanguage";
 import { ApiError, defaultStoragePath, initializeStorage, pickStorageFolder } from "@/services/api";
 import type { AppSettings } from "@/types";
 
@@ -10,6 +11,7 @@ interface OnboardingProps {
 }
 
 export function Onboarding({ onComplete }: OnboardingProps) {
+  const { t, translateError } = useLanguage();
   const [step, setStep] = useState<"welcome" | "storage">("welcome");
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,7 +34,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       onComplete(settings);
     } catch (e) {
       setBusy(false);
-      setError(e instanceof ApiError ? e.message : "Unable to set up storage.");
+      setError(e instanceof ApiError ? translateError(e.message) : t("onboarding.errorFallback"));
     }
   }
 
@@ -44,20 +46,16 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-apple-lg bg-accent/10">
               <Layers size={30} className="text-accent" strokeWidth={1.5} />
             </div>
-            <h1 className="text-[20px] font-semibold text-label-primary">Project Manager</h1>
-            <p className="mt-2 text-[13px] leading-relaxed text-label-secondary">
-              All your projects and files, in one place.
-            </p>
+            <h1 className="text-[20px] font-semibold text-label-primary">{t("onboarding.appName")}</h1>
+            <p className="mt-2 text-[13px] leading-relaxed text-label-secondary">{t("onboarding.tagline")}</p>
             <Button variant="primary" className="mt-7 w-full" onClick={() => setStep("storage")}>
-              Get Started
+              {t("onboarding.getStarted")}
             </Button>
           </div>
         ) : (
           <div>
-            <h2 className="text-[16px] font-semibold text-label-primary">Where should we store your data?</h2>
-            <p className="mt-1.5 text-[12.5px] leading-relaxed text-label-secondary">
-              Everything stays on this computer. You can change this later in Settings.
-            </p>
+            <h2 className="text-[16px] font-semibold text-label-primary">{t("onboarding.storageQuestion")}</h2>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-label-secondary">{t("onboarding.storageHint")}</p>
 
             <div className="mt-5 flex items-center gap-2 rounded-apple-sm border border-surface-border bg-black/[0.03] px-3 py-2.5 dark:bg-white/[0.05]">
               <FolderOpen size={15} className="shrink-0 text-label-secondary" />
@@ -66,7 +64,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
             <div className="mt-3 flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={handleChooseFolder} disabled={busy}>
-                Choose Folder
+                {t("onboarding.chooseFolder")}
               </Button>
               <Button
                 variant="secondary"
@@ -74,14 +72,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 onClick={() => defaultStoragePath().then(setPath)}
                 disabled={busy}
               >
-                Use Default
+                {t("onboarding.useDefault")}
               </Button>
             </div>
 
             {error && <p className="mt-3 text-[12px] text-danger">{error}</p>}
 
             <Button variant="primary" className="mt-5 w-full" onClick={handleContinue} disabled={busy || !path}>
-              Continue
+              {t("onboarding.continue")}
             </Button>
           </div>
         )}

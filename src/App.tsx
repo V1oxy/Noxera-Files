@@ -1,21 +1,23 @@
+import { FolderPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/Button";
+import { EmptyState } from "@/components/EmptyState";
 import { ProjectModal } from "@/components/ProjectModal";
 import { Sidebar } from "@/components/Sidebar";
 import { ToastContainer } from "@/components/Toast";
-import { EmptyState } from "@/components/EmptyState";
-import { Button } from "@/components/Button";
+import { LanguageProvider, useLanguage } from "@/hooks/useLanguage";
 import { ThemeProvider, useTheme } from "@/hooks/useTheme";
-import { ToastProvider } from "@/hooks/useToast";
 import { useProjects } from "@/hooks/useProjects";
+import { ToastProvider } from "@/hooks/useToast";
 import { Onboarding } from "@/pages/Onboarding";
 import { ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
 import { createProject, getSettings, isInitialized } from "@/services/api";
-import { FolderPlus } from "lucide-react";
 
 function MainShell() {
   const { setTheme } = useTheme();
+  const { setLanguage, t } = useLanguage();
   const { projects, refresh: refreshProjects } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [view, setView] = useState<"project" | "settings">("project");
@@ -23,7 +25,10 @@ function MainShell() {
 
   useEffect(() => {
     getSettings()
-      .then((s) => setTheme(s.theme, false))
+      .then((s) => {
+        setTheme(s.theme, false);
+        setLanguage(s.language, false);
+      })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -66,11 +71,11 @@ function MainShell() {
         <div className="flex flex-1 items-center justify-center">
           <EmptyState
             icon={FolderPlus}
-            title="No projects yet"
-            description="Create a project to start organizing your files and their versions."
+            title={t("projects.emptyTitle")}
+            description={t("projects.emptyDescription")}
             action={
               <Button variant="primary" onClick={() => setCreateOpen(true)}>
-                New Project
+                {t("sidebar.newProject")}
               </Button>
             }
           />
@@ -117,9 +122,11 @@ function AppInner() {
 export default function App() {
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <AppInner />
-      </ToastProvider>
+      <LanguageProvider>
+        <ToastProvider>
+          <AppInner />
+        </ToastProvider>
+      </LanguageProvider>
     </ThemeProvider>
   );
 }

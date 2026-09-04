@@ -84,11 +84,27 @@ fn move_into_place(temp_path: &Path, final_path: &Path) -> std::io::Result<()> {
     std::fs::remove_file(temp_path)
 }
 
+/// Removes a directory tree, retrying a few times on failure. On Windows in
+/// particular, a file written moments ago can still be briefly locked by the
+/// OS/antivirus, which would otherwise make a deletion right after an upload
+/// fail with a sharing violation.
 pub fn remove_dir_all_if_exists(path: &Path) -> std::io::Result<()> {
-    if path.exists() {
-        std::fs::remove_dir_all(path)?;
+    if !path.exists() {
+        return Ok(());
     }
-    Ok(())
+    let mut last_err = None;
+    for attempt in 0..5 {
+        match std::fs::remove_dir_all(path) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                last_err = Some(e);
+                if attempt < 4 {
+                    std::thread::sleep(std::time::Duration::from_millis(150 * (attempt + 1)));
+                }
+            }
+        }
+    }
+    Err(last_err.unwrap())
 }
 
 /// Removes any leftover partial uploads from `temp/`. Called once on

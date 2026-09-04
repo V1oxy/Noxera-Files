@@ -1,5 +1,6 @@
 pub mod backup;
 pub mod files;
+pub mod folders;
 pub mod projects;
 pub mod settings;
 pub mod versions;

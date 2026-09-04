@@ -3,7 +3,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use crate::models::{FileEntry, FileVersion, SortDirection, SortField};
 
 const SELECT_BASE: &str = "SELECT \
-    f.id, f.project_id, f.name, f.current_version_id, f.next_version_number, f.created_at, f.updated_at, \
+    f.id, f.project_id, f.folder_id, f.name, f.current_version_id, f.next_version_number, f.created_at, f.updated_at, \
     (SELECT COUNT(*) FROM file_versions v WHERE v.file_id = f.id) AS version_count, \
     v.id AS v_id, v.file_id AS v_file_id, v.version_number AS v_version_number, \
     v.storage_path AS v_storage_path, v.original_filename AS v_original_filename, \
@@ -30,6 +30,7 @@ fn map_row(row: &Row) -> rusqlite::Result<FileEntry> {
     Ok(FileEntry {
         id: row.get("id")?,
         project_id: row.get("project_id")?,
+        folder_id: row.get("folder_id")?,
         name: row.get("name")?,
         current_version_id: row.get("current_version_id")?,
         next_version_number: row.get("next_version_number")?,
@@ -55,31 +56,45 @@ fn sort_clause(field: SortField, dir: SortDirection) -> &'static str {
     }
 }
 
+/// Lists files in a project. When `search` is non-empty, it matches by name
+/// across the *entire* project regardless of folder (so you don't have to
+/// know which folder a file is in to find it); otherwise the list is scoped
+/// to `folder_id` (`None` = the project's root).
 pub fn list_for_project(
     conn: &Connection,
     project_id: &str,
+    folder_id: Option<&str>,
     search: Option<&str>,
     field: SortField,
     dir: SortDirection,
 ) -> rusqlite::Result<Vec<FileEntry>> {
     let order = sort_clause(field, dir);
-    let (sql, needle);
     if let Some(term) = search.filter(|s| !s.trim().is_empty()) {
         let escaped = term
             .trim()
             .replace('\\', "\\\\")
             .replace('%', "\\%")
             .replace('_', "\\_");
-        needle = format!("%{escaped}%");
-        sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.name LIKE ?2 ESCAPE '\\' {order}");
+        let needle = format!("%{escaped}%");
+        let sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.name LIKE ?2 ESCAPE '\\' {order}");
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map(params![project_id, needle], map_row)?;
         return rows.collect();
     }
-    sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 {order}");
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(params![project_id], map_row)?;
-    rows.collect()
+    match folder_id {
+        Some(folder) => {
+            let sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.folder_id = ?2 {order}");
+            let mut stmt = conn.prepare(&sql)?;
+            let rows = stmt.query_map(params![project_id, folder], map_row)?;
+            rows.collect()
+        }
+        None => {
+            let sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.folder_id IS NULL {order}");
+            let mut stmt = conn.prepare(&sql)?;
+            let rows = stmt.query_map(params![project_id], map_row)?;
+            rows.collect()
+        }
+    }
 }
 
 pub fn get(conn: &Connection, file_id: &str) -> rusqlite::Result<Option<FileEntry>> {
@@ -91,13 +106,14 @@ pub fn create(
     conn: &Connection,
     id: &str,
     project_id: &str,
+    folder_id: Option<&str>,
     name: &str,
     now: &str,
 ) -> rusqlite::Result<()> {
     conn.execute(
-        "INSERT INTO files (id, project_id, name, current_version_id, next_version_number, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, NULL, 1, ?4, ?4)",
-        params![id, project_id, name, now],
+        "INSERT INTO files (id, project_id, folder_id, name, current_version_id, next_version_number, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, NULL, 1, ?5, ?5)",
+        params![id, project_id, folder_id, name, now],
     )?;
     Ok(())
 }

@@ -12,6 +12,8 @@ import type {
   FileDetail,
   FileEntry,
   FileVersion,
+  Folder,
+  FolderPathEntry,
   Project,
   SortDirection,
   SortField,
@@ -55,7 +57,7 @@ export async function pickStorageFolder(): Promise<string | null> {
 // ---- Settings ---------------------------------------------------------------
 
 export const getSettings = () => call<AppSettings>("get_settings");
-export const updateSettings = (update: { theme?: string; launchAtStartup?: boolean }) =>
+export const updateSettings = (update: { theme?: string; language?: string; launchAtStartup?: boolean }) =>
   call<AppSettings>("update_settings", { update });
 export const getStorageInfo = () => call<StorageInfo>("get_storage_info");
 export const openDataFolder = (which: "storage" | "backups" | "logs") =>
@@ -76,10 +78,11 @@ export const deleteProject = (projectId: string) => call<void>("delete_project",
 
 export const getFiles = (
   projectId: string,
-  opts?: { search?: string; sortField?: SortField; sortDir?: SortDirection },
+  opts?: { folderId?: string | null; search?: string; sortField?: SortField; sortDir?: SortDirection },
 ) =>
   call<FileEntry[]>("get_files", {
     projectId,
+    folderId: opts?.folderId ?? null,
     search: opts?.search || null,
     sortField: opts?.sortField ?? null,
     sortDir: opts?.sortDir ?? null,
@@ -89,6 +92,18 @@ export const getFile = (fileId: string) => call<FileDetail>("get_file", { fileId
 export const renameFile = (fileId: string, newName: string) =>
   call<FileEntry>("rename_file", { fileId, newName });
 export const deleteFile = (fileId: string) => call<void>("delete_file", { fileId });
+
+// ---- Folders --------------------------------------------------------------------
+
+export const getFolders = (projectId: string, parentFolderId?: string | null) =>
+  call<Folder[]>("get_folders", { projectId, parentFolderId: parentFolderId ?? null });
+export const getFolderPath = (folderId: string) =>
+  call<FolderPathEntry[]>("get_folder_path", { folderId });
+export const createFolder = (projectId: string, parentFolderId: string | null, name: string) =>
+  call<Folder>("create_folder", { projectId, parentFolderId, name });
+export const renameFolder = (folderId: string, newName: string) =>
+  call<Folder>("rename_folder", { folderId, newName });
+export const deleteFolder = (folderId: string) => call<void>("delete_folder", { folderId });
 
 // ---- Versions ---------------------------------------------------------------
 
@@ -102,12 +117,14 @@ export async function pickFilesToUpload(multiple = true): Promise<string[]> {
 
 export const uploadFile = (
   projectId: string,
+  folderId: string | null,
   sourcePath: string,
   description?: string,
   operationId?: string,
 ) =>
   call<FileEntry>("upload_file", {
     projectId,
+    folderId,
     sourcePath,
     description: description || null,
     operationId: operationId || null,

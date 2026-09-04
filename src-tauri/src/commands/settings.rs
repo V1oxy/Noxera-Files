@@ -14,6 +14,7 @@ use crate::utils::{AppError, AppResult};
 use super::with_ready;
 
 const KEY_THEME: &str = "theme";
+const KEY_LANGUAGE: &str = "language";
 const KEY_LAUNCH_AT_STARTUP: &str = "launch_at_startup";
 
 #[tauri::command]
@@ -69,6 +70,9 @@ pub fn initialize_storage(
         if settings_db::get(conn, KEY_THEME)?.is_none() {
             settings_db::set(conn, KEY_THEME, "system")?;
         }
+        if settings_db::get(conn, KEY_LANGUAGE)?.is_none() {
+            settings_db::set(conn, KEY_LANGUAGE, "system")?;
+        }
         if settings_db::get(conn, KEY_LAUNCH_AT_STARTUP)?.is_none() {
             settings_db::set(conn, KEY_LAUNCH_AT_STARTUP, "false")?;
         }
@@ -82,11 +86,13 @@ pub fn initialize_storage(
 pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
     with_ready(&state, |conn, storage| {
         let theme = settings_db::get(conn, KEY_THEME)?.unwrap_or_else(|| "system".to_string());
+        let language = settings_db::get(conn, KEY_LANGUAGE)?.unwrap_or_else(|| "system".to_string());
         let launch_at_startup = settings_db::get(conn, KEY_LAUNCH_AT_STARTUP)?
             .map(|v| v == "true")
             .unwrap_or(false);
         Ok(AppSettings {
             theme,
+            language,
             launch_at_startup,
             storage_path: storage.root().to_string_lossy().to_string(),
         })
@@ -105,6 +111,12 @@ pub fn update_settings(
                 return Err(AppError::user("Invalid theme."));
             }
             settings_db::set(conn, KEY_THEME, theme)?;
+        }
+        if let Some(language) = &update.language {
+            if !["system", "en", "ru"].contains(&language.as_str()) {
+                return Err(AppError::user("Invalid language."));
+            }
+            settings_db::set(conn, KEY_LANGUAGE, language)?;
         }
         if let Some(launch) = update.launch_at_startup {
             settings_db::set(

@@ -5,6 +5,7 @@ import type { FileEntry, SortDirection, SortField } from "@/types";
 
 export function useFiles(
   projectId: string | null,
+  folderId: string | null,
   search: string,
   sortField: SortField,
   sortDir: SortDirection,
@@ -22,13 +23,13 @@ export function useFiles(
     setLoading(true);
     setError(null);
     try {
-      setFiles(await getFiles(projectId, { search, sortField, sortDir }));
+      setFiles(await getFiles(projectId, { folderId, search, sortField, sortDir }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to load files.");
     } finally {
       setLoading(false);
     }
-  }, [projectId, search, sortField, sortDir]);
+  }, [projectId, folderId, search, sortField, sortDir]);
 
   useEffect(() => {
     refresh();

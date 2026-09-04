@@ -5,37 +5,25 @@ import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
 import { useLanguage } from "@/hooks/useLanguage";
 import { ApiError } from "@/services/api";
 
-interface RenameModalProps {
+interface NewFolderModalProps {
   open: boolean;
-  currentName: string;
-  title: string;
-  emptyError: string;
-  errorFallback: string;
   onCancel: () => void;
-  onConfirm: (newName: string) => Promise<void>;
+  onConfirm: (name: string) => Promise<void>;
 }
 
-export function RenameModal({
-  open,
-  currentName,
-  title,
-  emptyError,
-  errorFallback,
-  onCancel,
-  onConfirm,
-}: RenameModalProps) {
+export function NewFolderModal({ open, onCancel, onConfirm }: NewFolderModalProps) {
   const { t, translateError } = useLanguage();
-  const [name, setName] = useState(currentName);
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setName(currentName);
+      setName("");
       setError(null);
       setBusy(false);
     }
-  }, [open, currentName]);
+  }, [open]);
 
   function handleCancel() {
     if (busy) return;
@@ -44,7 +32,7 @@ export function RenameModal({
 
   async function handleConfirm() {
     if (!name.trim()) {
-      setError(emptyError);
+      setError(t("newFolder.emptyError"));
       return;
     }
     setBusy(true);
@@ -53,13 +41,13 @@ export function RenameModal({
       await onConfirm(name.trim());
     } catch (e) {
       setBusy(false);
-      setError(e instanceof ApiError ? translateError(e.message) : errorFallback);
+      setError(e instanceof ApiError ? translateError(e.message) : t("newFolder.errorFallback"));
     }
   }
 
   return (
-    <Modal open={open} onClose={handleCancel} width={380}>
-      <ModalHeader title={title} />
+    <Modal open={open} onClose={handleCancel} width={360}>
+      <ModalHeader title={t("newFolder.title")} />
       <ModalBody>
         <input
           autoFocus
@@ -67,8 +55,8 @@ export function RenameModal({
           onChange={(e) => setName(e.target.value)}
           disabled={busy}
           onKeyDown={(e) => e.key === "Enter" && handleConfirm()}
-          onFocus={(e) => e.currentTarget.select()}
-          className="w-full rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 h-8 text-[13px] text-label-primary outline-none focus:border-accent/50 focus:bg-surface-content disabled:opacity-50 dark:bg-white/[0.05]"
+          placeholder={t("newFolder.placeholder")}
+          className="w-full rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 h-8 text-[13px] text-label-primary placeholder:text-label-tertiary outline-none focus:border-accent/50 focus:bg-surface-content disabled:opacity-50 dark:bg-white/[0.05]"
         />
         {error && <p className="mt-2 text-[12px] text-danger">{error}</p>}
       </ModalBody>
@@ -77,7 +65,7 @@ export function RenameModal({
           {t("common.cancel")}
         </Button>
         <Button variant="primary" onClick={handleConfirm} disabled={busy}>
-          {t("common.save")}
+          {t("common.create")}
         </Button>
       </ModalFooter>
     </Modal>

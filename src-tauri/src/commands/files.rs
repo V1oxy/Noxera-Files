@@ -12,6 +12,7 @@ use super::with_ready;
 pub fn get_files(
     state: State<AppState>,
     project_id: String,
+    folder_id: Option<String>,
     search: Option<String>,
     sort_field: Option<SortField>,
     sort_dir: Option<SortDirection>,
@@ -23,6 +24,7 @@ pub fn get_files(
         Ok(files_db::list_for_project(
             conn,
             &project_id,
+            folder_id.as_deref(),
             search.as_deref(),
             field,
             dir,
@@ -67,7 +69,12 @@ pub fn delete_file(state: State<AppState>, file_id: String) -> AppResult<()> {
             .ok_or_else(|| AppError::user("This file no longer exists."))?;
         files_db::delete(conn, &file_id)?;
         let dir = storage.file_dir(&file.project_id, &file_id)?;
-        remove_dir_all_if_exists(&dir)?;
+        if let Err(e) = remove_dir_all_if_exists(&dir) {
+            crate::utils::logger::append(
+                storage,
+                &format!("Failed to remove file directory {}: {e}", dir.display()),
+            );
+        }
         Ok(())
     })
 }

@@ -20,9 +20,26 @@ export interface FileVersion {
   createdAt: string;
 }
 
+export interface Folder {
+  id: string;
+  projectId: string;
+  parentFolderId: string | null;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  folderCount: number;
+  fileCount: number;
+}
+
+export interface FolderPathEntry {
+  id: string;
+  name: string;
+}
+
 export interface FileEntry {
   id: string;
   projectId: string;
+  folderId: string | null;
   name: string;
   currentVersionId: string | null;
   nextVersionNumber: number;
@@ -40,9 +57,11 @@ export type SortField = "name" | "lastModified" | "created" | "size";
 export type SortDirection = "asc" | "desc";
 
 export type ThemeMode = "system" | "light" | "dark";
+export type LanguageMode = "system" | "en" | "ru";
 
 export interface AppSettings {
   theme: ThemeMode;
+  language: LanguageMode;
   launchAtStartup: boolean;
   storagePath: string;
 }

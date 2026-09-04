@@ -2,6 +2,7 @@ import { Upload, X } from "lucide-react";
 
 import { Button } from "@/components/Button";
 import { VersionCard } from "@/components/VersionCard";
+import { useLanguage } from "@/hooks/useLanguage";
 import type { FileDetail, FileVersion } from "@/types";
 
 interface VersionHistoryProps {
@@ -25,6 +26,7 @@ export function VersionHistory({
   onRestore,
   onDelete,
 }: VersionHistoryProps) {
+  const { t } = useLanguage();
   if (!open) return null;
 
   return (
@@ -35,15 +37,17 @@ export function VersionHistory({
       }}
     >
       <div
+        data-drop-target={detail ? "file" : undefined}
+        data-row-id={detail?.id}
         className="animate-scale-in flex max-h-[80vh] w-[480px] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-surface-border px-5 py-4">
           <div className="min-w-0">
             <h2 className="truncate text-[15px] font-semibold text-label-primary">
-              {detail?.name ?? "Version History"}
+              {detail?.name ?? t("history.subtitle")}
             </h2>
-            <p className="text-[12px] text-label-secondary">Version History</p>
+            <p className="text-[12px] text-label-secondary">{t("history.subtitle")}</p>
           </div>
           <button
             onClick={onClose}
@@ -54,7 +58,7 @@ export function VersionHistory({
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto px-5 py-4">
-          {loading && <p className="text-[12.5px] text-label-secondary">Loading...</p>}
+          {loading && <p className="text-[12.5px] text-label-secondary">{t("files.loading")}</p>}
           {!loading &&
             detail?.versions.map((v) => (
               <VersionCard
@@ -71,7 +75,7 @@ export function VersionHistory({
         <div className="border-t border-surface-border px-5 py-3.5">
           <Button variant="primary" onClick={onUploadNewVersion} className="w-full">
             <Upload size={14} />
-            Upload New Version
+            {t("history.uploadNewVersion")}
           </Button>
         </div>
       </div>

@@ -65,12 +65,19 @@ pub fn delete_project(state: State<AppState>, project_id: String) -> AppResult<(
         if !db::exists(conn, &project_id)? {
             return Err(AppError::user("This project no longer exists."));
         }
-        // Delete the DB rows first (cascades to files/file_versions); only
-        // once that succeeds do we remove the physical files, so a failure
-        // here never leaves an orphaned DB reference to deleted files.
+        // Delete the DB rows first (cascades to files/file_versions) so the
+        // project is gone from the app's perspective even if the physical
+        // cleanup below hits a transient OS file lock (e.g. a file written
+        // moments ago still briefly held by an antivirus scan on Windows) -
+        // that failure is logged but must not make the project reappear.
         db::delete(conn, &project_id)?;
         let dir = storage.project_dir(&project_id)?;
-        remove_dir_all_if_exists(&dir)?;
+        if let Err(e) = remove_dir_all_if_exists(&dir) {
+            crate::utils::logger::append(
+                storage,
+                &format!("Failed to remove project directory {}: {e}", dir.display()),
+            );
+        }
         Ok(())
     })
 }

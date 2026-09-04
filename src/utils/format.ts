@@ -18,31 +18,45 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-});
+const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
-/** "Modified today, 09:32" / "Modified yesterday, 18:21" / "September 1, 2026" */
-export function formatModified(iso: string): string {
+function timeFormatter(locale: string): Intl.DateTimeFormat {
+  const key = `time:${locale}`;
+  if (!formatterCache.has(key)) {
+    formatterCache.set(key, new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }));
+  }
+  return formatterCache.get(key)!;
+}
+
+function dateFormatter(locale: string): Intl.DateTimeFormat {
+  const key = `date:${locale}`;
+  if (!formatterCache.has(key)) {
+    formatterCache.set(
+      key,
+      new Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric" }),
+    );
+  }
+  return formatterCache.get(key)!;
+}
+
+/** "Today, 09:32" / "Yesterday, 18:21" / "September 1, 2026", localized. */
+export function formatModified(iso: string, locale: string, todayLabel: string, yesterdayLabel: string): string {
   const date = new Date(iso);
   const now = new Date();
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
 
   if (isSameDay(date, now)) {
-    return `Today, ${timeFormatter.format(date)}`;
+    return `${todayLabel}, ${timeFormatter(locale).format(date)}`;
   }
   if (isSameDay(date, yesterday)) {
-    return `Yesterday, ${timeFormatter.format(date)}`;
+    return `${yesterdayLabel}, ${timeFormatter(locale).format(date)}`;
   }
-  return dateFormatter.format(date);
+  return dateFormatter(locale).format(date);
 }
 
-/** "September 4, 2026 · 09:32" */
-export function formatFullDateTime(iso: string): string {
+/** "September 4, 2026 · 09:32", localized. */
+export function formatFullDateTime(iso: string, locale: string): string {
   const date = new Date(iso);
-  return `${dateFormatter.format(date)} · ${timeFormatter.format(date)}`;
+  return `${dateFormatter(locale).format(date)} · ${timeFormatter(locale).format(date)}`;
 }

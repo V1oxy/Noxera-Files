@@ -111,6 +111,7 @@ pub fn upload_file(
     app: AppHandle,
     state: State<AppState>,
     project_id: String,
+    folder_id: Option<String>,
     source_path: String,
     description: Option<String>,
     operation_id: Option<String>,
@@ -128,7 +129,7 @@ pub fn upload_file(
         }
         let file_id = new_id();
         let now = now_iso();
-        files_db::create(conn, &file_id, &project_id, &display_name, &now)?;
+        files_db::create(conn, &file_id, &project_id, folder_id.as_deref(), &display_name, &now)?;
 
         match write_version(
             &app,
@@ -239,7 +240,12 @@ pub fn delete_version(state: State<AppState>, version_id: String) -> AppResult<O
 
         versions_db::delete(conn, &version_id)?;
         let version_dir = storage.version_dir(&file.project_id, &file.id, version.version_number)?;
-        remove_dir_all_if_exists(&version_dir)?;
+        if let Err(e) = remove_dir_all_if_exists(&version_dir) {
+            crate::utils::logger::append(
+                storage,
+                &format!("Failed to remove version directory {}: {e}", version_dir.display()),
+            );
+        }
 
         let remaining = versions_db::count_for_file(conn, &file.id)?;
         if remaining == 0 {
@@ -247,7 +253,12 @@ pub fn delete_version(state: State<AppState>, version_id: String) -> AppResult<O
             // (spec section 45).
             files_db::delete(conn, &file.id)?;
             let file_dir = storage.file_dir(&file.project_id, &file.id)?;
-            remove_dir_all_if_exists(&file_dir)?;
+            if let Err(e) = remove_dir_all_if_exists(&file_dir) {
+                crate::utils::logger::append(
+                    storage,
+                    &format!("Failed to remove file directory {}: {e}", file_dir.display()),
+                );
+            }
             return Ok(None);
         }
 

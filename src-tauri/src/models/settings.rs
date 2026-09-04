@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub theme: String,
+    pub language: String,
     pub launch_at_startup: bool,
     pub storage_path: String,
 }
@@ -12,6 +13,7 @@ pub struct AppSettings {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsUpdate {
     pub theme: Option<String>,
+    pub language: Option<String>,
     pub launch_at_startup: Option<bool>,
 }
 

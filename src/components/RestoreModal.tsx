@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
+import { useLanguage } from "@/hooks/useLanguage";
 import { ApiError } from "@/services/api";
 
 interface RestoreModalProps {
@@ -12,16 +13,18 @@ interface RestoreModalProps {
 }
 
 export function RestoreModal({ open, versionNumber, onCancel, onConfirm }: RestoreModalProps) {
+  const { t, translateError } = useLanguage();
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setDescription(versionNumber !== null ? `Restored from version v${versionNumber}` : "");
+      setDescription(versionNumber !== null ? t("restore.defaultDescription", { version: versionNumber }) : "");
       setError(null);
       setBusy(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, versionNumber]);
 
   function handleCancel() {
@@ -36,19 +39,19 @@ export function RestoreModal({ open, versionNumber, onCancel, onConfirm }: Resto
       await onConfirm(description.trim());
     } catch (e) {
       setBusy(false);
-      setError(e instanceof ApiError ? e.message : "Unable to restore this version.");
+      setError(e instanceof ApiError ? translateError(e.message) : t("restore.errorFallback"));
     }
   }
 
   return (
     <Modal open={open} onClose={handleCancel} width={420}>
       <ModalHeader
-        title={`Restore v${versionNumber}?`}
-        subtitle="A new version will be created using the contents of this version. Existing versions will not be changed."
+        title={t("restore.title", { version: versionNumber ?? "" })}
+        subtitle={t("restore.subtitle")}
       />
       <ModalBody>
         <label className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">
-          Description
+          {t("restore.description")}
         </label>
         <textarea
           value={description}
@@ -61,10 +64,10 @@ export function RestoreModal({ open, versionNumber, onCancel, onConfirm }: Resto
       </ModalBody>
       <ModalFooter>
         <Button variant="secondary" onClick={handleCancel} disabled={busy}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button variant="primary" onClick={handleConfirm} disabled={busy}>
-          Restore
+          {t("restore.confirm")}
         </Button>
       </ModalFooter>
     </Modal>
