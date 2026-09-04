@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Breadcrumb, type BreadcrumbEntry } from "@/components/Breadcrumb";
 import { Button } from "@/components/Button";
 import { DeleteModal } from "@/components/DeleteModal";
+import { ExpandableText } from "@/components/ExpandableText";
 import { FileList } from "@/components/FileList";
 import { NewFolderModal } from "@/components/NewFolderModal";
 import { ProjectModal } from "@/components/ProjectModal";
@@ -12,6 +13,7 @@ import { RenameModal } from "@/components/RenameModal";
 import { RestoreModal } from "@/components/RestoreModal";
 import { UploadModal } from "@/components/UploadModal";
 import { VersionHistory } from "@/components/VersionHistory";
+import { VersionInfoModal } from "@/components/VersionInfoModal";
 import { useFiles } from "@/hooks/useFiles";
 import { useFolders } from "@/hooks/useFolders";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -44,6 +46,7 @@ type DropTarget = { type: "file" | "folder"; id: string } | null;
 
 interface ProjectViewProps {
   project: Project;
+  navResetSignal?: number;
   onProjectUpdated: (project: Project) => void;
   onProjectDeleted: () => void;
 }
@@ -58,7 +61,7 @@ function resolveDropTarget(physicalX: number, physicalY: number): DropTarget {
   return { type, id };
 }
 
-export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: ProjectViewProps) {
+export function ProjectView({ project, navResetSignal, onProjectUpdated, onProjectDeleted }: ProjectViewProps) {
   const { showToast } = useToast();
   const { t, translateError } = useLanguage();
 
@@ -85,6 +88,7 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
   const [deleteVersionTarget, setDeleteVersionTarget] = useState<FileVersion | null>(null);
   const [deleteFileTarget, setDeleteFileTarget] = useState<FileEntry | null>(null);
   const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null);
+  const [whatsNewTarget, setWhatsNewTarget] = useState<FileEntry | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [renameFolderTarget, setRenameFolderTarget] = useState<Folder | null>(null);
   const [deleteFolderTarget, setDeleteFolderTarget] = useState<Folder | null>(null);
@@ -98,8 +102,11 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
     setCurrentFolderId(null);
     setBreadcrumb([{ id: null, name: project.name }]);
     setSearch("");
+    // Re-run (even though project.id is unchanged) whenever the sidebar
+    // entry for this project is clicked again, so it always jumps back to
+    // the project root instead of staying wherever the user had navigated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.id]);
+  }, [project.id, navResetSignal]);
 
   useEffect(() => {
     setBreadcrumb((prev) => (prev.length > 0 ? [{ ...prev[0], name: project.name }, ...prev.slice(1)] : prev));
@@ -305,7 +312,11 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
         <div className="min-w-0">
           <h1 className="truncate text-[20px] font-semibold text-label-primary">{project.name}</h1>
           {project.description && (
-            <p className="mt-1 max-w-xl truncate text-[12.5px] text-label-secondary">{project.description}</p>
+            <ExpandableText
+              text={project.description}
+              className="mt-1 max-w-xl text-[12.5px] text-label-secondary"
+              clampClassName="line-clamp-2"
+            />
           )}
         </div>
         <div className="no-drag flex shrink-0 gap-1.5 pt-1">
@@ -340,6 +351,7 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
         onDownload={handleDownloadFile}
         onUploadNewVersion={handleUploadNewVersionClick}
         onViewHistory={openHistory}
+        onShowWhatsNew={(f) => setWhatsNewTarget(f)}
         onRename={(f) => setRenameTarget(f)}
         onDelete={(f) => setDeleteFileTarget(f)}
         onOpenFolder={openFolder}
@@ -361,6 +373,12 @@ export function ProjectView({ project, onProjectUpdated, onProjectDeleted }: Pro
         onDownload={handleDownloadVersion}
         onRestore={(v) => setRestoreTarget(v)}
         onDelete={(v) => setDeleteVersionTarget(v)}
+      />
+
+      <VersionInfoModal
+        open={whatsNewTarget !== null}
+        file={whatsNewTarget}
+        onClose={() => setWhatsNewTarget(null)}
       />
 
       <UploadModal

@@ -65,6 +65,12 @@ export const translations: Record<Lang, Record<string, string>> = {
     "common.today": "Today",
     "common.yesterday": "Yesterday",
     "common.actionErrorFallback": "Unable to complete this action.",
+    "common.showMore": "Show more",
+    "common.showLess": "Show less",
+    "common.close": "Close",
+    "menu.whatsNew": "What's new in this version",
+    "whatsNew.title": "What's new in v{version}",
+    "whatsNew.empty": "No description was added for this version.",
 
     // Upload modal
     "upload.titleAddFile": "Add File",
@@ -236,6 +242,12 @@ export const translations: Record<Lang, Record<string, string>> = {
     "common.today": "Сегодня",
     "common.yesterday": "Вчера",
     "common.actionErrorFallback": "Не удалось выполнить это действие.",
+    "common.showMore": "Показать полностью",
+    "common.showLess": "Свернуть",
+    "common.close": "Закрыть",
+    "menu.whatsNew": "Что нового в этой версии",
+    "whatsNew.title": "Что нового в v{version}",
+    "whatsNew.empty": "Для этой версии не добавлено описание.",
 
     // Upload modal
     "upload.titleAddFile": "Добавить файл",

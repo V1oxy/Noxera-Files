@@ -70,16 +70,21 @@ pub fn list_for_project(
 ) -> rusqlite::Result<Vec<FileEntry>> {
     let order = sort_clause(field, dir);
     if let Some(term) = search.filter(|s| !s.trim().is_empty()) {
-        let escaped = term
-            .trim()
-            .replace('\\', "\\\\")
-            .replace('%', "\\%")
-            .replace('_', "\\_");
-        let needle = format!("%{escaped}%");
-        let sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.name LIKE ?2 ESCAPE '\\' {order}");
+        // SQLite's LIKE/NOCASE only case-folds ASCII, so a SQL-side filter
+        // would miss e.g. "спам" matching "СПАМ". Fetch every file in the
+        // project and filter here with Rust's Unicode-aware to_lowercase().
+        let needle = term.trim().to_lowercase();
+        let sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 {order}");
         let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(params![project_id, needle], map_row)?;
-        return rows.collect();
+        let rows = stmt.query_map(params![project_id], map_row)?;
+        return rows
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map(|files| {
+                files
+                    .into_iter()
+                    .filter(|f| f.name.to_lowercase().contains(&needle))
+                    .collect()
+            });
     }
     match folder_id {
         Some(folder) => {

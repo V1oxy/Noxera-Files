@@ -33,6 +33,7 @@ interface FileListProps {
   onDownload: (file: FileEntry) => void;
   onUploadNewVersion: (file: FileEntry) => void;
   onViewHistory: (file: FileEntry) => void;
+  onShowWhatsNew: (file: FileEntry) => void;
   onRename: (file: FileEntry) => void;
   onDelete: (file: FileEntry) => void;
   onOpenFolder: (folder: Folder) => void;
@@ -170,15 +171,17 @@ export function FileList({
         )}
       </div>
 
-      {isDragActive && (
+      {isDragActive && !dropTarget && (
         <div className="pointer-events-none absolute inset-3 flex flex-col items-center justify-center rounded-apple-lg border-2 border-dashed border-accent bg-accent/[0.06] backdrop-blur-sm">
           <Upload size={28} className="mb-2 text-accent" strokeWidth={1.5} />
-          <p className="text-[13px] font-medium text-accent">
-            {dropTarget?.type === "file"
-              ? t("files.dropNewVersion")
-              : dropTarget?.type === "folder"
-                ? t("files.dropIntoFolder")
-                : t("files.dropHere")}
+          <p className="text-[13px] font-medium text-accent">{t("files.dropHere")}</p>
+        </div>
+      )}
+
+      {isDragActive && dropTarget && (
+        <div className="pointer-events-none absolute inset-x-3 bottom-3 flex justify-center">
+          <p className="rounded-full border border-surface-border bg-surface-modal px-3 py-1.5 text-[12px] font-medium text-accent shadow-popover backdrop-blur-apple">
+            {dropTarget.type === "file" ? t("files.dropNewVersion") : t("files.dropIntoFolder")}
           </p>
         </div>
       )}

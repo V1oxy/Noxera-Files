@@ -1,6 +1,7 @@
 import { Download, RotateCcw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/Button";
+import { ExpandableText } from "@/components/ExpandableText";
 import { useLanguage } from "@/hooks/useLanguage";
 import type { FileVersion } from "@/types";
 import { formatBytes, formatFullDateTime } from "@/utils/format";
@@ -37,7 +38,11 @@ export function VersionCard({ version, isCurrent, onDownload, onRestore, onDelet
       <p className="mt-1 text-[11.5px] text-label-secondary">{formatFullDateTime(version.createdAt, locale)}</p>
 
       {version.description && (
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-label-primary">{version.description}</p>
+        <ExpandableText
+          text={version.description}
+          className="mt-1.5 text-[12.5px] leading-relaxed text-label-primary"
+          clampClassName="line-clamp-3"
+        />
       )}
 
       <div className="mt-2.5 flex gap-1.5">

@@ -22,6 +22,7 @@ function MainShell() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [view, setView] = useState<"project" | "settings">("project");
   const [createOpen, setCreateOpen] = useState(false);
+  const [navResetNonce, setNavResetNonce] = useState(0);
 
   useEffect(() => {
     getSettings()
@@ -49,6 +50,7 @@ function MainShell() {
         onSelectProject={(id) => {
           setSelectedProjectId(id);
           setView("project");
+          setNavResetNonce((n) => n + 1);
         }}
         onNewProject={() => setCreateOpen(true)}
         onOpenSettings={() => setView("settings")}
@@ -61,6 +63,7 @@ function MainShell() {
         <ProjectView
           key={selectedProject.id}
           project={selectedProject}
+          navResetSignal={navResetNonce}
           onProjectUpdated={() => refreshProjects()}
           onProjectDeleted={async () => {
             setSelectedProjectId(null);

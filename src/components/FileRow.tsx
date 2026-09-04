@@ -4,6 +4,7 @@ import {
   History,
   MoreHorizontal,
   Pencil,
+  Sparkles,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -20,6 +21,7 @@ interface FileRowActions {
   onDownload: (file: FileEntry) => void;
   onUploadNewVersion: (file: FileEntry) => void;
   onViewHistory: (file: FileEntry) => void;
+  onShowWhatsNew: (file: FileEntry) => void;
   onRename: (file: FileEntry) => void;
   onDelete: (file: FileEntry) => void;
 }
@@ -55,9 +57,17 @@ export function FileRow({
         <div className="flex items-center gap-2">
           <p className="truncate text-[13px] font-medium text-label-primary">{file.name}</p>
           {file.currentVersion && (
-            <span className="shrink-0 rounded-full bg-black/[0.05] px-1.5 py-0.5 text-[10.5px] font-medium text-label-secondary dark:bg-white/[0.08]">
+            <button
+              type="button"
+              title={t("menu.whatsNew")}
+              onClick={(e) => {
+                e.stopPropagation();
+                actions.onShowWhatsNew(file);
+              }}
+              className="no-drag shrink-0 rounded-full bg-black/[0.05] px-1.5 py-0.5 text-[10.5px] font-medium text-label-secondary transition-colors hover:bg-accent hover:text-white dark:bg-white/[0.08]"
+            >
               v{file.currentVersion.versionNumber}
-            </span>
+            </button>
           )}
         </div>
         <p className="mt-0.5 truncate text-[11.5px] text-label-secondary">
@@ -89,7 +99,8 @@ export function FileRow({
             { label: t("menu.open"), icon: ExternalLink, onClick: () => actions.onOpen(file) },
             { label: t("menu.download"), icon: Download, onClick: () => actions.onDownload(file) },
             { label: t("menu.uploadNewVersion"), icon: Upload, onClick: () => actions.onUploadNewVersion(file) },
-            { label: t("menu.versionHistory"), icon: History, onClick: () => actions.onViewHistory(file), dividerBefore: true },
+            { label: t("menu.whatsNew"), icon: Sparkles, onClick: () => actions.onShowWhatsNew(file), dividerBefore: true },
+            { label: t("menu.versionHistory"), icon: History, onClick: () => actions.onViewHistory(file) },
             { label: t("menu.rename"), icon: Pencil, onClick: () => actions.onRename(file), dividerBefore: true },
             { label: t("menu.delete"), icon: Trash2, onClick: () => actions.onDelete(file), danger: true, dividerBefore: true },
           ]}

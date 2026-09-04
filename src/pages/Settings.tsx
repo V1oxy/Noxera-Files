@@ -174,14 +174,15 @@ export function Settings() {
         <SettingsSection title={t("settings.general")}>
           <SettingsRow label={t("settings.launchAtStartup")}>
             <button
+              type="button"
               onClick={handleToggleStartup}
-              className={`relative h-5 w-9 rounded-full transition-colors ${
+              className={`relative inline-block h-5 w-9 shrink-0 rounded-full border-0 p-0 transition-colors ${
                 settings?.launchAtStartup ? "bg-accent" : "bg-black/15 dark:bg-white/20"
               }`}
             >
               <span
-                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                  settings?.launchAtStartup ? "translate-x-4" : "translate-x-0.5"
+                className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  settings?.launchAtStartup ? "translate-x-4" : "translate-x-0"
                 }`}
               />
             </button>
