@@ -57,8 +57,12 @@ export async function pickStorageFolder(): Promise<string | null> {
 // ---- Settings ---------------------------------------------------------------
 
 export const getSettings = () => call<AppSettings>("get_settings");
-export const updateSettings = (update: { theme?: string; language?: string; launchAtStartup?: boolean }) =>
-  call<AppSettings>("update_settings", { update });
+export const updateSettings = (update: {
+  theme?: string;
+  language?: string;
+  launchAtStartup?: boolean;
+  accentColor?: string;
+}) => call<AppSettings>("update_settings", { update });
 export const getStorageInfo = () => call<StorageInfo>("get_storage_info");
 export const openDataFolder = (which: "storage" | "backups" | "logs") =>
   call<void>("open_data_folder", { which });

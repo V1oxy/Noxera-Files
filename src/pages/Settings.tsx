@@ -1,8 +1,10 @@
-import { Archive, FolderOpen, Globe, HardDrive, Laptop, Moon, ScrollText, Sun } from "lucide-react";
+import { Archive, Check, FolderOpen, Globe, HardDrive, Laptop, Moon, ScrollText, Sun } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/Button";
 import { SiteFooter } from "@/components/SiteFooter";
+import { ACCENT_COLOR_PRESETS } from "@/constants/accentColors";
+import { useAccentColor } from "@/hooks/useAccentColor";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useSettings } from "@/hooks/useSettings";
 import { useTheme } from "@/hooks/useTheme";
@@ -46,6 +48,7 @@ function SettingsRow({
 export function Settings() {
   const { settings, storageInfo, refresh } = useSettings();
   const { theme, setTheme } = useTheme();
+  const { accentColor, setAccentColor } = useAccentColor();
   const { language, setLanguage, t, translateError } = useLanguage();
   const { showToast } = useToast();
   const [backing, setBacking] = useState(false);
@@ -148,6 +151,26 @@ export function Settings() {
               >
                 <opt.icon size={16} strokeWidth={1.5} />
                 {opt.label}
+              </button>
+            ))}
+          </div>
+        </SettingsSection>
+
+        <SettingsSection title={t("settings.accentColor")}>
+          <div className="flex flex-wrap gap-2.5 p-3.5">
+            {ACCENT_COLOR_PRESETS.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                title={t(`settings.accentColors.${preset.key}`)}
+                aria-label={t(`settings.accentColors.${preset.key}`)}
+                onClick={() => setAccentColor(preset.key)}
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-110 ${
+                  accentColor === preset.key ? "ring-2 ring-offset-2 ring-offset-surface-card" : ""
+                }`}
+                style={{ backgroundColor: preset.swatch, "--tw-ring-color": preset.swatch } as React.CSSProperties}
+              >
+                {accentColor === preset.key && <Check size={14} className="text-white" strokeWidth={3} />}
               </button>
             ))}
           </div>

@@ -16,6 +16,11 @@ use super::with_ready;
 const KEY_THEME: &str = "theme";
 const KEY_LANGUAGE: &str = "language";
 const KEY_LAUNCH_AT_STARTUP: &str = "launch_at_startup";
+const KEY_ACCENT_COLOR: &str = "accent_color";
+
+const ACCENT_COLORS: [&str; 10] = [
+    "green", "blue", "teal", "purple", "pink", "red", "orange", "amber", "indigo", "graphite",
+];
 
 #[tauri::command]
 pub fn is_initialized(state: State<AppState>) -> bool {
@@ -76,6 +81,9 @@ pub fn initialize_storage(
         if settings_db::get(conn, KEY_LAUNCH_AT_STARTUP)?.is_none() {
             settings_db::set(conn, KEY_LAUNCH_AT_STARTUP, "false")?;
         }
+        if settings_db::get(conn, KEY_ACCENT_COLOR)?.is_none() {
+            settings_db::set(conn, KEY_ACCENT_COLOR, "green")?;
+        }
         Ok(())
     })?;
 
@@ -95,11 +103,13 @@ pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
         let launch_at_startup = settings_db::get(conn, KEY_LAUNCH_AT_STARTUP)?
             .map(|v| v == "true")
             .unwrap_or(false);
+        let accent_color = settings_db::get(conn, KEY_ACCENT_COLOR)?.unwrap_or_else(|| "green".to_string());
         Ok(AppSettings {
             theme,
             language,
             launch_at_startup,
             storage_path: storage.root().to_string_lossy().to_string(),
+            accent_color,
         })
     })
 }
@@ -132,6 +142,13 @@ pub fn update_settings(
                 if launch { "true" } else { "false" },
             )?;
             crate::utils::logger::info(storage, &format!("Setting changed: launch_at_startup = {launch}"));
+        }
+        if let Some(accent_color) = &update.accent_color {
+            if !ACCENT_COLORS.contains(&accent_color.as_str()) {
+                return Err(AppError::user("Invalid accent color."));
+            }
+            settings_db::set(conn, KEY_ACCENT_COLOR, accent_color)?;
+            crate::utils::logger::info(storage, &format!("Setting changed: accent_color = {accent_color}"));
         }
         Ok(())
     })?;

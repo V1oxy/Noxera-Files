@@ -7,6 +7,7 @@ import { ProjectModal } from "@/components/ProjectModal";
 import { Sidebar } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { ToastContainer } from "@/components/Toast";
+import { AccentColorProvider, useAccentColor } from "@/hooks/useAccentColor";
 import { LanguageProvider, useLanguage } from "@/hooks/useLanguage";
 import { ThemeProvider, useTheme } from "@/hooks/useTheme";
 import { useProjects } from "@/hooks/useProjects";
@@ -19,6 +20,7 @@ import { createProject, getSettings, isInitialized, reorderProjects } from "@/se
 function MainShell() {
   const { setTheme } = useTheme();
   const { setLanguage, t } = useLanguage();
+  const { setAccentColor } = useAccentColor();
   const { projects, refresh: refreshProjects } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [view, setView] = useState<"project" | "settings">("project");
@@ -30,6 +32,7 @@ function MainShell() {
       .then((s) => {
         setTheme(s.theme, false);
         setLanguage(s.language, false);
+        setAccentColor(s.accentColor, false);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,11 +153,13 @@ function AppInner() {
 export default function App() {
   return (
     <ThemeProvider>
-      <LanguageProvider>
-        <ToastProvider>
-          <AppInner />
-        </ToastProvider>
-      </LanguageProvider>
+      <AccentColorProvider>
+        <LanguageProvider>
+          <ToastProvider>
+            <AppInner />
+          </ToastProvider>
+        </LanguageProvider>
+      </AccentColorProvider>
     </ThemeProvider>
   );
 }

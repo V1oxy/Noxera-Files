@@ -1,3 +1,5 @@
+import type { AccentColorKey } from "@/constants/accentColors";
+
 export interface Project {
   id: string;
   name: string;
@@ -67,6 +69,7 @@ export interface AppSettings {
   language: LanguageMode;
   launchAtStartup: boolean;
   storagePath: string;
+  accentColor: AccentColorKey;
 }
 
 export interface StorageInfo {

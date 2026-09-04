@@ -7,6 +7,7 @@ pub struct AppSettings {
     pub language: String,
     pub launch_at_startup: bool,
     pub storage_path: String,
+    pub accent_color: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -15,6 +16,7 @@ pub struct SettingsUpdate {
     pub theme: Option<String>,
     pub language: Option<String>,
     pub launch_at_startup: Option<bool>,
+    pub accent_color: Option<String>,
 }
 
 /// Persisted outside the SQLite database (in the OS app-config directory)
