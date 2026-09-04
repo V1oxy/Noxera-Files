@@ -1,4 +1,5 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -27,7 +28,9 @@ import {
   deleteProject as apiDeleteProject,
   deleteVersion as apiDeleteVersion,
   downloadVersion,
+  importFolder,
   openVersion,
+  pathIsDirectory,
   pickFilesToUpload,
   renameFile as apiRenameFile,
   renameFolder as apiRenameFolder,
@@ -54,9 +57,8 @@ interface ProjectViewProps {
   onProjectDeleted: () => void;
 }
 
-function resolveDropTarget(physicalX: number, physicalY: number): DropTarget {
-  const dpr = window.devicePixelRatio || 1;
-  const el = document.elementFromPoint(physicalX / dpr, physicalY / dpr);
+function resolveDropTarget(logicalX: number, logicalY: number): DropTarget {
+  const el = document.elementFromPoint(logicalX, logicalY);
   const target = el?.closest("[data-drop-target]") as HTMLElement | null;
   const type = target?.dataset.dropTarget as "file" | "folder" | undefined;
   const id = target?.dataset.rowId;
@@ -99,7 +101,28 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   const dropTargetRef = useRef<DropTarget>(null);
+  // The native drag position arrives in physical pixels; converting it with
+  // the webview's own window.devicePixelRatio can silently disagree with the
+  // OS's actual scale factor (a documented Tauri quirk, most visible on
+  // macOS), landing elementFromPoint on the wrong row entirely - so track
+  // the real scale factor Tauri reports instead and use PhysicalPosition's
+  // own conversion.
+  const scaleFactorRef = useRef(1);
+
+  useEffect(() => {
+    const win = getCurrentWindow();
+    void win.scaleFactor().then((f) => {
+      scaleFactorRef.current = f;
+    });
+    const unlisten = win.onScaleChanged(({ payload }) => {
+      scaleFactorRef.current = payload.scaleFactor;
+    });
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, []);
 
   useEffect(() => {
     setCurrentFolderId(null);
@@ -140,17 +163,21 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         // Version History's backdrop covers the whole window, so
         // elementFromPoint can never see the file rows underneath it -
         // while it's open, any drop anywhere is for that file's next version.
+        const logical = event.payload.position.toLogical(scaleFactorRef.current);
+        setDragPosition({ x: logical.x, y: logical.y });
         const target = historyFileId
           ? ({ type: "file", id: historyFileId } as DropTarget)
-          : resolveDropTarget(event.payload.position.x, event.payload.position.y);
+          : resolveDropTarget(logical.x, logical.y);
         dropTargetRef.current = target;
         setDropTarget(target);
       } else if (event.payload.type === "leave") {
         setIsDragActive(false);
+        setDragPosition(null);
         dropTargetRef.current = null;
         setDropTarget(null);
       } else if (event.payload.type === "drop") {
         setIsDragActive(false);
+        setDragPosition(null);
         const target = dropTargetRef.current;
         dropTargetRef.current = null;
         setDropTarget(null);
@@ -182,13 +209,37 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
 
     const folderId = target?.type === "folder" ? target.id : currentFolderId;
 
-    if (paths.length === 1) {
-      setUploadTarget({ mode: "new-file", sourcePath: paths[0], folderId });
+    // A dropped folder (from Finder/Explorer, not one of the app's own rows)
+    // is classified up front so it can go through import_folder instead of
+    // being treated as a file to copy - it becomes its own app folder, with
+    // everything inside it (subfolders included) imported as version 1.
+    const kinds = await Promise.all(paths.map((p) => pathIsDirectory(p).catch(() => false)));
+    const directoryPaths = paths.filter((_, i) => kinds[i]);
+    const filePaths = paths.filter((_, i) => !kinds[i]);
+
+    let importedFolder: Folder | null = null;
+    let folderImportErrors = 0;
+    for (const dirPath of directoryPaths) {
+      try {
+        const result = await importFolder(project.id, folderId, dirPath);
+        importedFolder = directoryPaths.length === 1 ? result.rootFolder : null;
+      } catch (e) {
+        folderImportErrors++;
+        showToast({
+          title: t("toast.folderImportError"),
+          description: e instanceof ApiError ? translateError(e.message) : undefined,
+          variant: "error",
+        });
+      }
+    }
+
+    if (filePaths.length === 1 && directoryPaths.length === 0) {
+      setUploadTarget({ mode: "new-file", sourcePath: filePaths[0], folderId });
       return;
     }
 
     let succeeded = 0;
-    for (const p of paths) {
+    for (const p of filePaths) {
       try {
         await uploadFile(project.id, folderId, p);
         succeeded++;
@@ -196,8 +247,19 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         // continue with the rest of the batch
       }
     }
-    await Promise.all([refreshFiles(), refreshFolders()]);
-    showToast({ title: t("toast.filesUploaded", { count: succeeded }) });
+
+    if (directoryPaths.length > 0 || filePaths.length > 0) {
+      await Promise.all([refreshFiles(), refreshFolders()]);
+    }
+    if (succeeded > 0) {
+      showToast({ title: t("toast.filesUploaded", { count: succeeded }) });
+    }
+    if (directoryPaths.length - folderImportErrors > 0) {
+      showToast({ title: t("toast.folderImported", { count: directoryPaths.length - folderImportErrors }) });
+    }
+    if (importedFolder) {
+      openFolder(importedFolder);
+    }
   }
 
   async function handleUploadClick() {
@@ -428,6 +490,8 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         open={historyFileId !== null}
         detail={detail}
         loading={historyLoading}
+        isDragActive={isDragActive}
+        dragPosition={dragPosition}
         onClose={() => setHistoryFileId(null)}
         onUploadNewVersion={async () => {
           if (!detail) return;

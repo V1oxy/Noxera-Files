@@ -11,6 +11,8 @@ import { formatBytes, formatFullDateTime } from "@/utils/format";
 interface VersionCardProps {
   version: FileVersion;
   isCurrent: boolean;
+  /** True for a few seconds right after this version was created, for a brief confirmation glow. */
+  justAdded?: boolean;
   onOpen: (version: FileVersion) => void;
   onDownload: (version: FileVersion) => void;
   onRestore: (version: FileVersion) => void;
@@ -18,7 +20,16 @@ interface VersionCardProps {
   onEditDescription: (version: FileVersion, description: string) => Promise<void>;
 }
 
-export function VersionCard({ version, isCurrent, onOpen, onDownload, onRestore, onDelete, onEditDescription }: VersionCardProps) {
+export function VersionCard({
+  version,
+  isCurrent,
+  justAdded,
+  onOpen,
+  onDownload,
+  onRestore,
+  onDelete,
+  onEditDescription,
+}: VersionCardProps) {
   const { t, locale, translateError } = useLanguage();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(version.description ?? "");
@@ -52,9 +63,9 @@ export function VersionCard({ version, isCurrent, onOpen, onDownload, onRestore,
 
   return (
     <div
-      className={`rounded-apple border p-3 ${
+      className={`rounded-apple border p-3 transition-shadow duration-500 ${
         isCurrent ? "border-accent/40 bg-accent/[0.06]" : "border-surface-border bg-surface-card"
-      }`}
+      } ${justAdded ? "ring-2 ring-accent/60" : ""}`}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

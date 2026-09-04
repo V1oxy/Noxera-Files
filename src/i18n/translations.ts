@@ -132,6 +132,8 @@ export const translations: Record<Lang, Record<string, string>> = {
     // Version history modal
     "history.subtitle": "Version History",
     "history.uploadNewVersion": "Upload New Version",
+    "history.dropZoneTitle": "Drop files here",
+    "history.dropZoneSubtitle": "to create a new version",
 
     // Version card
     "version.current": "Current",
@@ -154,6 +156,9 @@ export const translations: Record<Lang, Record<string, string>> = {
     "toast.downloadComplete": "Download complete",
     "toast.filesUploaded": "{count} file uploaded",
     "toast.filesUploaded_plural": "{count} files uploaded",
+    "toast.folderImported": "{count} folder imported",
+    "toast.folderImported_plural": "{count} folders imported",
+    "toast.folderImportError": "Unable to import the folder.",
     "toast.openFileError": "Unable to open the file",
     "toast.downloadFileError": "Unable to download the file",
     "toast.settingUpdateError": "Unable to update setting",
@@ -330,6 +335,8 @@ export const translations: Record<Lang, Record<string, string>> = {
     // Version history modal
     "history.subtitle": "История версий",
     "history.uploadNewVersion": "Загрузить новую версию",
+    "history.dropZoneTitle": "Перетащите файлы сюда",
+    "history.dropZoneSubtitle": "чтобы создать новую версию",
 
     // Version card
     "version.current": "Текущая",
@@ -352,6 +359,9 @@ export const translations: Record<Lang, Record<string, string>> = {
     "toast.downloadComplete": "Загрузка завершена",
     "toast.filesUploaded": "Загружен {count} файл",
     "toast.filesUploaded_plural": "Загружено файлов: {count}",
+    "toast.folderImported": "Импортирована {count} папка",
+    "toast.folderImported_plural": "Импортировано папок: {count}",
+    "toast.folderImportError": "Не удалось импортировать папку.",
     "toast.openFileError": "Не удалось открыть файл",
     "toast.downloadFileError": "Не удалось скачать файл",
     "toast.settingUpdateError": "Не удалось обновить настройку",

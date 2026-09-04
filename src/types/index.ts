@@ -40,6 +40,12 @@ export interface FolderPathEntry {
   name: string;
 }
 
+export interface ImportFolderResult {
+  rootFolder: Folder;
+  filesImported: number;
+  foldersCreated: number;
+}
+
 export interface FileEntry {
   id: string;
   projectId: string;

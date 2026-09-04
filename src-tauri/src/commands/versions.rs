@@ -5,8 +5,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::database::{files as files_db, projects as projects_db, versions as versions_db};
-use crate::models::{FileEntry, FileVersion};
+use crate::database::{files as files_db, folders as folders_db, projects as projects_db, versions as versions_db};
+use crate::models::{FileEntry, FileVersion, Folder};
 use crate::state::AppState;
 use crate::storage::{
     copy_with_checksum, guess_mime_type, remove_dir_all_if_exists, rename_dir_with_retry,
@@ -155,6 +155,122 @@ pub fn upload_file(
                 Err(e)
             }
         }
+    })
+}
+
+/// Cheap, side-effect-free classification of a dropped path so the frontend
+/// can decide whether to run it through import_folder or the regular file
+/// upload flow - no state/DB access needed.
+#[tauri::command]
+pub fn path_is_directory(path: String) -> bool {
+    PathBuf::from(path).is_dir()
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportFolderResult {
+    root_folder: Folder,
+    files_imported: u32,
+    folders_created: u32,
+}
+
+/// Imports a folder dragged in from the OS: creates one app folder per
+/// directory (mirroring the dropped tree, nested folders included) and one
+/// file per regular file inside it, each starting life as version 1 with no
+/// description. Symlinks are skipped. A file that fails to copy is dropped
+/// (its row removed) rather than aborting the whole import, so one bad file
+/// can't block the rest of a large folder.
+#[tauri::command]
+pub fn import_folder(
+    app: AppHandle,
+    state: State<AppState>,
+    project_id: String,
+    parent_folder_id: Option<String>,
+    source_path: String,
+) -> AppResult<ImportFolderResult> {
+    let root = PathBuf::from(&source_path);
+    if !root.is_dir() {
+        return Err(AppError::user("That isn't a folder."));
+    }
+    let root_name = root
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("Untitled")
+        .to_string();
+
+    with_ready(&state, |conn, storage| {
+        if !projects_db::exists(conn, &project_id)? {
+            return Err(AppError::user("This project no longer exists."));
+        }
+        let now = now_iso();
+
+        let root_folder_id = new_id();
+        folders_db::create(conn, &root_folder_id, &project_id, parent_folder_id.as_deref(), &root_name, &now)?;
+
+        let mut files_imported: u32 = 0;
+        let mut folders_created: u32 = 1;
+        let mut stack: Vec<(PathBuf, String)> = vec![(root.clone(), root_folder_id.clone())];
+
+        while let Some((dir, folder_id)) = stack.pop() {
+            let entries = match std::fs::read_dir(&dir) {
+                Ok(entries) => entries,
+                Err(e) => {
+                    logger::append(storage, &format!("Skipped folder {} while importing: {e}", dir.display()));
+                    continue;
+                }
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Ok(file_type) = entry.file_type() else { continue };
+                if file_type.is_symlink() {
+                    continue;
+                }
+                if file_type.is_dir() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    let child_id = new_id();
+                    folders_db::create(conn, &child_id, &project_id, Some(folder_id.as_str()), &name, &now)?;
+                    folders_created += 1;
+                    stack.push((path, child_id));
+                } else if file_type.is_file() {
+                    let display_name = entry.file_name().to_string_lossy().to_string();
+                    let file_id = new_id();
+                    files_db::create(conn, &file_id, &project_id, Some(folder_id.as_str()), &display_name, &now)?;
+                    let result = write_version(
+                        &app,
+                        conn,
+                        storage,
+                        &project_id,
+                        &file_id,
+                        1,
+                        &path,
+                        &display_name,
+                        None,
+                        &now,
+                        None,
+                    );
+                    match result {
+                        Ok(_) => files_imported += 1,
+                        Err(e) => {
+                            let _ = files_db::delete(conn, &file_id);
+                            logger::append(
+                                storage,
+                                &format!("Skipped \"{}\" while importing folder: {e}", path.display()),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let root_folder = folders_db::get(conn, &root_folder_id)?
+            .ok_or_else(|| AppError::user("Failed to import the folder."))?;
+        logger::info(
+            storage,
+            &format!(
+                "Folder imported: \"{root_name}\" ({files_imported} files, {folders_created} folders) into project {project_id}"
+            ),
+        );
+        Ok(ImportFolderResult { root_folder, files_imported, folders_created })
     })
 }
 

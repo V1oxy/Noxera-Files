@@ -14,6 +14,7 @@ import type {
   FileVersion,
   Folder,
   FolderPathEntry,
+  ImportFolderResult,
   Project,
   SortDirection,
   SortField,
@@ -137,6 +138,11 @@ export const uploadFile = (
     description: description || null,
     operationId: operationId || null,
   });
+
+export const pathIsDirectory = (path: string) => call<boolean>("path_is_directory", { path });
+
+export const importFolder = (projectId: string, parentFolderId: string | null, sourcePath: string) =>
+  call<ImportFolderResult>("import_folder", { projectId, parentFolderId, sourcePath });
 
 export const uploadNewVersion = (
   fileId: string,

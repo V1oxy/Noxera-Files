@@ -65,6 +65,8 @@ pub fn run() {
             commands::folders::delete_folder,
             commands::versions::get_versions,
             commands::versions::upload_file,
+            commands::versions::path_is_directory,
+            commands::versions::import_folder,
             commands::versions::upload_new_version,
             commands::versions::restore_version,
             commands::versions::update_version_description,
