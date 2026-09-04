@@ -11,6 +11,7 @@ pub struct FileEntry {
     pub name: String,
     pub current_version_id: Option<String>,
     pub next_version_number: i64,
+    pub position: i64,
     pub created_at: String,
     pub updated_at: String,
     pub current_version: Option<FileVersion>,
@@ -32,6 +33,9 @@ pub enum SortField {
     LastModified,
     Created,
     Size,
+    /// Manual drag-and-drop order (`files.position`), entered automatically
+    /// the first time the user drags a row.
+    Custom,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

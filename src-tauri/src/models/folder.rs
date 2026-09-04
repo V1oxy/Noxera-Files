@@ -7,6 +7,7 @@ pub struct Folder {
     pub project_id: String,
     pub parent_folder_id: Option<String>,
     pub name: String,
+    pub position: i64,
     pub created_at: String,
     pub updated_at: String,
     pub folder_count: i64,

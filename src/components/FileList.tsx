@@ -1,15 +1,27 @@
+import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ArrowDownWideNarrow, ArrowUpWideNarrow, ChevronDown, FolderPlus, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { BackgroundLogo } from "@/components/BackgroundLogo";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { FileRow } from "@/components/FileRow";
 import { FolderRow } from "@/components/FolderRow";
 import { SearchBar } from "@/components/SearchBar";
+import { SortableRow } from "@/components/SortableRow";
 import { useLanguage } from "@/hooks/useLanguage";
 import type { FileEntry, Folder, SortDirection, SortField } from "@/types";
 
 const SORT_KEYS: Record<SortField, string> = {
+  custom: "sort.custom",
   name: "sort.name",
   lastModified: "sort.lastModified",
   created: "sort.created",
@@ -39,6 +51,8 @@ interface FileListProps {
   onOpenFolder: (folder: Folder) => void;
   onRenameFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
+  onReorderFolders: (orderedIds: string[]) => void;
+  onReorderFiles: (orderedIds: string[]) => void;
 }
 
 export function FileList({
@@ -57,12 +71,48 @@ export function FileList({
   onOpenFolder,
   onRenameFolder,
   onDeleteFolder,
+  onReorderFolders,
+  onReorderFiles,
   ...rowActions
 }: FileListProps) {
   const { t } = useLanguage();
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const isEmpty = folders.length === 0 && files.length === 0;
+  const reorderable = search === "";
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  // Local mirrors so a drag reorders instantly instead of waiting for the
+  // reorder call + refetch to round-trip back through props.
+  const [folderOrder, setFolderOrder] = useState(folders);
+  const [fileOrder, setFileOrder] = useState(files);
+  useEffect(() => setFolderOrder(folders), [folders]);
+  useEffect(() => setFileOrder(files), [files]);
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const folderFrom = folderOrder.findIndex((f) => f.id === active.id);
+    if (folderFrom !== -1) {
+      const folderTo = folderOrder.findIndex((f) => f.id === over.id);
+      if (folderTo === -1) return;
+      const next = arrayMove(folderOrder, folderFrom, folderTo);
+      setFolderOrder(next);
+      onReorderFolders(next.map((f) => f.id));
+      return;
+    }
+
+    const fileFrom = fileOrder.findIndex((f) => f.id === active.id);
+    if (fileFrom !== -1) {
+      const fileTo = fileOrder.findIndex((f) => f.id === over.id);
+      if (fileTo === -1) return;
+      const next = arrayMove(fileOrder, fileFrom, fileTo);
+      setFileOrder(next);
+      if (sortField !== "custom") onSortChange("custom", "asc");
+      onReorderFiles(next.map((f) => f.id));
+    }
+  }
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -76,20 +126,22 @@ export function FileList({
   }, []);
 
   return (
-    <div className="relative flex h-full flex-col">
-      <div className="flex shrink-0 items-center gap-2 px-6 pb-3 pt-4">
-        <div className="w-64">
+    <div className="relative isolate flex h-full flex-col">
+      <BackgroundLogo />
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 pt-4">
+        <div className="min-w-[100px] max-w-xs flex-1 basis-40">
           <SearchBar ref={searchRef} value={search} onChange={onSearchChange} placeholder={t("files.searchPlaceholder")} />
         </div>
 
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => setSortMenuOpen((v) => !v)}
-            className="no-drag flex h-8 items-center gap-1.5 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 text-[12.5px] text-label-primary hover:bg-black/[0.05] dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"
+            className="no-drag flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 text-[12.5px] text-label-primary hover:bg-black/[0.05] dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"
           >
             {sortDir === "asc" ? <ArrowUpWideNarrow size={13} /> : <ArrowDownWideNarrow size={13} />}
-            {t(SORT_KEYS[sortField])}
-            <ChevronDown size={13} className="text-label-tertiary" />
+            <span className="whitespace-nowrap">{t(SORT_KEYS[sortField])}</span>
+            <ChevronDown size={13} className="shrink-0 text-label-tertiary" />
           </button>
           {sortMenuOpen && (
             <>
@@ -99,7 +151,18 @@ export function FileList({
                   <button
                     key={field}
                     onClick={() => {
-                      onSortChange(field, field === sortField && sortDir === "desc" ? "asc" : "desc");
+                      const alreadyActive = field === sortField;
+                      // "Custom Order" has no inherent asc/desc meaning - default
+                      // it to ascending (top-to-bottom drag order) on first pick
+                      // instead of the "desc first" convention the other fields use.
+                      const nextDir = alreadyActive
+                        ? sortDir === "desc"
+                          ? "asc"
+                          : "desc"
+                        : field === "custom"
+                          ? "asc"
+                          : "desc";
+                      onSortChange(field, nextDir);
                       setSortMenuOpen(false);
                     }}
                     className={`flex w-full items-center justify-between rounded-apple-sm px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-accent hover:text-white ${
@@ -115,19 +178,19 @@ export function FileList({
           )}
         </div>
 
-        <div className="flex-1" />
+        <div className="min-w-2 flex-1" />
 
-        <Button variant="secondary" onClick={onNewFolderClick}>
+        <Button variant="secondary" className="shrink-0" onClick={onNewFolderClick}>
           <FolderPlus size={14} />
           {t("files.newFolder")}
         </Button>
-        <Button variant="primary" onClick={onUploadClick}>
+        <Button variant="primary" className="shrink-0" onClick={onUploadClick}>
           <Upload size={14} />
           {t("files.uploadFile")}
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-6">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 pt-2">
         {loading && <p className="px-2 py-4 text-[12.5px] text-label-secondary">{t("files.loading")}</p>}
 
         {!loading && isEmpty && search === "" && (
@@ -147,7 +210,42 @@ export function FileList({
           <EmptyState title={t("files.noMatchTitle")} description={t("files.noMatchDescription", { search })} />
         )}
 
-        {!loading && !isEmpty && (
+        {!loading && !isEmpty && reorderable && (
+          <DndContext
+            sensors={sensors}
+            modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="space-y-0.5">
+              <SortableContext items={folderOrder.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+                {folderOrder.map((folder) => (
+                  <SortableRow key={folder.id} id={folder.id}>
+                    <FolderRow
+                      folder={folder}
+                      onOpen={onOpenFolder}
+                      onRename={onRenameFolder}
+                      onDelete={onDeleteFolder}
+                      isDropTarget={dropTarget?.type === "folder" && dropTarget.id === folder.id}
+                    />
+                  </SortableRow>
+                ))}
+              </SortableContext>
+              <SortableContext items={fileOrder.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+                {fileOrder.map((file) => (
+                  <SortableRow key={file.id} id={file.id}>
+                    <FileRow
+                      file={file}
+                      isDropTarget={dropTarget?.type === "file" && dropTarget.id === file.id}
+                      {...rowActions}
+                    />
+                  </SortableRow>
+                ))}
+              </SortableContext>
+            </div>
+          </DndContext>
+        )}
+
+        {!loading && !isEmpty && !reorderable && (
           <div className="space-y-0.5">
             {folders.map((folder) => (
               <FolderRow

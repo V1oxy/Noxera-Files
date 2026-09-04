@@ -72,6 +72,8 @@ export const createProject = (name: string, description?: string) =>
   call<Project>("create_project", { name, description: description || null });
 export const updateProject = (projectId: string, name: string, description?: string) =>
   call<Project>("update_project", { projectId, name, description: description || null });
+export const reorderProjects = (orderedIds: string[]) =>
+  call<Project[]>("reorder_projects", { orderedIds });
 export const deleteProject = (projectId: string) => call<void>("delete_project", { projectId });
 
 // ---- Files ----------------------------------------------------------------------
@@ -91,6 +93,7 @@ export const getFiles = (
 export const getFile = (fileId: string) => call<FileDetail>("get_file", { fileId });
 export const renameFile = (fileId: string, newName: string) =>
   call<FileEntry>("rename_file", { fileId, newName });
+export const reorderFiles = (orderedIds: string[]) => call<void>("reorder_files", { orderedIds });
 export const deleteFile = (fileId: string) => call<void>("delete_file", { fileId });
 
 // ---- Folders --------------------------------------------------------------------
@@ -103,6 +106,7 @@ export const createFolder = (projectId: string, parentFolderId: string | null, n
   call<Folder>("create_folder", { projectId, parentFolderId, name });
 export const renameFolder = (folderId: string, newName: string) =>
   call<Folder>("rename_folder", { folderId, newName });
+export const reorderFolders = (orderedIds: string[]) => call<void>("reorder_folders", { orderedIds });
 export const deleteFolder = (folderId: string) => call<void>("delete_folder", { folderId });
 
 // ---- Versions ---------------------------------------------------------------
@@ -145,6 +149,9 @@ export const uploadNewVersion = (
 
 export const restoreVersion = (fileId: string, versionId: string, description?: string) =>
   call<FileEntry>("restore_version", { fileId, versionId, description: description || null });
+
+export const updateVersionDescription = (versionId: string, description: string) =>
+  call<FileVersion>("update_version_description", { versionId, description: description || null });
 
 export const deleteVersion = (versionId: string) =>
   call<FileEntry | null>("delete_version", { versionId });

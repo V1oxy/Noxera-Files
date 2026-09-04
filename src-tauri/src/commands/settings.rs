@@ -32,7 +32,7 @@ pub fn default_storage_path(app: AppHandle) -> AppResult<String> {
         .document_dir()
         .or_else(|_| app.path().home_dir())
         .map_err(|e| AppError::with_details("Unable to determine a default location.", e))?;
-    Ok(base.join("Project Manager").to_string_lossy().to_string())
+    Ok(base.join("Noxera Files").to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -79,6 +79,11 @@ pub fn initialize_storage(
         Ok(())
     })?;
 
+    with_ready(&state, |_, storage| {
+        crate::utils::logger::info(storage, &format!("Storage initialized at {}", storage.root().display()));
+        Ok(())
+    })?;
+
     get_settings(state)
 }
 
@@ -105,18 +110,20 @@ pub fn update_settings(
     state: State<AppState>,
     update: SettingsUpdate,
 ) -> AppResult<AppSettings> {
-    with_ready(&state, |conn, _| {
+    with_ready(&state, |conn, storage| {
         if let Some(theme) = &update.theme {
             if !["system", "light", "dark"].contains(&theme.as_str()) {
                 return Err(AppError::user("Invalid theme."));
             }
             settings_db::set(conn, KEY_THEME, theme)?;
+            crate::utils::logger::info(storage, &format!("Setting changed: theme = {theme}"));
         }
         if let Some(language) = &update.language {
             if !["system", "en", "ru"].contains(&language.as_str()) {
                 return Err(AppError::user("Invalid language."));
             }
             settings_db::set(conn, KEY_LANGUAGE, language)?;
+            crate::utils::logger::info(storage, &format!("Setting changed: language = {language}"));
         }
         if let Some(launch) = update.launch_at_startup {
             settings_db::set(
@@ -124,6 +131,7 @@ pub fn update_settings(
                 KEY_LAUNCH_AT_STARTUP,
                 if launch { "true" } else { "false" },
             )?;
+            crate::utils::logger::info(storage, &format!("Setting changed: launch_at_startup = {launch}"));
         }
         Ok(())
     })?;
@@ -135,6 +143,10 @@ pub fn update_settings(
             // Autostart registration can fail in sandboxed/CI environments;
             // the setting itself is still saved, so don't fail the request.
             eprintln!("autostart toggle failed: {e}");
+            let _ = with_ready(&state, |_, storage| {
+                crate::utils::logger::append(storage, &format!("Autostart toggle (launch={launch}) failed: {e}"));
+                Ok(())
+            });
         }
     }
 

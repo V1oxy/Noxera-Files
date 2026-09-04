@@ -14,6 +14,7 @@ interface VersionHistoryProps {
   onDownload: (version: FileVersion) => void;
   onRestore: (version: FileVersion) => void;
   onDelete: (version: FileVersion) => void;
+  onEditDescription: (version: FileVersion, description: string) => Promise<void>;
 }
 
 export function VersionHistory({
@@ -25,6 +26,7 @@ export function VersionHistory({
   onDownload,
   onRestore,
   onDelete,
+  onEditDescription,
 }: VersionHistoryProps) {
   const { t } = useLanguage();
   if (!open) return null;
@@ -68,6 +70,7 @@ export function VersionHistory({
                 onDownload={onDownload}
                 onRestore={onRestore}
                 onDelete={onDelete}
+                onEditDescription={onEditDescription}
               />
             ))}
         </div>

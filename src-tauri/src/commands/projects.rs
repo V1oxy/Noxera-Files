@@ -30,10 +30,11 @@ pub fn create_project(
     if name.is_empty() {
         return Err(AppError::user("Project name cannot be empty."));
     }
-    with_ready(&state, |conn, _| {
+    with_ready(&state, |conn, storage| {
         let id = crate::utils::id::new_id();
         let now = now_iso();
         db::create(conn, &id, &name, description.as_deref(), &now)?;
+        crate::utils::logger::info(storage, &format!("Project created: \"{name}\" ({id})"));
         db::get(conn, &id)?.ok_or_else(|| AppError::user("Failed to create project."))
     })
 }
@@ -49,13 +50,27 @@ pub fn update_project(
     if name.is_empty() {
         return Err(AppError::user("Project name cannot be empty."));
     }
-    with_ready(&state, |conn, _| {
+    with_ready(&state, |conn, storage| {
         let now = now_iso();
         let updated = db::update(conn, &project_id, &name, description.as_deref(), &now)?;
         if updated == 0 {
             return Err(AppError::user("This project no longer exists."));
         }
+        crate::utils::logger::info(storage, &format!("Project updated: \"{name}\" ({project_id})"));
         db::get(conn, &project_id)?.ok_or_else(|| AppError::user("Failed to update project."))
+    })
+}
+
+/// Persists a new manual order for the whole project list: `ordered_ids[i]`
+/// gets position `i`. Called after a drag-and-drop reorder in the sidebar.
+#[tauri::command]
+pub fn reorder_projects(state: State<AppState>, ordered_ids: Vec<String>) -> AppResult<Vec<Project>> {
+    with_ready(&state, |conn, storage| {
+        for (i, id) in ordered_ids.iter().enumerate() {
+            db::set_position(conn, id, i as i64)?;
+        }
+        crate::utils::logger::info(storage, &format!("Projects reordered ({} items)", ordered_ids.len()));
+        Ok(db::list(conn)?)
     })
 }
 
@@ -78,6 +93,7 @@ pub fn delete_project(state: State<AppState>, project_id: String) -> AppResult<(
                 &format!("Failed to remove project directory {}: {e}", dir.display()),
             );
         }
+        crate::utils::logger::info(storage, &format!("Project deleted: {project_id}"));
         Ok(())
     })
 }

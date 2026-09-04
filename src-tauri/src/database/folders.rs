@@ -3,7 +3,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use crate::models::{Folder, FolderPathEntry};
 
 const SELECT_BASE: &str = "SELECT \
-    f.id, f.project_id, f.parent_folder_id, f.name, f.created_at, f.updated_at, \
+    f.id, f.project_id, f.parent_folder_id, f.name, f.position, f.created_at, f.updated_at, \
     (SELECT COUNT(*) FROM folders sf WHERE sf.parent_folder_id = f.id) AS folder_count, \
     (SELECT COUNT(*) FROM files ff WHERE ff.folder_id = f.id) AS file_count \
     FROM folders f";
@@ -14,6 +14,7 @@ fn map_row(row: &Row) -> rusqlite::Result<Folder> {
         project_id: row.get("project_id")?,
         parent_folder_id: row.get("parent_folder_id")?,
         name: row.get("name")?,
+        position: row.get("position")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
         folder_count: row.get("folder_count")?,
@@ -21,7 +22,8 @@ fn map_row(row: &Row) -> rusqlite::Result<Folder> {
     })
 }
 
-/// Direct child folders of `parent_folder_id` (None = the project's root).
+/// Direct child folders of `parent_folder_id` (None = the project's root),
+/// in the user's manually arranged order.
 pub fn list_children(
     conn: &Connection,
     project_id: &str,
@@ -31,19 +33,39 @@ pub fn list_children(
     let mut stmt;
     let rows = match parent_folder_id {
         Some(parent) => {
-            sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.parent_folder_id = ?2 ORDER BY f.name COLLATE NOCASE ASC");
+            sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.parent_folder_id = ?2 ORDER BY f.position ASC, f.name COLLATE NOCASE ASC");
             stmt = conn.prepare(&sql)?;
             stmt.query_map(params![project_id, parent], map_row)?
                 .collect::<rusqlite::Result<Vec<_>>>()
         }
         None => {
-            sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.parent_folder_id IS NULL ORDER BY f.name COLLATE NOCASE ASC");
+            sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.parent_folder_id IS NULL ORDER BY f.position ASC, f.name COLLATE NOCASE ASC");
             stmt = conn.prepare(&sql)?;
             stmt.query_map(params![project_id], map_row)?
                 .collect::<rusqlite::Result<Vec<_>>>()
         }
     };
     rows
+}
+
+/// Next free position among siblings under the same parent (None = project root).
+pub fn next_position(conn: &Connection, project_id: &str, parent_folder_id: Option<&str>) -> rusqlite::Result<i64> {
+    match parent_folder_id {
+        Some(parent) => conn.query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM folders WHERE project_id = ?1 AND parent_folder_id = ?2",
+            params![project_id, parent],
+            |r| r.get(0),
+        ),
+        None => conn.query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM folders WHERE project_id = ?1 AND parent_folder_id IS NULL",
+            params![project_id],
+            |r| r.get(0),
+        ),
+    }
+}
+
+pub fn set_position(conn: &Connection, id: &str, position: i64) -> rusqlite::Result<usize> {
+    conn.execute("UPDATE folders SET position = ?2 WHERE id = ?1", params![id, position])
 }
 
 pub fn get(conn: &Connection, folder_id: &str) -> rusqlite::Result<Option<Folder>> {
@@ -59,10 +81,11 @@ pub fn create(
     name: &str,
     now: &str,
 ) -> rusqlite::Result<()> {
+    let position = next_position(conn, project_id, parent_folder_id)?;
     conn.execute(
-        "INSERT INTO folders (id, project_id, parent_folder_id, name, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-        params![id, project_id, parent_folder_id, name, now],
+        "INSERT INTO folders (id, project_id, parent_folder_id, name, position, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+        params![id, project_id, parent_folder_id, name, position, now],
     )?;
     Ok(())
 }

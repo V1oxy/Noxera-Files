@@ -11,12 +11,13 @@ interface UploadModalProps {
   open: boolean;
   fileLabel: string;
   versionLabel: string;
+  isNewFile: boolean;
   upload: (description: string | undefined, operationId: string) => Promise<FileEntry>;
   onSuccess: (entry: FileEntry) => void;
   onCancel: () => void;
 }
 
-export function UploadModal({ open, fileLabel, versionLabel, upload, onSuccess, onCancel }: UploadModalProps) {
+export function UploadModal({ open, fileLabel, versionLabel, isNewFile, upload, onSuccess, onCancel }: UploadModalProps) {
   const { t, translateError } = useLanguage();
   const [description, setDescription] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -61,7 +62,7 @@ export function UploadModal({ open, fileLabel, versionLabel, upload, onSuccess, 
 
   return (
     <Modal open={open} onClose={handleCancel} width={440}>
-      <ModalHeader title={versionLabel === "v1" ? t("upload.titleAddFile") : t("upload.titleNewVersion")} />
+      <ModalHeader title={isNewFile ? t("upload.titleAddFile") : t("upload.titleNewVersion")} />
       <ModalBody>
         <div className="space-y-3">
           <div>
@@ -74,14 +75,14 @@ export function UploadModal({ open, fileLabel, versionLabel, upload, onSuccess, 
           </div>
           <div>
             <label className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">
-              {t("upload.whatChanged")}
+              {isNewFile ? t("upload.comment") : t("upload.whatChanged")}
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={uploading}
               rows={3}
-              placeholder={t("upload.whatChangedPlaceholder")}
+              placeholder={isNewFile ? t("upload.commentPlaceholder") : t("upload.whatChangedPlaceholder")}
               className="mt-1 w-full resize-none rounded-apple-sm border border-surface-border bg-black/[0.03] p-2 text-[13px] text-label-primary placeholder:text-label-tertiary outline-none focus:border-accent/50 focus:bg-surface-content disabled:opacity-50 dark:bg-white/[0.05]"
             />
           </div>

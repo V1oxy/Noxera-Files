@@ -7,21 +7,32 @@ fn map_row(row: &Row) -> rusqlite::Result<Project> {
         id: row.get("id")?,
         name: row.get("name")?,
         description: row.get("description")?,
+        position: row.get("position")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
         file_count: row.get("file_count")?,
     })
 }
 
-const SELECT_BASE: &str = "SELECT p.id, p.name, p.description, p.created_at, p.updated_at, \
+const SELECT_BASE: &str = "SELECT p.id, p.name, p.description, p.position, p.created_at, p.updated_at, \
     (SELECT COUNT(*) FROM files f WHERE f.project_id = p.id) AS file_count \
     FROM projects p";
 
 pub fn list(conn: &Connection) -> rusqlite::Result<Vec<Project>> {
-    let sql = format!("{SELECT_BASE} ORDER BY p.updated_at DESC");
+    let sql = format!("{SELECT_BASE} ORDER BY p.position ASC, p.updated_at DESC");
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map([], map_row)?;
     rows.collect()
+}
+
+/// Next free position at the end of the project list, so a brand-new
+/// project always lands last instead of colliding with position 0.
+pub fn next_position(conn: &Connection) -> rusqlite::Result<i64> {
+    conn.query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM projects", [], |r| r.get(0))
+}
+
+pub fn set_position(conn: &Connection, id: &str, position: i64) -> rusqlite::Result<usize> {
+    conn.execute("UPDATE projects SET position = ?2 WHERE id = ?1", params![id, position])
 }
 
 pub fn get(conn: &Connection, id: &str) -> rusqlite::Result<Option<Project>> {
@@ -36,9 +47,11 @@ pub fn create(
     description: Option<&str>,
     now: &str,
 ) -> rusqlite::Result<()> {
+    let position = next_position(conn)?;
     conn.execute(
-        "INSERT INTO projects (id, name, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)",
-        params![id, name, description, now],
+        "INSERT INTO projects (id, name, description, position, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+        params![id, name, description, position, now],
     )?;
     Ok(())
 }

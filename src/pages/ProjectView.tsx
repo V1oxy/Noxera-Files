@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Breadcrumb, type BreadcrumbEntry } from "@/components/Breadcrumb";
 import { Button } from "@/components/Button";
 import { DeleteModal } from "@/components/DeleteModal";
-import { ExpandableText } from "@/components/ExpandableText";
+import { ExpandableDescription } from "@/components/ExpandableDescription";
 import { FileList } from "@/components/FileList";
 import { NewFolderModal } from "@/components/NewFolderModal";
 import { ProjectModal } from "@/components/ProjectModal";
@@ -31,8 +31,11 @@ import {
   pickFilesToUpload,
   renameFile as apiRenameFile,
   renameFolder as apiRenameFolder,
+  reorderFiles,
+  reorderFolders,
   restoreVersion as apiRestoreVersion,
   updateProject,
+  updateVersionDescription,
   uploadFile,
   uploadNewVersion,
 } from "@/services/api";
@@ -241,6 +244,13 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
     });
   }
 
+  async function handleEditVersionDescription(version: FileVersion, description: string) {
+    await updateVersionDescription(version.id, description);
+    await refreshHistory();
+    await refreshFiles();
+    showToast({ title: t("toast.versionDescriptionUpdated") });
+  }
+
   async function handleDeleteVersion() {
     if (!deleteVersionTarget || !historyFileId) return;
     const deletedNumber = deleteVersionTarget.versionNumber;
@@ -286,6 +296,16 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
     showToast({ title: t("toast.folderRenamed") });
   }
 
+  async function handleReorderFolders(orderedIds: string[]) {
+    await reorderFolders(orderedIds);
+    await refreshFolders();
+  }
+
+  async function handleReorderFiles(orderedIds: string[]) {
+    await reorderFiles(orderedIds);
+    await refreshFiles();
+  }
+
   async function handleDeleteFolder() {
     if (!deleteFolderTarget) return;
     await apiDeleteFolder(deleteFolderTarget.id);
@@ -312,10 +332,12 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         <div className="min-w-0">
           <h1 className="truncate text-[20px] font-semibold text-label-primary">{project.name}</h1>
           {project.description && (
-            <ExpandableText
+            <ExpandableDescription
               text={project.description}
-              className="mt-1 max-w-xl text-[12.5px] text-label-secondary"
-              clampClassName="line-clamp-2"
+              className="mt-1 max-w-xl"
+              textClassName="text-[12.5px] leading-relaxed text-label-secondary"
+              collapsedLines={2}
+              expandedMaxHeight={160}
             />
           )}
         </div>
@@ -357,6 +379,8 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         onOpenFolder={openFolder}
         onRenameFolder={(f) => setRenameFolderTarget(f)}
         onDeleteFolder={(f) => setDeleteFolderTarget(f)}
+        onReorderFolders={handleReorderFolders}
+        onReorderFiles={handleReorderFiles}
       />
 
       <VersionHistory
@@ -373,6 +397,7 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         onDownload={handleDownloadVersion}
         onRestore={(v) => setRestoreTarget(v)}
         onDelete={(v) => setDeleteVersionTarget(v)}
+        onEditDescription={handleEditVersionDescription}
       />
 
       <VersionInfoModal
@@ -389,6 +414,7 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
             : uploadTarget?.file.name ?? ""
         }
         versionLabel={uploadTarget?.mode === "new-file" ? "v1" : `v${uploadTarget?.file.nextVersionNumber ?? 1}`}
+        isNewFile={uploadTarget?.mode === "new-file"}
         upload={async (description, operationId) => {
           if (!uploadTarget) throw new Error("No upload target");
           if (uploadTarget.mode === "new-file") {

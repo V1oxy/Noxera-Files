@@ -39,7 +39,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Project Manager {0}', github.ref_name) || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Noxera Files {0}', github.ref_name) || '' }}
           releaseDraft: true
           prerelease: false
 
@@ -49,15 +49,15 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
-          name: project-manager-windows-x64-portable
-          path: src-tauri/target/release/project-manager.exe
+          name: noxera-files-windows-x64-portable
+          path: src-tauri/target/release/noxera-files.exe
           if-no-files-found: warn
 
       - name: Upload installer
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
-          name: project-manager-windows-x64-installer
+          name: noxera-files-windows-x64-installer
           path: src-tauri/target/release/bundle/**
           if-no-files-found: warn
 
@@ -71,10 +71,10 @@ jobs:
         include:
           - name: macos-arm64
             args: "--target aarch64-apple-darwin"
-            raw_path: src-tauri/target/aarch64-apple-darwin/release/project-manager
+            raw_path: src-tauri/target/aarch64-apple-darwin/release/noxera-files
           - name: macos-intel
             args: "--target x86_64-apple-darwin"
-            raw_path: src-tauri/target/x86_64-apple-darwin/release/project-manager
+            raw_path: src-tauri/target/x86_64-apple-darwin/release/noxera-files
 
     runs-on: macos-latest
 
@@ -107,7 +107,7 @@ jobs:
         with:
           args: ${{ matrix.args }}
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Project Manager {0}', github.ref_name) || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Noxera Files {0}', github.ref_name) || '' }}
           releaseDraft: true
           prerelease: false
 
@@ -115,7 +115,7 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
-          name: project-manager-${{ matrix.name }}-portable
+          name: noxera-files-${{ matrix.name }}-portable
           path: ${{ matrix.raw_path }}
           if-no-files-found: warn
 
@@ -123,6 +123,6 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
-          name: project-manager-${{ matrix.name }}-installer
+          name: noxera-files-${{ matrix.name }}-installer
           path: src-tauri/target/**/release/bundle/**
           if-no-files-found: warn

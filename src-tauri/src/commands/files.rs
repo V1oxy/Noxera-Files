@@ -52,13 +52,27 @@ pub fn rename_file(
     if new_name.is_empty() {
         return Err(AppError::user("File name cannot be empty."));
     }
-    with_ready(&state, |conn, _| {
+    with_ready(&state, |conn, storage| {
         let now = now_iso();
         let updated = files_db::rename(conn, &file_id, &new_name, &now)?;
         if updated == 0 {
             return Err(AppError::user("This file no longer exists."));
         }
+        crate::utils::logger::info(storage, &format!("File renamed to \"{new_name}\" ({file_id})"));
         files_db::get(conn, &file_id)?.ok_or_else(|| AppError::user("Failed to rename file."))
+    })
+}
+
+/// Persists a new manual order for one folder's files (or a project's root
+/// files): `ordered_ids[i]` gets position `i`.
+#[tauri::command]
+pub fn reorder_files(state: State<AppState>, ordered_ids: Vec<String>) -> AppResult<()> {
+    with_ready(&state, |conn, storage| {
+        for (i, id) in ordered_ids.iter().enumerate() {
+            files_db::set_position(conn, id, i as i64)?;
+        }
+        crate::utils::logger::info(storage, &format!("Files reordered ({} items)", ordered_ids.len()));
+        Ok(())
     })
 }
 
@@ -75,6 +89,7 @@ pub fn delete_file(state: State<AppState>, file_id: String) -> AppResult<()> {
                 &format!("Failed to remove file directory {}: {e}", dir.display()),
             );
         }
+        crate::utils::logger::info(storage, &format!("File deleted: \"{}\" ({file_id})", file.name));
         Ok(())
     })
 }

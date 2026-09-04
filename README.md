@@ -1,11 +1,11 @@
-# Project Manager
+# Noxera Files
 
 A local-first desktop app for keeping every project and every file's version
 history in one place. Built with **Tauri 2 + React + TypeScript + Rust +
 SQLite** — no browser, no server, no internet connection required.
 
 ```
-Project Manager
+Noxera Files
 │
 ├── Project 1
 │   ├── Files
@@ -55,9 +55,9 @@ npm run tauri build     # build the full native app + installer for the current 
 
 Output lands in `src-tauri/target/release/bundle/`:
 
-- **Windows** → `nsis/ProjectManager-Setup.exe` (and/or `msi/*.msi`), plus the
-  raw `project-manager.exe` in `target/release/`
-- **macOS** → `macos/Project Manager.app` and `dmg/*.dmg`
+- **Windows** → `nsis/NoxeraFiles-Setup.exe` (and/or `msi/*.msi`), plus the
+  raw `noxera-files.exe` in `target/release/`
+- **macOS** → `macos/Noxera Files.app` and `dmg/*.dmg`
 - **Linux** → `deb/*.deb`, `rpm/*.rpm`, `appimage/*.AppImage`
 
 Tauri does not cross-compile GUI apps between OSes, so build on (or via CI
@@ -76,7 +76,7 @@ native runners whenever you push a version tag.
 ## Project structure
 
 ```
-project-manager/
+noxera-files/
 ├── src/                      React + TypeScript frontend
 │   ├── components/           Reusable UI: Sidebar, FileList, FileRow,
 │   │                         modals, Toast, EmptyState, context menu...
@@ -105,7 +105,7 @@ and delegates to the `storage` and `database` layers.
 ## Local storage layout
 
 On first launch you choose where to keep your data (a normal folder on your
-computer, e.g. `D:\ProjectManager` or `~/ProjectManager`). That choice is
+computer, e.g. `D:\NoxeraFiles` or `~/NoxeraFiles`). That choice is
 remembered outside the database (`config.json` in the OS app-config
 directory) so it can be read before the database itself is opened.
 
@@ -134,10 +134,12 @@ mid-upload can never leave an orphaned file or a dangling database row.
 ## Database schema
 
 ```sql
-projects(id, name, description, created_at, updated_at)
+projects(id, name, description, position, created_at, updated_at)
 
-files(id, project_id, name, current_version_id, next_version_number,
-      created_at, updated_at)
+folders(id, project_id, parent_folder_id, name, position, created_at, updated_at)
+
+files(id, project_id, folder_id, name, current_version_id, next_version_number,
+      position, created_at, updated_at)
 
 file_versions(id, file_id, version_number, storage_path, original_filename,
               file_size, mime_type, checksum, description, created_at)
@@ -147,9 +149,16 @@ settings(key, value)
 
 - Every `id` is a UUID — never a filename — so projects, files, and versions
   stay unambiguous even when names collide.
-- `files.next_version_number` only ever increases. Deleting a version never
-  renumbers the ones that remain, and the next upload always gets a version
-  number higher than anything ever used for that file.
+- `position` on projects/folders/files drives their manual drag-and-drop
+  order and survives a restart; dragging a file also switches that project's
+  sort mode to "Custom Order" so the arrangement is what's displayed again on
+  the next launch.
+- Version numbers stay **contiguous**: deleting version *N* shifts every
+  version above it (and its on-disk `v{N}/` directory) down by one, so the
+  file always shows `v1..v{count}` with no gaps. Every other version keeps
+  its id, description, checksum and file untouched — only its number and
+  storage path move. `files.next_version_number` is kept in sync so the next
+  upload always continues right after the new highest version.
 - `UNIQUE(file_id, version_number)` plus indexes on `files.project_id` and
   `file_versions.file_id` keep the common queries (a project's files, a
   file's version history) fast even with thousands of rows.

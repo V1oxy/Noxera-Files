@@ -2,6 +2,7 @@ export interface Project {
   id: string;
   name: string;
   description: string | null;
+  position: number;
   createdAt: string;
   updatedAt: string;
   fileCount: number;
@@ -25,6 +26,7 @@ export interface Folder {
   projectId: string;
   parentFolderId: string | null;
   name: string;
+  position: number;
   createdAt: string;
   updatedAt: string;
   folderCount: number;
@@ -43,6 +45,7 @@ export interface FileEntry {
   name: string;
   currentVersionId: string | null;
   nextVersionNumber: number;
+  position: number;
   createdAt: string;
   updatedAt: string;
   currentVersion: FileVersion | null;
@@ -53,7 +56,7 @@ export interface FileDetail extends FileEntry {
   versions: FileVersion[];
 }
 
-export type SortField = "name" | "lastModified" | "created" | "size";
+export type SortField = "name" | "lastModified" | "created" | "size" | "custom";
 export type SortDirection = "asc" | "desc";
 
 export type ThemeMode = "system" | "light" | "dark";

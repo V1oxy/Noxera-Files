@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS projects (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
     description TEXT,
+    position    INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS folders (
     project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     parent_folder_id  TEXT REFERENCES folders(id) ON DELETE CASCADE,
     name              TEXT NOT NULL,
+    position          INTEGER NOT NULL DEFAULT 0,
     created_at        TEXT NOT NULL,
     updated_at        TEXT NOT NULL
 );
@@ -28,6 +30,7 @@ CREATE TABLE IF NOT EXISTS files (
     name                TEXT NOT NULL,
     current_version_id  TEXT,
     next_version_number INTEGER NOT NULL DEFAULT 1,
+    position            INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL
 );
@@ -73,6 +76,54 @@ pub fn migrate(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
         conn.execute_batch(
             "ALTER TABLE files ADD COLUMN folder_id TEXT REFERENCES folders(id) ON DELETE CASCADE;",
         )?;
+    }
+
+    // `position` drives the manual drag-and-drop order. New installs get it
+    // from TABLES_SQL already; a database from before this column existed
+    // gets it backfilled here from whatever order it displayed in before, so
+    // upgrading never visibly reshuffles anything until the user drags.
+    if !column_exists(conn, "projects", "position")? {
+        conn.execute_batch("ALTER TABLE projects ADD COLUMN position INTEGER NOT NULL DEFAULT 0;")?;
+        backfill_positions(conn, "SELECT id FROM projects ORDER BY updated_at DESC", "projects")?;
+    }
+    if !column_exists(conn, "folders", "position")? {
+        conn.execute_batch("ALTER TABLE folders ADD COLUMN position INTEGER NOT NULL DEFAULT 0;")?;
+        backfill_positions(
+            conn,
+            "SELECT id FROM folders ORDER BY parent_folder_id, name COLLATE NOCASE ASC",
+            "folders",
+        )?;
+    }
+    if !column_exists(conn, "files", "position")? {
+        conn.execute_batch("ALTER TABLE files ADD COLUMN position INTEGER NOT NULL DEFAULT 0;")?;
+        backfill_positions(
+            conn,
+            "SELECT id FROM files ORDER BY folder_id, updated_at DESC",
+            "files",
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Assigns sequential `position` values (in the order `select_ids_sql`
+/// returns them) to every row of `table`. `select_ids_sql` groups by parent
+/// scope so that e.g. folder positions are only ever compared to siblings
+/// under the same parent, never across the whole table.
+fn backfill_positions(
+    conn: &rusqlite::Connection,
+    select_ids_sql: &str,
+    table: &str,
+) -> rusqlite::Result<()> {
+    let ids: Vec<String> = {
+        let mut stmt = conn.prepare(select_ids_sql)?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let update_sql = format!("UPDATE {table} SET position = ?2 WHERE id = ?1");
+    let mut stmt = conn.prepare(&update_sql)?;
+    for (i, id) in ids.iter().enumerate() {
+        stmt.execute(rusqlite::params![id, i as i64])?;
     }
     Ok(())
 }

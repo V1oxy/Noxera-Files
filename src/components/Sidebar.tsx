@@ -1,5 +1,16 @@
+import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { FolderClosed, Layers, Plus, Settings as SettingsIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 
+import { SortableRow } from "@/components/SortableRow";
 import { useLanguage } from "@/hooks/useLanguage";
 import type { Project } from "@/types";
 
@@ -9,6 +20,7 @@ interface SidebarProps {
   onSelectProject: (id: string) => void;
   onNewProject: () => void;
   onOpenSettings: () => void;
+  onReorderProjects: (orderedIds: string[]) => void;
   settingsActive: boolean;
 }
 
@@ -18,9 +30,30 @@ export function Sidebar({
   onSelectProject,
   onNewProject,
   onOpenSettings,
+  onReorderProjects,
   settingsActive,
 }: SidebarProps) {
   const { t } = useLanguage();
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  // Mirrors `projects` locally so a drag can reorder instantly - the props
+  // update a moment later once the new order round-trips through the store,
+  // and would otherwise cause a visible snap-back while that's in flight.
+  const [order, setOrder] = useState(projects);
+  useEffect(() => {
+    setOrder(projects);
+  }, [projects]);
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = order.findIndex((p) => p.id === active.id);
+    const newIndex = order.findIndex((p) => p.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const next = arrayMove(order, oldIndex, newIndex);
+    setOrder(next);
+    onReorderProjects(next.map((p) => p.id));
+  }
 
   return (
     <aside className="drag-region flex h-full w-60 shrink-0 flex-col border-r border-surface-border bg-surface-sidebar backdrop-blur-apple">
@@ -32,24 +65,33 @@ export function Sidebar({
         </p>
 
         <nav className="flex flex-col gap-0.5">
-          {projects.map((project) => (
-            <button
-              key={project.id}
-              onClick={() => onSelectProject(project.id)}
-              className={`group flex items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
-                selectedProjectId === project.id && !settingsActive
-                  ? "bg-accent/[0.14] text-accent font-medium"
-                  : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
-              }`}
-            >
-              <FolderClosed
-                size={15}
-                strokeWidth={1.75}
-                className={selectedProjectId === project.id && !settingsActive ? "text-accent" : "text-label-secondary"}
-              />
-              <span className="min-w-0 flex-1 truncate">{project.name}</span>
-            </button>
-          ))}
+          <DndContext
+            sensors={sensors}
+            modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={order.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+              {order.map((project) => (
+                <SortableRow key={project.id} id={project.id}>
+                  <button
+                    onClick={() => onSelectProject(project.id)}
+                    className={`group flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
+                      selectedProjectId === project.id && !settingsActive
+                        ? "bg-accent/[0.14] text-accent font-medium"
+                        : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <FolderClosed
+                      size={15}
+                      strokeWidth={1.75}
+                      className={selectedProjectId === project.id && !settingsActive ? "text-accent" : "text-label-secondary"}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                  </button>
+                </SortableRow>
+              ))}
+            </SortableContext>
+          </DndContext>
 
           {projects.length === 0 && (
             <p className="px-2 py-1.5 text-[12px] text-label-tertiary">{t("sidebar.noProjects")}</p>
@@ -86,7 +128,7 @@ export function SidebarBrand() {
   return (
     <div className="flex items-center gap-2 px-3 py-2 text-[13px] font-semibold text-label-primary">
       <Layers size={16} className="text-accent" />
-      Project Manager
+      Noxera Files
     </div>
   );
 }

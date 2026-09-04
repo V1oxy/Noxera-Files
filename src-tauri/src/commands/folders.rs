@@ -35,7 +35,7 @@ pub fn create_folder(
     if name.is_empty() {
         return Err(AppError::user("Folder name cannot be empty."));
     }
-    with_ready(&state, |conn, _| {
+    with_ready(&state, |conn, storage| {
         if !projects_db::exists(conn, &project_id)? {
             return Err(AppError::user("This project no longer exists."));
         }
@@ -47,6 +47,7 @@ pub fn create_folder(
         let id = new_id();
         let now = now_iso();
         db::create(conn, &id, &project_id, parent_folder_id.as_deref(), &name, &now)?;
+        crate::utils::logger::info(storage, &format!("Folder created: \"{name}\" ({id}) in project {project_id}"));
         db::get(conn, &id)?.ok_or_else(|| AppError::user("Failed to create folder."))
     })
 }
@@ -57,12 +58,26 @@ pub fn rename_folder(state: State<AppState>, folder_id: String, new_name: String
     if new_name.is_empty() {
         return Err(AppError::user("Folder name cannot be empty."));
     }
-    with_ready(&state, |conn, _| {
+    with_ready(&state, |conn, storage| {
         let updated = db::rename(conn, &folder_id, &new_name, &now_iso())?;
         if updated == 0 {
             return Err(AppError::user("This folder no longer exists."));
         }
+        crate::utils::logger::info(storage, &format!("Folder renamed to \"{new_name}\" ({folder_id})"));
         db::get(conn, &folder_id)?.ok_or_else(|| AppError::user("Failed to rename folder."))
+    })
+}
+
+/// Persists a new manual order for one folder's siblings (all children of
+/// the same parent): `ordered_ids[i]` gets position `i`.
+#[tauri::command]
+pub fn reorder_folders(state: State<AppState>, ordered_ids: Vec<String>) -> AppResult<()> {
+    with_ready(&state, |conn, storage| {
+        for (i, id) in ordered_ids.iter().enumerate() {
+            db::set_position(conn, id, i as i64)?;
+        }
+        crate::utils::logger::info(storage, &format!("Folders reordered ({} items)", ordered_ids.len()));
+        Ok(())
     })
 }
 
@@ -101,6 +116,7 @@ pub fn delete_folder(state: State<AppState>, folder_id: String) -> AppResult<()>
         // Deleting the top folder cascades (ON DELETE CASCADE) to every
         // subfolder and every file/version row within them.
         db::delete(conn, &folder.id)?;
+        crate::utils::logger::info(storage, &format!("Folder deleted: \"{}\" ({})", folder.name, folder.id));
         Ok(())
     })
 }

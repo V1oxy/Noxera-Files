@@ -9,9 +9,11 @@ use crate::database::{files as files_db, projects as projects_db, versions as ve
 use crate::models::{FileEntry, FileVersion};
 use crate::state::AppState;
 use crate::storage::{
-    copy_with_checksum, guess_mime_type, remove_dir_all_if_exists, sanitize_filename, StorageRoot,
+    copy_with_checksum, guess_mime_type, remove_dir_all_if_exists, rename_dir_with_retry,
+    sanitize_filename, StorageRoot,
 };
 use crate::utils::id::new_id;
+use crate::utils::logger;
 use crate::utils::{now_iso, AppError, AppResult};
 
 use super::with_ready;
@@ -144,7 +146,10 @@ pub fn upload_file(
             &now,
             operation_id.as_deref(),
         ) {
-            Ok(entry) => Ok(entry),
+            Ok(entry) => {
+                logger::info(storage, &format!("File uploaded: \"{display_name}\" ({file_id}) in project {project_id}"));
+                Ok(entry)
+            }
             Err(e) => {
                 let _ = files_db::delete(conn, &file_id);
                 Err(e)
@@ -174,7 +179,7 @@ pub fn upload_new_version(
             .ok_or_else(|| AppError::user("This file no longer exists."))?;
         let version_number = files_db::next_version_number(conn, &file_id)?;
         let now = now_iso();
-        write_version(
+        let entry = write_version(
             &app,
             conn,
             storage,
@@ -186,7 +191,9 @@ pub fn upload_new_version(
             description.as_deref(),
             &now,
             operation_id.as_deref(),
-        )
+        )?;
+        logger::info(storage, &format!("New version v{version_number} uploaded for file {file_id}"));
+        Ok(entry)
     })
 }
 
@@ -213,7 +220,7 @@ pub fn restore_version(
             format!("Restored from version v{}", source_version.version_number)
         });
 
-        write_version(
+        let entry = write_version(
             &app,
             conn,
             storage,
@@ -225,7 +232,31 @@ pub fn restore_version(
             Some(&desc),
             &now,
             None,
-        )
+        )?;
+        logger::info(
+            storage,
+            &format!("Version v{} restored as v{version_number} for file {file_id}", source_version.version_number),
+        );
+        Ok(entry)
+    })
+}
+
+#[tauri::command]
+pub fn update_version_description(
+    state: State<AppState>,
+    version_id: String,
+    description: Option<String>,
+) -> AppResult<FileVersion> {
+    let trimmed = description.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    with_ready(&state, |conn, storage| {
+        let existing = versions_db::get(conn, &version_id)?
+            .ok_or_else(|| AppError::user("This version no longer exists."))?;
+        versions_db::update_description(conn, &version_id, trimmed)?;
+        logger::info(
+            storage,
+            &format!("Description updated for version v{} ({version_id})", existing.version_number),
+        );
+        versions_db::get(conn, &version_id)?.ok_or_else(|| AppError::user("This version no longer exists."))
     })
 }
 
@@ -241,11 +272,15 @@ pub fn delete_version(state: State<AppState>, version_id: String) -> AppResult<O
         versions_db::delete(conn, &version_id)?;
         let version_dir = storage.version_dir(&file.project_id, &file.id, version.version_number)?;
         if let Err(e) = remove_dir_all_if_exists(&version_dir) {
-            crate::utils::logger::append(
+            logger::append(
                 storage,
                 &format!("Failed to remove version directory {}: {e}", version_dir.display()),
             );
         }
+        logger::info(
+            storage,
+            &format!("Version v{} deleted for file {}", version.version_number, file.id),
+        );
 
         let remaining = versions_db::count_for_file(conn, &file.id)?;
         if remaining == 0 {
@@ -254,17 +289,20 @@ pub fn delete_version(state: State<AppState>, version_id: String) -> AppResult<O
             files_db::delete(conn, &file.id)?;
             let file_dir = storage.file_dir(&file.project_id, &file.id)?;
             if let Err(e) = remove_dir_all_if_exists(&file_dir) {
-                crate::utils::logger::append(
+                logger::append(
                     storage,
                     &format!("Failed to remove file directory {}: {e}", file_dir.display()),
                 );
             }
+            logger::info(storage, &format!("File {} deleted (last version removed)", file.id));
             return Ok(None);
         }
 
+        renumber_after_delete(storage, conn, &file, version.version_number)?;
+
         if was_current {
-            // Promote the highest remaining version number - version
-            // numbers themselves are never reassigned (spec sections 33/44).
+            // The version that used to have the highest number is now the
+            // new current one, whatever number it landed on after the shift.
             if let Some(next_current) = versions_db::highest_remaining(conn, &file.id)? {
                 files_db::set_current_version(conn, &file.id, Some(&next_current.id), &now_iso())?;
             }
@@ -272,6 +310,80 @@ pub fn delete_version(state: State<AppState>, version_id: String) -> AppResult<O
 
         Ok(files_db::get(conn, &file.id)?)
     })
+}
+
+/// Keeps version numbers (and their on-disk `v{N}/` directories) contiguous
+/// after a deletion: every version that was numbered above the deleted one
+/// shifts down by one, in ascending order so each target directory name is
+/// always vacated (by the deletion itself, or by the previous shift) before
+/// it's needed. The version's id, description, checksum and every other
+/// column stay untouched - only its number and storage path move.
+fn renumber_after_delete(
+    storage: &StorageRoot,
+    conn: &Connection,
+    file: &FileEntry,
+    deleted_number: i64,
+) -> AppResult<()> {
+    let to_shift = versions_db::versions_after(conn, &file.id, deleted_number)?;
+    if to_shift.is_empty() {
+        return Ok(());
+    }
+
+    // Physically rename every affected version directory first. If one
+    // fails partway through, undo the renames already done so disk and
+    // database never disagree about where a version's file lives.
+    let mut done: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+    for v in &to_shift {
+        let old_dir = storage.version_dir(&file.project_id, &file.id, v.version_number)?;
+        let new_dir = storage.version_dir(&file.project_id, &file.id, v.version_number - 1)?;
+        if let Err(e) = rename_dir_with_retry(&old_dir, &new_dir) {
+            for (from, to) in done.iter().rev() {
+                let _ = rename_dir_with_retry(to, from);
+            }
+            return Err(AppError::with_details(
+                "Unable to renumber the remaining versions on disk.",
+                e,
+            ));
+        }
+        done.push((old_dir, new_dir));
+    }
+
+    let result = (|| -> rusqlite::Result<()> {
+        conn.execute_batch("BEGIN")?;
+        for v in &to_shift {
+            let new_number = v.version_number - 1;
+            let new_dir = storage
+                .version_dir(&file.project_id, &file.id, new_number)
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let new_relative = storage
+                .relative_path(&new_dir.join(&v.original_filename))
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+            versions_db::renumber(conn, &v.id, new_number, &new_relative)?;
+        }
+        files_db::decrement_next_version_number(conn, &file.id)?;
+        conn.execute_batch("COMMIT")?;
+        Ok(())
+    })();
+
+    if let Err(e) = result {
+        let _ = conn.execute_batch("ROLLBACK");
+        // The DB update failed after the directories were already renamed -
+        // put them back so disk state matches the (unchanged) DB rows.
+        for (from, to) in done.iter().rev() {
+            let _ = rename_dir_with_retry(to, from);
+        }
+        return Err(AppError::from(e));
+    }
+
+    logger::info(
+        storage,
+        &format!(
+            "Renumbered {} version(s) for file {} after deleting v{deleted_number}",
+            to_shift.len(),
+            file.id
+        ),
+    );
+    Ok(())
 }
 
 #[tauri::command]

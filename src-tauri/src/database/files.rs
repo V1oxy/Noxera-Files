@@ -3,7 +3,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use crate::models::{FileEntry, FileVersion, SortDirection, SortField};
 
 const SELECT_BASE: &str = "SELECT \
-    f.id, f.project_id, f.folder_id, f.name, f.current_version_id, f.next_version_number, f.created_at, f.updated_at, \
+    f.id, f.project_id, f.folder_id, f.name, f.current_version_id, f.next_version_number, f.position, f.created_at, f.updated_at, \
     (SELECT COUNT(*) FROM file_versions v WHERE v.file_id = f.id) AS version_count, \
     v.id AS v_id, v.file_id AS v_file_id, v.version_number AS v_version_number, \
     v.storage_path AS v_storage_path, v.original_filename AS v_original_filename, \
@@ -34,6 +34,7 @@ fn map_row(row: &Row) -> rusqlite::Result<FileEntry> {
         name: row.get("name")?,
         current_version_id: row.get("current_version_id")?,
         next_version_number: row.get("next_version_number")?,
+        position: row.get("position")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
         current_version,
@@ -53,6 +54,8 @@ fn sort_clause(field: SortField, dir: SortDirection) -> &'static str {
         (Created, Desc) => "ORDER BY f.created_at DESC",
         (Size, Asc) => "ORDER BY v.file_size ASC",
         (Size, Desc) => "ORDER BY v.file_size DESC",
+        (Custom, Asc) => "ORDER BY f.position ASC",
+        (Custom, Desc) => "ORDER BY f.position DESC",
     }
 }
 
@@ -115,12 +118,34 @@ pub fn create(
     name: &str,
     now: &str,
 ) -> rusqlite::Result<()> {
+    let position = next_position(conn, project_id, folder_id)?;
     conn.execute(
-        "INSERT INTO files (id, project_id, folder_id, name, current_version_id, next_version_number, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, NULL, 1, ?5, ?5)",
-        params![id, project_id, folder_id, name, now],
+        "INSERT INTO files (id, project_id, folder_id, name, current_version_id, next_version_number, position, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, NULL, 1, ?5, ?6, ?6)",
+        params![id, project_id, folder_id, name, position, now],
     )?;
     Ok(())
+}
+
+/// Next free position among siblings in the same project + folder scope
+/// (None = the project's root).
+pub fn next_position(conn: &Connection, project_id: &str, folder_id: Option<&str>) -> rusqlite::Result<i64> {
+    match folder_id {
+        Some(folder) => conn.query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM files WHERE project_id = ?1 AND folder_id = ?2",
+            params![project_id, folder],
+            |r| r.get(0),
+        ),
+        None => conn.query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM files WHERE project_id = ?1 AND folder_id IS NULL",
+            params![project_id],
+            |r| r.get(0),
+        ),
+    }
+}
+
+pub fn set_position(conn: &Connection, id: &str, position: i64) -> rusqlite::Result<usize> {
+    conn.execute("UPDATE files SET position = ?2 WHERE id = ?1", params![id, position])
 }
 
 pub fn rename(conn: &Connection, id: &str, new_name: &str, now: &str) -> rusqlite::Result<usize> {
@@ -153,6 +178,17 @@ pub fn next_version_number(conn: &Connection, file_id: &str) -> rusqlite::Result
 pub fn bump_next_version_number(conn: &Connection, file_id: &str) -> rusqlite::Result<usize> {
     conn.execute(
         "UPDATE files SET next_version_number = next_version_number + 1 WHERE id = ?1",
+        params![file_id],
+    )
+}
+
+/// Called after deleting a version and shifting every later version down by
+/// one, so the next upload continues right after the new highest version
+/// number instead of leaving a gap.
+pub fn decrement_next_version_number(conn: &Connection, file_id: &str) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE files SET next_version_number = next_version_number - 1 \
+         WHERE id = ?1 AND next_version_number > 1",
         params![file_id],
     )
 }

@@ -13,7 +13,7 @@ import { ToastProvider } from "@/hooks/useToast";
 import { Onboarding } from "@/pages/Onboarding";
 import { ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
-import { createProject, getSettings, isInitialized } from "@/services/api";
+import { createProject, getSettings, isInitialized, reorderProjects } from "@/services/api";
 
 function MainShell() {
   const { setTheme } = useTheme();
@@ -54,6 +54,9 @@ function MainShell() {
         }}
         onNewProject={() => setCreateOpen(true)}
         onOpenSettings={() => setView("settings")}
+        onReorderProjects={(orderedIds) => {
+          void reorderProjects(orderedIds).then(() => refreshProjects());
+        }}
         settingsActive={view === "settings"}
       />
 

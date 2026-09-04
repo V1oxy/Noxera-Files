@@ -76,6 +76,45 @@ pub fn delete(conn: &Connection, version_id: &str) -> rusqlite::Result<usize> {
     conn.execute("DELETE FROM file_versions WHERE id = ?1", params![version_id])
 }
 
+pub fn update_description(
+    conn: &Connection,
+    version_id: &str,
+    description: Option<&str>,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE file_versions SET description = ?2 WHERE id = ?1",
+        params![version_id, description],
+    )
+}
+
+/// Versions of `file_id` numbered above `number`, ascending - the ones that
+/// need to shift down by one once the version at `number` is gone, so a
+/// lower one is always vacated before the next shift needs it.
+pub fn versions_after(conn: &Connection, file_id: &str, number: i64) -> rusqlite::Result<Vec<FileVersion>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, file_id, version_number, storage_path, original_filename, file_size, \
+         mime_type, checksum, description, created_at \
+         FROM file_versions WHERE file_id = ?1 AND version_number > ?2 ORDER BY version_number ASC",
+    )?;
+    let rows = stmt.query_map(params![file_id, number], map_row)?;
+    rows.collect()
+}
+
+/// Applied after a lower version is deleted and this version's on-disk
+/// directory has already been renamed to match: points the DB row at its new
+/// number and the new storage path, keeping every other column untouched.
+pub fn renumber(
+    conn: &Connection,
+    version_id: &str,
+    new_number: i64,
+    new_storage_path: &str,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE file_versions SET version_number = ?2, storage_path = ?3 WHERE id = ?1",
+        params![version_id, new_number, new_storage_path],
+    )
+}
+
 pub fn count_for_file(conn: &Connection, file_id: &str) -> rusqlite::Result<i64> {
     conn.query_row(
         "SELECT COUNT(*) FROM file_versions WHERE file_id = ?1",

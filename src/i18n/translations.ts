@@ -3,7 +3,7 @@ export type Lang = "en" | "ru";
 export const translations: Record<Lang, Record<string, string>> = {
   en: {
     // Onboarding
-    "onboarding.appName": "Project Manager",
+    "onboarding.appName": "Noxera Files",
     "onboarding.tagline": "All your projects and files, in one place.",
     "onboarding.getStarted": "Get Started",
     "onboarding.storageQuestion": "Where should we store your data?",
@@ -41,6 +41,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "sort.lastModified": "Last Modified",
     "sort.created": "Created",
     "sort.size": "Size",
+    "sort.custom": "Custom Order",
 
     // Folder row
     "folder.empty": "Empty",
@@ -79,6 +80,8 @@ export const translations: Record<Lang, Record<string, string>> = {
     "upload.version": "Version",
     "upload.whatChanged": "What changed?",
     "upload.whatChangedPlaceholder": "Describe what changed in this version",
+    "upload.comment": "Comment",
+    "upload.commentPlaceholder": "Add a comment about this file",
     "upload.uploading": "Uploading...",
     "upload.uploadingProgress": "Uploading... {pct}% · {written} / {total}",
     "upload.confirm": "Upload",
@@ -130,6 +133,9 @@ export const translations: Record<Lang, Record<string, string>> = {
 
     // Version card
     "version.current": "Current",
+    "version.editDescription": "Edit description",
+    "version.descriptionPlaceholder": "No description",
+    "version.descriptionInputPlaceholder": "Describe this version...",
 
     // Toasts
     "toast.fileUploaded": "File uploaded",
@@ -137,6 +143,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "toast.versionRestored": "Version v{version} restored",
     "toast.newVersionCreated": "New version created",
     "toast.versionDeleted": "Version v{version} deleted",
+    "toast.versionDescriptionUpdated": "Description updated",
     "toast.fileDeleted": "File deleted",
     "toast.fileRenamed": "File renamed",
     "toast.folderCreated": "Folder created",
@@ -180,7 +187,7 @@ export const translations: Record<Lang, Record<string, string>> = {
 
   ru: {
     // Onboarding
-    "onboarding.appName": "Project Manager",
+    "onboarding.appName": "Noxera Files",
     "onboarding.tagline": "Все ваши проекты и файлы — в одном месте.",
     "onboarding.getStarted": "Начать",
     "onboarding.storageQuestion": "Где хранить данные?",
@@ -218,6 +225,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "sort.lastModified": "Дате изменения",
     "sort.created": "Дате создания",
     "sort.size": "Размеру",
+    "sort.custom": "Свой порядок",
 
     // Folder row
     "folder.empty": "Пусто",
@@ -256,6 +264,8 @@ export const translations: Record<Lang, Record<string, string>> = {
     "upload.version": "Версия",
     "upload.whatChanged": "Что изменилось?",
     "upload.whatChangedPlaceholder": "Опишите, что изменилось в этой версии",
+    "upload.comment": "Комментарий",
+    "upload.commentPlaceholder": "Добавьте комментарий к файлу",
     "upload.uploading": "Загрузка...",
     "upload.uploadingProgress": "Загрузка... {pct}% · {written} / {total}",
     "upload.confirm": "Загрузить",
@@ -307,6 +317,9 @@ export const translations: Record<Lang, Record<string, string>> = {
 
     // Version card
     "version.current": "Текущая",
+    "version.editDescription": "Изменить описание",
+    "version.descriptionPlaceholder": "Описание отсутствует",
+    "version.descriptionInputPlaceholder": "Опишите эту версию...",
 
     // Toasts
     "toast.fileUploaded": "Файл загружен",
@@ -314,6 +327,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "toast.versionRestored": "Версия v{version} восстановлена",
     "toast.newVersionCreated": "Создана новая версия",
     "toast.versionDeleted": "Версия v{version} удалена",
+    "toast.versionDescriptionUpdated": "Описание обновлено",
     "toast.fileDeleted": "Файл удалён",
     "toast.fileRenamed": "Файл переименован",
     "toast.folderCreated": "Папка создана",

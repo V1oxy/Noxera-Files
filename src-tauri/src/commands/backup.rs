@@ -38,6 +38,7 @@ pub fn create_backup(state: State<AppState>) -> AppResult<BackupResult> {
         write_backup_archive(storage, &backup_path)?;
 
         let size = std::fs::metadata(&backup_path).map(|m| m.len()).unwrap_or(0) as i64;
+        crate::utils::logger::info(storage, &format!("Backup created: {filename} ({})", human_size(size)));
         Ok(BackupResult {
             path: backup_path.to_string_lossy().to_string(),
             size_bytes: size,

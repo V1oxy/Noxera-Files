@@ -1,4 +1,5 @@
 import { Button } from "@/components/Button";
+import { ExpandableDescription } from "@/components/ExpandableDescription";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
 import { useLanguage } from "@/hooks/useLanguage";
 import type { FileEntry } from "@/types";
@@ -22,9 +23,13 @@ export function VersionInfoModal({ open, file, onClose }: VersionInfoModalProps)
         subtitle={version ? formatFullDateTime(version.createdAt, locale) : undefined}
       />
       <ModalBody>
-        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-label-primary">
-          {version?.description || t("whatsNew.empty")}
-        </p>
+        <ExpandableDescription
+          text={version?.description}
+          textClassName="text-[13px] leading-relaxed text-label-primary"
+          collapsedLines={6}
+          expandedMaxHeight={280}
+          emptyPlaceholder={t("whatsNew.empty")}
+        />
       </ModalBody>
       <ModalFooter>
         <Button variant="primary" onClick={onClose}>

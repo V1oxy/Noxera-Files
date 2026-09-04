@@ -107,6 +107,28 @@ pub fn remove_dir_all_if_exists(path: &Path) -> std::io::Result<()> {
     Err(last_err.unwrap())
 }
 
+/// Renames a version directory (e.g. moving `v4/` to `v3/` when v3 was just
+/// deleted and everything above it shifts down), retrying a few times since
+/// Windows can briefly hold a lock on a file that was written moments ago.
+pub fn rename_dir_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut last_err = None;
+    for attempt in 0..5 {
+        match std::fs::rename(from, to) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                last_err = Some(e);
+                if attempt < 4 {
+                    std::thread::sleep(std::time::Duration::from_millis(150 * (attempt + 1)));
+                }
+            }
+        }
+    }
+    Err(last_err.unwrap())
+}
+
 /// Removes any leftover partial uploads from `temp/`. Called once on
 /// startup (spec section 66/97) - anything found here means the app closed
 /// or crashed mid-upload, and no DB row references it.
