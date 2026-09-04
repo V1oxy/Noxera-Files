@@ -202,6 +202,34 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id, currentFolderId, files, detail, historyFileId, blockingModalOpen]);
 
+  // Tauri's own "leave" event should cover the cursor exiting the window
+  // mid-drag, but the OS can also just switch focus away entirely (alt-tab,
+  // a system dialog stealing focus, the debugger detaching) without ever
+  // delivering one - a safety net so a drag can never leave the highlight
+  // state stuck on stale once the window itself is no longer front-most.
+  useEffect(() => {
+    function resetDragState() {
+      setIsDragActive(false);
+      setDragPosition(null);
+      dropTargetRef.current = null;
+      setDropTarget(null);
+      // If an in-app drag was in progress when focus was lost, its own
+      // dragend/cancel may never fire - without this, the native-event gate
+      // above would stay stuck permanently ignoring every future real
+      // Finder drag, since nothing would ever flip it back off.
+      inAppDragActiveRef.current = false;
+    }
+    function onVisibilityChange() {
+      if (document.hidden) resetDragState();
+    }
+    window.addEventListener("blur", resetDragState);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("blur", resetDragState);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
   async function handleIncomingPaths(paths: string[], target: DropTarget) {
     if (paths.length === 0) return;
 

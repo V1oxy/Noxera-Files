@@ -271,7 +271,17 @@ export function FileList({
                   />
                 </DraggableRow>
               ))}
-              <SortableContext items={fileOrder.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+              {/* Folder ids must be included here even though folders render via
+                  DraggableRow, not SortableRow - dnd-kit's sortable strategy only
+                  gives the actively-dragged item its own pointer-following transform
+                  when `over` resolves to a valid index within *this* items list.
+                  Without folders in the list, dragging a file onto a folder makes
+                  `overIndex` invalid, which zeroes the dragged file's transform and
+                  it visually stops following the cursor mid-drag. */}
+              <SortableContext
+                items={[...folders.map((f) => f.id), ...fileOrder.map((f) => f.id)]}
+                strategy={verticalListSortingStrategy}
+              >
                 {fileOrder.map((file) => (
                   <SortableRow key={file.id} id={file.id}>
                     <FileRow
