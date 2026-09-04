@@ -1,6 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { useLanguage } from "@/hooks/useLanguage";
+import { useToast } from "@/hooks/useToast";
 
 /**
  * Small "Made by noxera" credit at the bottom of Settings - the app's only
@@ -8,6 +9,7 @@ import { useLanguage } from "@/hooks/useLanguage";
  */
 export function SiteFooter() {
   const { t } = useLanguage();
+  const { showToast } = useToast();
 
   return (
     <div className="mt-10 flex flex-col items-center gap-1.5 pb-2">
@@ -17,7 +19,9 @@ export function SiteFooter() {
         title="noxera.ru"
         aria-label="noxera.ru"
         onClick={() => {
-          void openUrl("https://noxera.ru/");
+          openUrl("https://noxera.ru/").catch(() => {
+            showToast({ title: t("toast.openLinkError"), variant: "error" });
+          });
         }}
         className="no-drag w-16 text-label-secondary opacity-40 transition-opacity duration-200 hover:opacity-80 focus-visible:opacity-80"
       >

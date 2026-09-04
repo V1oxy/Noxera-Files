@@ -99,6 +99,8 @@ export const getFile = (fileId: string) => call<FileDetail>("get_file", { fileId
 export const renameFile = (fileId: string, newName: string) =>
   call<FileEntry>("rename_file", { fileId, newName });
 export const reorderFiles = (orderedIds: string[]) => call<void>("reorder_files", { orderedIds });
+export const moveFile = (fileId: string, folderId: string | null) =>
+  call<FileEntry>("move_file", { fileId, folderId });
 export const deleteFile = (fileId: string) => call<void>("delete_file", { fileId });
 
 // ---- Folders --------------------------------------------------------------------
@@ -112,6 +114,8 @@ export const createFolder = (projectId: string, parentFolderId: string | null, n
 export const renameFolder = (folderId: string, newName: string) =>
   call<Folder>("rename_folder", { folderId, newName });
 export const reorderFolders = (orderedIds: string[]) => call<void>("reorder_folders", { orderedIds });
+export const moveFolder = (folderId: string, parentFolderId: string | null) =>
+  call<Folder>("move_folder", { folderId, parentFolderId });
 export const deleteFolder = (folderId: string) => call<void>("delete_folder", { folderId });
 
 // ---- Versions ---------------------------------------------------------------

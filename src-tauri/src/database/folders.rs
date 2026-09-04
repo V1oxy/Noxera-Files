@@ -68,6 +68,21 @@ pub fn set_position(conn: &Connection, id: &str, position: i64) -> rusqlite::Res
     conn.execute("UPDATE folders SET position = ?2 WHERE id = ?1", params![id, position])
 }
 
+/// Moves a folder under a different parent (None = the project's root),
+/// placing it at the end of that parent's list.
+pub fn set_parent(
+    conn: &Connection,
+    id: &str,
+    parent_folder_id: Option<&str>,
+    position: i64,
+    now: &str,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE folders SET parent_folder_id = ?2, position = ?3, updated_at = ?4 WHERE id = ?1",
+        params![id, parent_folder_id, position, now],
+    )
+}
+
 pub fn get(conn: &Connection, folder_id: &str) -> rusqlite::Result<Option<Folder>> {
     let sql = format!("{SELECT_BASE} WHERE f.id = ?1");
     conn.query_row(&sql, params![folder_id], map_row).optional()

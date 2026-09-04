@@ -1,6 +1,8 @@
 import {
   DndContext,
   type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,
@@ -11,6 +13,7 @@ import { ArrowDownWideNarrow, ArrowUpWideNarrow, ChevronDown, FolderPlus, Upload
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/Button";
+import { DraggableRow } from "@/components/DraggableRow";
 import { EmptyState } from "@/components/EmptyState";
 import { FileRow } from "@/components/FileRow";
 import { FolderRow } from "@/components/FolderRow";
@@ -50,8 +53,11 @@ interface FileListProps {
   onOpenFolder: (folder: Folder) => void;
   onRenameFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
-  onReorderFolders: (orderedIds: string[]) => void;
   onReorderFiles: (orderedIds: string[]) => void;
+  onMoveFile: (fileId: string, targetFolderId: string) => void;
+  onMoveFolder: (folderId: string, targetFolderId: string) => void;
+  /** Fires around the whole lifetime of an in-app drag - see ProjectView's inAppDragActiveRef. */
+  onDragStateChange: (active: boolean) => void;
 }
 
 export function FileList({
@@ -70,8 +76,10 @@ export function FileList({
   onOpenFolder,
   onRenameFolder,
   onDeleteFolder,
-  onReorderFolders,
   onReorderFiles,
+  onMoveFile,
+  onMoveFolder,
+  onDragStateChange,
   ...rowActions
 }: FileListProps) {
   const { t } = useLanguage();
@@ -81,36 +89,68 @@ export function FileList({
   const reorderable = search === "";
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  // Local mirrors so a drag reorders instantly instead of waiting for the
-  // reorder call + refetch to round-trip back through props.
-  const [folderOrder, setFolderOrder] = useState(folders);
+  // Local mirror so a file drag reorders instantly instead of waiting for
+  // the reorder call + refetch to round-trip back through props. Folders no
+  // longer reorder against each other by drag (see DraggableRow) so they
+  // don't need one - the `folders` prop is rendered directly.
   const [fileOrder, setFileOrder] = useState(files);
-  useEffect(() => setFolderOrder(folders), [folders]);
   useEffect(() => setFileOrder(files), [files]);
+
+  // The folder currently acting as a drop target mid-drag - drives its
+  // highlight. Unlike files (which stay siblings and can only reorder),
+  // dropping anything onto a folder unconditionally means "move into it,"
+  // so this needs no position math, just "is a folder being hovered."
+  const [moveIntoFolderId, setMoveIntoFolderId] = useState<string | null>(null);
+
+  function handleDragStart() {
+    onDragStateChange(true);
+    // Text selection can otherwise survive into the drag on some engines and
+    // visually look like the app is "selecting files" instead of dragging.
+    window.getSelection()?.removeAllRanges();
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      setMoveIntoFolderId(null);
+      return;
+    }
+    const overIsFolder = folders.some((f) => f.id === over.id);
+    setMoveIntoFolderId(overIsFolder ? (over.id as string) : null);
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
+    onDragStateChange(false);
+    setMoveIntoFolderId(null);
     if (!over || active.id === over.id) return;
 
-    const folderFrom = folderOrder.findIndex((f) => f.id === active.id);
-    if (folderFrom !== -1) {
-      const folderTo = folderOrder.findIndex((f) => f.id === over.id);
-      if (folderTo === -1) return;
-      const next = arrayMove(folderOrder, folderFrom, folderTo);
-      setFolderOrder(next);
-      onReorderFolders(next.map((f) => f.id));
+    const activeIsFolder = folders.some((f) => f.id === active.id);
+    const overIsFolder = folders.some((f) => f.id === over.id);
+
+    if (overIsFolder) {
+      if (activeIsFolder) {
+        onMoveFolder(active.id as string, over.id as string);
+      } else {
+        onMoveFile(active.id as string, over.id as string);
+      }
       return;
     }
 
+    if (activeIsFolder) return; // a folder dragged over a file has no defined effect
+
     const fileFrom = fileOrder.findIndex((f) => f.id === active.id);
-    if (fileFrom !== -1) {
-      const fileTo = fileOrder.findIndex((f) => f.id === over.id);
-      if (fileTo === -1) return;
-      const next = arrayMove(fileOrder, fileFrom, fileTo);
-      setFileOrder(next);
-      if (sortField !== "custom") onSortChange("custom", "asc");
-      onReorderFiles(next.map((f) => f.id));
-    }
+    const fileTo = fileOrder.findIndex((f) => f.id === over.id);
+    if (fileFrom === -1 || fileTo === -1) return;
+    const next = arrayMove(fileOrder, fileFrom, fileTo);
+    setFileOrder(next);
+    if (sortField !== "custom") onSortChange("custom", "asc");
+    onReorderFiles(next.map((f) => f.id));
+  }
+
+  function handleDragCancel() {
+    onDragStateChange(false);
+    setMoveIntoFolderId(null);
   }
 
   useEffect(() => {
@@ -214,22 +254,23 @@ export function FileList({
           <DndContext
             sensors={sensors}
             modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
           >
             <div className="space-y-0.5">
-              <SortableContext items={folderOrder.map((f) => f.id)} strategy={verticalListSortingStrategy}>
-                {folderOrder.map((folder) => (
-                  <SortableRow key={folder.id} id={folder.id}>
-                    <FolderRow
-                      folder={folder}
-                      onOpen={onOpenFolder}
-                      onRename={onRenameFolder}
-                      onDelete={onDeleteFolder}
-                      isDropTarget={dropTarget?.type === "folder" && dropTarget.id === folder.id}
-                    />
-                  </SortableRow>
-                ))}
-              </SortableContext>
+              {folders.map((folder) => (
+                <DraggableRow key={folder.id} id={folder.id}>
+                  <FolderRow
+                    folder={folder}
+                    onOpen={onOpenFolder}
+                    onRename={onRenameFolder}
+                    onDelete={onDeleteFolder}
+                    isDropTarget={(dropTarget?.type === "folder" && dropTarget.id === folder.id) || moveIntoFolderId === folder.id}
+                  />
+                </DraggableRow>
+              ))}
               <SortableContext items={fileOrder.map((f) => f.id)} strategy={verticalListSortingStrategy}>
                 {fileOrder.map((file) => (
                   <SortableRow key={file.id} id={file.id}>

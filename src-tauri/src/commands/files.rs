@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::database::{files as files_db, versions as versions_db};
+use crate::database::{files as files_db, folders as folders_db, versions as versions_db};
 use crate::models::{FileDetail, FileEntry, SortDirection, SortField};
 use crate::state::AppState;
 use crate::storage::remove_dir_all_if_exists;
@@ -73,6 +73,29 @@ pub fn reorder_files(state: State<AppState>, ordered_ids: Vec<String>) -> AppRes
         }
         crate::utils::logger::info(storage, &format!("Files reordered ({} items)", ordered_ids.len()));
         Ok(())
+    })
+}
+
+/// Moves a file into a different folder (None = the project's root) via
+/// drag-and-drop - a pure metadata move, since physical storage is keyed by
+/// file id, not by the folder tree.
+#[tauri::command]
+pub fn move_file(state: State<AppState>, file_id: String, folder_id: Option<String>) -> AppResult<FileEntry> {
+    with_ready(&state, |conn, storage| {
+        let file = files_db::get(conn, &file_id)?
+            .ok_or_else(|| AppError::user("This file no longer exists."))?;
+        if let Some(target) = &folder_id {
+            if folders_db::get(conn, target)?.is_none() {
+                return Err(AppError::user("The target folder no longer exists."));
+            }
+        }
+        if file.folder_id == folder_id {
+            return Ok(file);
+        }
+        let position = files_db::next_position(conn, &file.project_id, folder_id.as_deref())?;
+        files_db::set_folder(conn, &file_id, folder_id.as_deref(), position, &now_iso())?;
+        crate::utils::logger::info(storage, &format!("File moved: \"{}\" ({file_id})", file.name));
+        files_db::get(conn, &file_id)?.ok_or_else(|| AppError::user("Failed to move the file."))
     })
 }
 

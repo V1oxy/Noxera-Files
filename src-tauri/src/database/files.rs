@@ -148,6 +148,21 @@ pub fn set_position(conn: &Connection, id: &str, position: i64) -> rusqlite::Res
     conn.execute("UPDATE files SET position = ?2 WHERE id = ?1", params![id, position])
 }
 
+/// Moves a file into a different folder (None = the project's root),
+/// placing it at the end of that folder's list.
+pub fn set_folder(
+    conn: &Connection,
+    id: &str,
+    folder_id: Option<&str>,
+    position: i64,
+    now: &str,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE files SET folder_id = ?2, position = ?3, updated_at = ?4 WHERE id = ?1",
+        params![id, folder_id, position, now],
+    )
+}
+
 pub fn rename(conn: &Connection, id: &str, new_name: &str, now: &str) -> rusqlite::Result<usize> {
     conn.execute(
         "UPDATE files SET name = ?2, updated_at = ?3 WHERE id = ?1",

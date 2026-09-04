@@ -62,6 +62,12 @@
 
 * {
   box-sizing: border-box;
+  /* WebKit (macOS) can start its own native "drag this content out of the
+     window" gesture on an ordinary mouse-drag over text/icons unless this
+     is off - left on, it fights dnd-kit's own pointer-based drag tracking
+     and can spuriously trip Tauri's native OS drag-drop listener even
+     though no real external file is involved. */
+  -webkit-user-drag: none;
 }
 
 html,
@@ -118,7 +124,17 @@ textarea {
 }
 
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+button:focus-visible,
+.sortable-row:focus-visible {
+  outline: none;
+}
+
+/* Some WebKit builds apply their own default focus ring on plain :focus
+   (not just :focus-visible) for a pointer-focused element with role="button"
+   - dnd-kit gives every draggable row that role, so a drag can otherwise
+   show a stray native outline that never happens on Chromium/Windows. */
+.sortable-row:focus {
   outline: none;
 }
 

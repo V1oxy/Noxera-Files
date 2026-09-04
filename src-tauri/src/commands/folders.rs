@@ -81,6 +81,42 @@ pub fn reorder_folders(state: State<AppState>, ordered_ids: Vec<String>) -> AppR
     })
 }
 
+/// Moves a folder under a different parent (None = the project's root) via
+/// drag-and-drop, rejecting a move into itself or into one of its own
+/// descendants (which would otherwise silently corrupt the tree into a
+/// cycle a normal breadcrumb navigation could never escape).
+#[tauri::command]
+pub fn move_folder(state: State<AppState>, folder_id: String, parent_folder_id: Option<String>) -> AppResult<Folder> {
+    with_ready(&state, |conn, storage| {
+        let folder = db::get(conn, &folder_id)?
+            .ok_or_else(|| AppError::user("This folder no longer exists."))?;
+
+        if let Some(target) = &parent_folder_id {
+            if *target == folder_id {
+                return Err(AppError::user("A folder can't be moved into itself."));
+            }
+            if db::get(conn, target)?.is_none() {
+                return Err(AppError::user("The target folder no longer exists."));
+            }
+            // path() returns target's own ancestor chain, root-to-target
+            // inclusive - if folder_id shows up in it, target lives inside
+            // folder_id's own subtree.
+            if db::path(conn, target)?.iter().any(|e| e.id == folder_id) {
+                return Err(AppError::user("A folder can't be moved into one of its own subfolders."));
+            }
+        }
+
+        if folder.parent_folder_id == parent_folder_id {
+            return Ok(folder);
+        }
+
+        let position = db::next_position(conn, &folder.project_id, parent_folder_id.as_deref())?;
+        db::set_parent(conn, &folder_id, parent_folder_id.as_deref(), position, &now_iso())?;
+        crate::utils::logger::info(storage, &format!("Folder moved: \"{}\" ({folder_id})", folder.name));
+        db::get(conn, &folder_id)?.ok_or_else(|| AppError::user("Failed to move the folder."))
+    })
+}
+
 #[tauri::command]
 pub fn delete_folder(state: State<AppState>, folder_id: String) -> AppResult<()> {
     with_ready(&state, |conn, storage| {

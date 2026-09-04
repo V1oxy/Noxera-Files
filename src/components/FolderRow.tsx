@@ -28,7 +28,7 @@ export function FolderRow({ folder, onOpen, onRename, onDelete, isDropTarget }: 
       }}
       onDoubleClick={() => onOpen(folder)}
       onClick={() => onOpen(folder)}
-      className={`group flex cursor-default items-center gap-3 rounded-apple-sm px-3 py-2.5 transition-colors hover:bg-surface-card-hover ${
+      className={`group flex cursor-default items-center gap-3 rounded-apple-sm px-3 py-2.5 transition-all duration-150 ease-out hover:bg-surface-card-hover ${
         isDropTarget ? "bg-accent/[0.12] ring-1 ring-accent/50" : ""
       }`}
     >

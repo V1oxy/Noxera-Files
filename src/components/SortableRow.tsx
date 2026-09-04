@@ -23,7 +23,7 @@ export function SortableRow({ id, children, className = "" }: SortableRowProps) 
   return (
     <div
       ref={setNodeRef}
-      className={`${className} ${isDragging ? "z-10" : ""}`}
+      className={`sortable-row ${className} ${isDragging ? "z-10" : ""}`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,

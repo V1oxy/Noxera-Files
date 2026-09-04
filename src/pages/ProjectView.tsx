@@ -29,13 +29,14 @@ import {
   deleteVersion as apiDeleteVersion,
   downloadVersion,
   importFolder,
+  moveFile,
+  moveFolder,
   openVersion,
   pathIsDirectory,
   pickFilesToUpload,
   renameFile as apiRenameFile,
   renameFolder as apiRenameFolder,
   reorderFiles,
-  reorderFolders,
   restoreVersion as apiRestoreVersion,
   updateProject,
   updateVersionDescription,
@@ -110,6 +111,15 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
   // the real scale factor Tauri reports instead and use PhysicalPosition's
   // own conversion.
   const scaleFactorRef = useRef(1);
+  // dnd-kit's own in-app drag (reordering, or moving a file/folder into
+  // another folder) is pointer-event based, but on macOS WebKit can still
+  // interpret the same mouse gesture as a native content drag and fire
+  // Tauri's OS-level onDragDropEvent alongside it - a real external OS drag
+  // can never start while a mouse button is already down driving an in-app
+  // drag, so any native drag event arriving while this is true is that
+  // spurious echo, not a real drop, and must be ignored outright rather
+  // than fed into the same isDragActive/dropTarget state.
+  const inAppDragActiveRef = useRef(false);
 
   useEffect(() => {
     const win = getCurrentWindow();
@@ -158,6 +168,7 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
 
   useEffect(() => {
     const unlisten = getCurrentWebview().onDragDropEvent((event) => {
+      if (inAppDragActiveRef.current) return;
       if (event.payload.type === "over") {
         setIsDragActive(true);
         // Version History's backdrop covers the whole window, so
@@ -399,14 +410,37 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
     showToast({ title: t("toast.folderRenamed") });
   }
 
-  async function handleReorderFolders(orderedIds: string[]) {
-    await reorderFolders(orderedIds);
-    await refreshFolders();
-  }
-
   async function handleReorderFiles(orderedIds: string[]) {
     await reorderFiles(orderedIds);
     await refreshFiles();
+  }
+
+  async function handleMoveFile(fileId: string, targetFolderId: string) {
+    try {
+      await moveFile(fileId, targetFolderId);
+      await Promise.all([refreshFiles(), refreshFolders()]);
+      showToast({ title: t("toast.fileMoved") });
+    } catch (e) {
+      showToast({
+        title: t("toast.moveError"),
+        description: e instanceof ApiError ? translateError(e.message) : undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  async function handleMoveFolder(folderId: string, targetFolderId: string) {
+    try {
+      await moveFolder(folderId, targetFolderId);
+      await refreshFolders();
+      showToast({ title: t("toast.folderMoved") });
+    } catch (e) {
+      showToast({
+        title: t("toast.moveError"),
+        description: e instanceof ApiError ? translateError(e.message) : undefined,
+        variant: "error",
+      });
+    }
   }
 
   async function handleDeleteFolder() {
@@ -482,8 +516,12 @@ export function ProjectView({ project, navResetSignal, onProjectUpdated, onProje
         onOpenFolder={openFolder}
         onRenameFolder={(f) => setRenameFolderTarget(f)}
         onDeleteFolder={(f) => setDeleteFolderTarget(f)}
-        onReorderFolders={handleReorderFolders}
         onReorderFiles={handleReorderFiles}
+        onMoveFile={handleMoveFile}
+        onMoveFolder={handleMoveFolder}
+        onDragStateChange={(active) => {
+          inAppDragActiveRef.current = active;
+        }}
       />
 
       <VersionHistory
