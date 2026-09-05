@@ -572,10 +572,12 @@ export function ProjectView({
       <div className="drag-region flex shrink-0 items-start justify-between px-6 pb-2 pt-10">
         <div className="min-w-0">
           <h1 className="truncate text-[20px] font-semibold text-label-primary">{project.name}</h1>
-          {/* Reserved at a fixed height (2 lines' worth) regardless of whether this
-              project has a description, so the toolbar below - search, filters,
-              upload - always sits at the same height switching between projects. */}
-          <div className="mt-1 max-w-xl min-h-[42px]">
+          {/* Reserved at a fixed height (2 lines' worth, plus the "Show more"
+              toggle's own line for a description long enough to truncate)
+              regardless of whether this project has a description, so the
+              toolbar below - search, filters, upload - always sits at the
+              same height switching between projects, truncated or not. */}
+          <div className="mt-1 max-w-xl min-h-[60px]">
             {project.description && (
               <ExpandableDescription
                 text={project.description}
