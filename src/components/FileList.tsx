@@ -179,7 +179,7 @@ export function FileList({
 
   return (
     <div className="relative isolate flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 pt-4">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 pt-1">
         <div className="min-w-[100px] max-w-xs flex-1 basis-40">
           <SearchBar ref={searchRef} value={search} onChange={onSearchChange} placeholder={t("files.searchPlaceholder")} />
         </div>
