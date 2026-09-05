@@ -572,15 +572,19 @@ export function ProjectView({
       <div className="drag-region flex shrink-0 items-start justify-between px-6 pb-2 pt-10">
         <div className="min-w-0">
           <h1 className="truncate text-[20px] font-semibold text-label-primary">{project.name}</h1>
-          {project.description && (
-            <ExpandableDescription
-              text={project.description}
-              className="mt-1 max-w-xl"
-              textClassName="text-[12.5px] leading-relaxed text-label-secondary"
-              collapsedLines={2}
-              expandedMaxHeight={160}
-            />
-          )}
+          {/* Reserved at a fixed height (2 lines' worth) regardless of whether this
+              project has a description, so the toolbar below - search, filters,
+              upload - always sits at the same height switching between projects. */}
+          <div className="mt-1 max-w-xl min-h-[42px]">
+            {project.description && (
+              <ExpandableDescription
+                text={project.description}
+                textClassName="text-[12.5px] leading-relaxed text-label-secondary"
+                collapsedLines={2}
+                expandedMaxHeight={160}
+              />
+            )}
+          </div>
         </div>
         <div className="no-drag flex shrink-0 gap-1.5 pt-1">
           <Button variant="ghost" size="sm" onClick={() => setEditProjectOpen(true)}>
