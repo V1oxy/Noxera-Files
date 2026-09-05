@@ -18,8 +18,8 @@ import {
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
-import { MoveStorageModal } from "@/components/MoveStorageModal";
 import { SiteFooter } from "@/components/SiteFooter";
+import { SwitchStorageModal } from "@/components/SwitchStorageModal";
 import { ACCENT_COLOR_PRESETS } from "@/constants/accentColors";
 import { useAccentColor } from "@/hooks/useAccentColor";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -30,7 +30,7 @@ import { useUpdater } from "@/hooks/useUpdater";
 import {
   ApiError,
   createBackup,
-  moveStorage,
+  initializeStorage,
   openDataFolder,
   pickStorageFolder,
   updateSettings,
@@ -80,7 +80,7 @@ export function Settings() {
     useUpdater();
   const [backing, setBacking] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [moveStorageTarget, setMoveStorageTarget] = useState<string | null>(null);
+  const [switchStorageTarget, setSwitchStorageTarget] = useState<string | null>(null);
 
   useEffect(() => {
     getVersion()
@@ -140,15 +140,17 @@ export function Settings() {
 
   async function handlePickStorageTarget() {
     const folder = await pickStorageFolder();
-    if (folder) setMoveStorageTarget(folder);
+    if (folder) setSwitchStorageTarget(folder);
   }
 
-  async function handleConfirmMoveStorage() {
-    if (!moveStorageTarget) return;
-    await moveStorage(moveStorageTarget);
-    setMoveStorageTarget(null);
-    await refresh();
-    showToast({ title: t("toast.storageMoved") });
+  async function handleConfirmSwitchStorage() {
+    if (!switchStorageTarget) return;
+    await initializeStorage(switchStorageTarget);
+    // Everything the app holds in memory - projects, files, settings, theme,
+    // language - belongs to whichever folder is open, so switching to a
+    // different one (a different "vault", not a physical move) needs a full
+    // reload rather than trying to patch every hook that read the old one.
+    window.location.reload();
   }
 
   return (
@@ -333,11 +335,11 @@ export function Settings() {
         <SiteFooter />
       </div>
 
-      <MoveStorageModal
-        open={moveStorageTarget !== null}
-        targetPath={moveStorageTarget}
-        onCancel={() => setMoveStorageTarget(null)}
-        onConfirm={handleConfirmMoveStorage}
+      <SwitchStorageModal
+        open={switchStorageTarget !== null}
+        targetPath={switchStorageTarget}
+        onCancel={() => setSwitchStorageTarget(null)}
+        onConfirm={handleConfirmSwitchStorage}
       />
     </div>
   );

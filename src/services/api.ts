@@ -49,7 +49,6 @@ export const isInitialized = () => call<boolean>("is_initialized");
 export const defaultStoragePath = () => call<string>("default_storage_path");
 export const initializeStorage = (path: string) =>
   call<AppSettings>("initialize_storage", { path });
-export const moveStorage = (newPath: string) => call<AppSettings>("move_storage", { newPath });
 
 export async function pickStorageFolder(): Promise<string | null> {
   const selected = await openDialog({ directory: true, multiple: false });

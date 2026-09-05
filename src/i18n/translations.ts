@@ -180,7 +180,6 @@ export const translations: Record<Lang, Record<string, string>> = {
     "toast.settingUpdateError": "Unable to update setting",
     "toast.backupCreated": "Backup created",
     "toast.backupError": "Unable to create backup",
-    "toast.storageMoved": "Storage location updated",
 
     // Settings page
     "settings.title": "Settings",
@@ -188,13 +187,11 @@ export const translations: Record<Lang, Record<string, string>> = {
     "settings.storageLocation": "Storage location",
     "settings.openFolder": "Open Folder",
     "settings.changeStorageLocation": "Change",
-    "settings.moveStorageTitle": "Move storage location",
-    "settings.moveStorageSubtitle": "All projects and files will be moved to the new folder.",
-    "settings.moveStorageDestination": "New location",
-    "settings.moveStorageInProgress": "Moving your data - this can take a while for large projects. Don't close the app.",
-    "settings.moveStorageConfirm": "Move",
-    "settings.moveStorageMoving": "Moving...",
-    "settings.moveStorageErrorFallback": "Unable to move the storage folder.",
+    "settings.switchStorageTitle": "Switch storage location",
+    "settings.switchStorageSubtitle": "Opens that folder's own projects instead - nothing here is moved, and you can switch back by choosing this folder again.",
+    "settings.switchStorageDestination": "New location",
+    "settings.switchStorageConfirm": "Switch",
+    "settings.switchStorageErrorFallback": "Unable to switch to that folder.",
     "settings.dataUsed": "Data used",
     "settings.calculating": "Calculating...",
     "settings.backup": "Backup",
@@ -422,7 +419,6 @@ export const translations: Record<Lang, Record<string, string>> = {
     "toast.settingUpdateError": "Не удалось обновить настройку",
     "toast.backupCreated": "Резервная копия создана",
     "toast.backupError": "Не удалось создать резервную копию",
-    "toast.storageMoved": "Расположение хранилища обновлено",
 
     // Settings page
     "settings.title": "Настройки",
@@ -430,13 +426,11 @@ export const translations: Record<Lang, Record<string, string>> = {
     "settings.storageLocation": "Расположение хранилища",
     "settings.openFolder": "Открыть папку",
     "settings.changeStorageLocation": "Изменить",
-    "settings.moveStorageTitle": "Перенос хранилища",
-    "settings.moveStorageSubtitle": "Все проекты и файлы будут перенесены в новую папку.",
-    "settings.moveStorageDestination": "Новое расположение",
-    "settings.moveStorageInProgress": "Переносим данные - для больших проектов это может занять время. Не закрывайте приложение.",
-    "settings.moveStorageConfirm": "Перенести",
-    "settings.moveStorageMoving": "Перенос...",
-    "settings.moveStorageErrorFallback": "Не удалось перенести папку хранилища.",
+    "settings.switchStorageTitle": "Переключить хранилище",
+    "settings.switchStorageSubtitle": "Откроются проекты из этой папки - ничего никуда не переносится, вернуться можно, выбрав прежнюю папку снова.",
+    "settings.switchStorageDestination": "Новое расположение",
+    "settings.switchStorageConfirm": "Переключить",
+    "settings.switchStorageErrorFallback": "Не удалось переключиться на эту папку.",
     "settings.dataUsed": "Занято места",
     "settings.calculating": "Подсчёт...",
     "settings.backup": "Резервное копирование",
@@ -534,14 +528,4 @@ export const backendErrorTranslations: Record<string, string> = {
     "Не удалось получить доступ к папке хранилища. Проверьте, что она доступна, и попробуйте снова.",
   "Unable to create the storage folder. Check that the location is available and try again.":
     "Не удалось создать папку хранилища. Проверьте, что расположение доступно, и попробуйте снова.",
-  "Please choose a destination folder.": "Пожалуйста, выберите папку назначения.",
-  "That's already the current storage location.": "Это и так текущее расположение хранилища.",
-  "The destination can't be inside the current storage folder.":
-    "Папка назначения не может находиться внутри текущей папки хранилища.",
-  "The destination folder isn't empty. Choose an empty folder.":
-    "Папка назначения не пуста. Выберите пустую папку.",
-  "Unable to create the destination folder.": "Не удалось создать папку назначения.",
-  "Unable to move the storage folder.": "Не удалось перенести папку хранилища.",
-  "The data was copied to the new location, but the old copy couldn't be removed automatically - you can delete it by hand.":
-    "Данные скопированы в новое место, но старую копию не удалось удалить автоматически - вы можете удалить её вручную.",
 };
