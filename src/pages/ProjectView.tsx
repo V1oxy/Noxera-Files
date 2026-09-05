@@ -170,6 +170,20 @@ export function ProjectView({
   const [isDragActive, setIsDragActive] = useState(false);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  // TEMPORARY diagnostic for the "wrong row highlighted" drag-and-drop report -
+  // shows the raw vs. converted coordinates so the actual mismatch (offset,
+  // scale, axis flip?) can be measured from a screenshot instead of guessed
+  // at blind. Remove once that's root-caused.
+  const [dragDebug, setDragDebug] = useState<{
+    physX: number;
+    physY: number;
+    logX: number;
+    logY: number;
+    scale: number;
+    winW: number;
+    winH: number;
+  } | null>(null);
+  const windowSizeRef = useRef({ width: 0, height: 0 });
   const dropTargetRef = useRef<DropTarget>(null);
   // The native drag position arrives in physical pixels; converting it with
   // the webview's own window.devicePixelRatio can silently disagree with the
@@ -196,6 +210,23 @@ export function ProjectView({
     const unlisten = win.onScaleChanged(({ payload }) => {
       scaleFactorRef.current = payload.scaleFactor;
     });
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, []);
+
+  // TEMPORARY: tracks the window's own logical size for the drag-position
+  // diagnostic above - see dragDebug.
+  useEffect(() => {
+    const win = getCurrentWindow();
+    function refreshSize() {
+      void win.innerSize().then((size) => {
+        const logical = size.toLogical(scaleFactorRef.current);
+        windowSizeRef.current = { width: logical.width, height: logical.height };
+      });
+    }
+    refreshSize();
+    const unlisten = win.onResized(refreshSize);
     return () => {
       unlisten.then((f) => f());
     };
@@ -288,6 +319,15 @@ export function ProjectView({
         // while it's open, any drop anywhere is for that file's next version.
         const logical = event.payload.position.toLogical(scaleFactorRef.current);
         setDragPosition({ x: logical.x, y: logical.y });
+        setDragDebug({
+          physX: event.payload.position.x,
+          physY: event.payload.position.y,
+          logX: logical.x,
+          logY: logical.y,
+          scale: scaleFactorRef.current,
+          winW: windowSizeRef.current.width,
+          winH: windowSizeRef.current.height,
+        });
         const target = historyFileId
           ? ({ type: "file", id: historyFileId } as DropTarget)
           : resolveDropTarget(logical.x, logical.y);
@@ -296,11 +336,13 @@ export function ProjectView({
       } else if (event.payload.type === "leave") {
         setIsDragActive(false);
         setDragPosition(null);
+        setDragDebug(null);
         dropTargetRef.current = null;
         setDropTarget(null);
       } else if (event.payload.type === "drop") {
         setIsDragActive(false);
         setDragPosition(null);
+        setDragDebug(null);
         const target = dropTargetRef.current;
         dropTargetRef.current = null;
         setDropTarget(null);
@@ -323,6 +365,7 @@ export function ProjectView({
     function resetDragState() {
       setIsDragActive(false);
       setDragPosition(null);
+      setDragDebug(null);
       dropTargetRef.current = null;
       setDropTarget(null);
       // If an in-app drag was in progress when focus was lost, its own
@@ -671,6 +714,15 @@ export function ProjectView({
           inAppDragActiveRef.current = active;
         }}
       />
+
+      {/* TEMPORARY diagnostic for the "wrong row highlighted" drag report - remove once root-caused. */}
+      {dragDebug && (
+        <div className="pointer-events-none fixed left-2 top-16 z-[999] rounded bg-black/80 px-2 py-1 font-mono text-[11px] text-white">
+          phys ({Math.round(dragDebug.physX)}, {Math.round(dragDebug.physY)}) · logical ({Math.round(dragDebug.logX)},{" "}
+          {Math.round(dragDebug.logY)}) · scale {dragDebug.scale} · win {Math.round(dragDebug.winW)}x
+          {Math.round(dragDebug.winH)} · target {dropTarget ? `${dropTarget.type}:${dropTarget.id.slice(0, 6)}` : "none"}
+        </div>
+      )}
 
       <VersionHistory
         open={historyFileId !== null}
