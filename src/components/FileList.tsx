@@ -237,7 +237,7 @@ export function FileList({
           <FolderPlus size={14} />
           {t("files.newFolder")}
         </Button>
-        <Button variant="primary" className="shrink-0" onClick={onUploadClick}>
+        <Button variant="secondary" className="shrink-0" onClick={onUploadClick}>
           <Upload size={14} />
           {t("files.uploadFile")}
         </Button>
