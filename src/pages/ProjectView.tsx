@@ -86,18 +86,25 @@ interface ProjectViewProps {
 // the row it's actually nearest to.
 const ROW_HIT_PADDING = 3;
 
+// A native drag from outside the app (Finder/Explorer) only ever resolves to
+// a folder in the plain file list - landing on a file row there must never
+// be read as "add a new version," since that flow now belongs exclusively
+// to the Version History view (which forces its own target below instead of
+// calling this at all). Restricting the selector to folder rows means a
+// drop over a file row simply falls through to the current folder, same as
+// dropping on empty space.
 function resolveDropTarget(logicalX: number, logicalY: number): DropTarget {
   const el = document.elementFromPoint(logicalX, logicalY);
-  const direct = el?.closest("[data-drop-target]") as HTMLElement | null;
+  const direct = el?.closest('[data-drop-target="folder"]') as HTMLElement | null;
   const fromElement = direct ?? findNearestDropTarget(logicalX, logicalY);
-  const type = fromElement?.dataset.dropTarget as "file" | "folder" | undefined;
+  const type = fromElement?.dataset.dropTarget as "folder" | undefined;
   const id = fromElement?.dataset.rowId;
   if (!type || !id) return null;
   return { type, id };
 }
 
 function findNearestDropTarget(logicalX: number, logicalY: number): HTMLElement | null {
-  const candidates = document.querySelectorAll<HTMLElement>("[data-drop-target][data-row-id]");
+  const candidates = document.querySelectorAll<HTMLElement>('[data-drop-target="folder"][data-row-id]');
   let best: HTMLElement | null = null;
   let bestDistance = Infinity;
   for (const candidate of candidates) {
@@ -338,6 +345,9 @@ export function ProjectView({
   async function handleIncomingPaths(paths: string[], target: DropTarget) {
     if (paths.length === 0) return;
 
+    // Only reachable when Version History is open (resolveDropTarget never
+    // yields a "file" target on its own) - adding a version stays scoped to
+    // that dedicated view instead of the plain file list.
     if (target?.type === "file") {
       const targetFile = files.find((f) => f.id === target.id) ?? (detail?.id === target.id ? detail : null);
       if (targetFile) {

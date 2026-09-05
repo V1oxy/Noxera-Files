@@ -80,6 +80,9 @@ export interface AppSettings {
   launchAtStartup: boolean;
   storagePath: string;
   accentColor: AccentColorKey;
+  lastWhatsNewVersion: string | null;
+  pendingWhatsNewVersion: string | null;
+  pendingWhatsNewNotes: string | null;
 }
 
 export interface StorageInfo {

@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { updateSettings } from "@/services/api";
+
 export type UpdateStatus = "idle" | "checking" | "upToDate" | "available" | "downloading" | "readyToRestart" | "error";
 
 interface UpdaterContextValue {
@@ -78,6 +80,12 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
         }
       });
       setStatus("readyToRestart");
+      // Cache the notes for the version we just installed so the next
+      // launch can show "What's new" without a network call of its own -
+      // see useWhatsNew. Best-effort: losing this just means no popup.
+      if (update.body) {
+        updateSettings({ pendingWhatsNewVersion: update.version, pendingWhatsNewNotes: update.body }).catch(() => {});
+      }
     } catch (e) {
       setStatus("error");
       setErrorMessage(e instanceof Error ? e.message : String(e));

@@ -64,6 +64,9 @@ export const updateSettings = (update: {
   language?: string;
   launchAtStartup?: boolean;
   accentColor?: string;
+  lastWhatsNewVersion?: string;
+  pendingWhatsNewVersion?: string;
+  pendingWhatsNewNotes?: string;
 }) => call<AppSettings>("update_settings", { update });
 export const getStorageInfo = () => call<StorageInfo>("get_storage_info");
 export const openDataFolder = (which: "storage" | "backups" | "logs") =>

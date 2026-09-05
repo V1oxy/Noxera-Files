@@ -78,6 +78,13 @@ export const translations: Record<Lang, Record<string, string>> = {
     "whatsNew.title": "What's new in v{version}",
     "whatsNew.empty": "No description was added for this version.",
 
+    // "What's new" popup shown once after the app itself updates
+    "appWhatsNew.title": "What's new in {app}",
+    "appWhatsNew.added": "New features",
+    "appWhatsNew.fixed": "Fixes",
+    "appWhatsNew.improved": "Improvements",
+    "appWhatsNew.gotIt": "Got it",
+
     // Upload modal
     "upload.titleAddFile": "Add File",
     "upload.titleNewVersion": "Upload New Version",
@@ -303,6 +310,13 @@ export const translations: Record<Lang, Record<string, string>> = {
     "menu.whatsNew": "Что нового в этой версии",
     "whatsNew.title": "Что нового в v{version}",
     "whatsNew.empty": "Для этой версии не добавлено описание.",
+
+    // Попап "Что нового", показываемый один раз после обновления приложения
+    "appWhatsNew.title": "Что нового в {app}",
+    "appWhatsNew.added": "Новые возможности",
+    "appWhatsNew.fixed": "Исправления",
+    "appWhatsNew.improved": "Улучшения",
+    "appWhatsNew.gotIt": "Понятно",
 
     // Upload modal
     "upload.titleAddFile": "Добавить файл",

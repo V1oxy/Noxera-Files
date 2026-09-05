@@ -17,6 +17,9 @@ const KEY_THEME: &str = "theme";
 const KEY_LANGUAGE: &str = "language";
 const KEY_LAUNCH_AT_STARTUP: &str = "launch_at_startup";
 const KEY_ACCENT_COLOR: &str = "accent_color";
+const KEY_LAST_WHATS_NEW_VERSION: &str = "last_whats_new_version";
+const KEY_PENDING_WHATS_NEW_VERSION: &str = "pending_whats_new_version";
+const KEY_PENDING_WHATS_NEW_NOTES: &str = "pending_whats_new_notes";
 
 const ACCENT_COLORS: [&str; 10] = [
     "green", "blue", "teal", "purple", "pink", "red", "orange", "amber", "indigo", "graphite",
@@ -104,12 +107,18 @@ pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
             .map(|v| v == "true")
             .unwrap_or(false);
         let accent_color = settings_db::get(conn, KEY_ACCENT_COLOR)?.unwrap_or_else(|| "green".to_string());
+        let last_whats_new_version = settings_db::get(conn, KEY_LAST_WHATS_NEW_VERSION)?;
+        let pending_whats_new_version = settings_db::get(conn, KEY_PENDING_WHATS_NEW_VERSION)?;
+        let pending_whats_new_notes = settings_db::get(conn, KEY_PENDING_WHATS_NEW_NOTES)?;
         Ok(AppSettings {
             theme,
             language,
             launch_at_startup,
             storage_path: storage.root().to_string_lossy().to_string(),
             accent_color,
+            last_whats_new_version,
+            pending_whats_new_version,
+            pending_whats_new_notes,
         })
     })
 }
@@ -149,6 +158,15 @@ pub fn update_settings(
             }
             settings_db::set(conn, KEY_ACCENT_COLOR, accent_color)?;
             crate::utils::logger::info(storage, &format!("Setting changed: accent_color = {accent_color}"));
+        }
+        if let Some(version) = &update.last_whats_new_version {
+            settings_db::set(conn, KEY_LAST_WHATS_NEW_VERSION, version)?;
+        }
+        if let Some(version) = &update.pending_whats_new_version {
+            settings_db::set(conn, KEY_PENDING_WHATS_NEW_VERSION, version)?;
+        }
+        if let Some(notes) = &update.pending_whats_new_notes {
+            settings_db::set(conn, KEY_PENDING_WHATS_NEW_NOTES, notes)?;
         }
         Ok(())
     })?;

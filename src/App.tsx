@@ -7,12 +7,14 @@ import { ProjectModal } from "@/components/ProjectModal";
 import { Sidebar } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { ToastContainer } from "@/components/Toast";
+import { WhatsNewModal } from "@/components/WhatsNewModal";
 import { AccentColorProvider, useAccentColor } from "@/hooks/useAccentColor";
 import { LanguageProvider, useLanguage } from "@/hooks/useLanguage";
 import { ThemeProvider, useTheme } from "@/hooks/useTheme";
 import { useProjects } from "@/hooks/useProjects";
 import { ToastProvider } from "@/hooks/useToast";
 import { UpdaterProvider, useUpdater } from "@/hooks/useUpdater";
+import { useWhatsNew } from "@/hooks/useWhatsNew";
 import { Onboarding } from "@/pages/Onboarding";
 import { type PendingFileOpen, ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
@@ -24,6 +26,7 @@ function MainShell() {
   const { setLanguage, t } = useLanguage();
   const { setAccentColor } = useAccentColor();
   const { status: updateStatus } = useUpdater();
+  const { data: whatsNewData, dismiss: dismissWhatsNew } = useWhatsNew();
   const { projects, refresh: refreshProjects } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [view, setView] = useState<"project" | "settings">("project");
@@ -125,6 +128,8 @@ function MainShell() {
       />
 
       <ToastContainer />
+
+      <WhatsNewModal data={whatsNewData} onClose={dismissWhatsNew} />
     </div>
   );
 }
