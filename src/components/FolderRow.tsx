@@ -20,8 +20,6 @@ export function FolderRow({ folder, onOpen, onRename, onDelete, isDropTarget }: 
 
   return (
     <div
-      data-drop-target="folder"
-      data-row-id={folder.id}
       onContextMenu={(e) => {
         e.preventDefault();
         setMenu({ x: e.clientX, y: e.clientY });

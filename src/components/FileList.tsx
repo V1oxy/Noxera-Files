@@ -49,7 +49,8 @@ interface FileListProps {
   onUploadClick: () => void;
   onNewFolderClick: () => void;
   isDragActive: boolean;
-  dropTarget: { type: "file" | "folder"; id: string } | null;
+  /** Set only while Version History is open - a native drag never targets a specific folder row anymore. */
+  dropTarget: { type: "file"; id: string } | null;
   onOpen: (file: FileEntry) => void;
   onDownload: (file: FileEntry) => void;
   onUploadNewVersion: (file: FileEntry) => void;
@@ -311,7 +312,7 @@ export function FileList({
                     onOpen={onOpenFolder}
                     onRename={onRenameFolder}
                     onDelete={onDeleteFolder}
-                    isDropTarget={(dropTarget?.type === "folder" && dropTarget.id === folder.id) || moveIntoFolderId === folder.id}
+                    isDropTarget={moveIntoFolderId === folder.id}
                   />
                 </DraggableRow>
               ))}
@@ -349,7 +350,6 @@ export function FileList({
                 onOpen={onOpenFolder}
                 onRename={onRenameFolder}
                 onDelete={onDeleteFolder}
-                isDropTarget={dropTarget?.type === "folder" && dropTarget.id === folder.id}
               />
             ))}
             {files.map((file) => (
@@ -376,7 +376,7 @@ export function FileList({
       {isDragActive && dropTarget && (
         <div className="pointer-events-none absolute inset-x-3 bottom-3 flex justify-center">
           <p className="rounded-full border border-surface-border bg-surface-modal px-3 py-1.5 text-[12px] font-medium text-accent shadow-popover backdrop-blur-apple">
-            {dropTarget.type === "file" ? t("files.dropNewVersion") : t("files.dropIntoFolder")}
+            {t("files.dropNewVersion")}
           </p>
         </div>
       )}

@@ -40,8 +40,6 @@ export function FileRow({
 
   return (
     <div
-      data-drop-target="file"
-      data-row-id={file.id}
       onContextMenu={(e) => {
         e.preventDefault();
         openMenuAt(e.clientX, e.clientY);

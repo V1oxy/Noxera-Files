@@ -52,7 +52,16 @@ type UploadTarget =
   | { mode: "new-file"; sourcePath: string; folderId: string | null }
   | { mode: "new-version"; file: FileEntry; sourcePath: string; candidatePaths?: string[] };
 
-type DropTarget = { type: "file" | "folder"; id: string } | null;
+// A native drag from outside the app (Finder/Explorer) no longer targets a
+// specific folder row - it always uploads into whichever folder is
+// currently open, full stop. Precisely hit-testing which row the cursor is
+// over turned out to be a persistent source of bugs (coordinate conversion
+// mismatches that put the highlight on the wrong row, sometimes several
+// rows off) with little upside over just opening the folder you want first.
+// The only target a native drag can still resolve to is "file" - Version
+// History forcing every drop while it's open to be a new version of that
+// one file.
+type DropTarget = { type: "file"; id: string } | null;
 
 export interface PendingFileOpen {
   requestId: number;
@@ -70,55 +79,6 @@ interface ProjectViewProps {
   onPendingFileOpenHandled: () => void;
   /** A global search result was clicked - the caller (MainShell) owns project selection and decides whether that requires switching projects. */
   onNavigateToFile: (hit: GlobalFileHit) => void;
-}
-
-// Rows sit `space-y-0.5` (2px) apart, and a real mouse/trackpad release
-// lands in that gap - or right on a row's rounded-corner edge - often
-// enough that a strict elementFromPoint hit-test would silently resolve to
-// "no target" there, even though the row was highlighted as active a
-// moment earlier. That made a drop right at a folder's edge fall back to
-// the project root instead of that folder - looking like the highlight and
-// the "add to project root" behavior were firing at once. This tolerance
-// is deliberately smaller than half the inter-row gap so two rows' padded
-// boxes can never both claim the same point; findNearestDropTarget also
-// picks the closest candidate rather than the first match, so even a point
-// that (due to rounding) falls inside more than one padded box resolves to
-// the row it's actually nearest to.
-const ROW_HIT_PADDING = 3;
-
-// A native drag from outside the app (Finder/Explorer) only ever resolves to
-// a folder in the plain file list - landing on a file row there must never
-// be read as "add a new version," since that flow now belongs exclusively
-// to the Version History view (which forces its own target below instead of
-// calling this at all). Restricting the selector to folder rows means a
-// drop over a file row simply falls through to the current folder, same as
-// dropping on empty space.
-function resolveDropTarget(logicalX: number, logicalY: number): DropTarget {
-  const el = document.elementFromPoint(logicalX, logicalY);
-  const direct = el?.closest('[data-drop-target="folder"]') as HTMLElement | null;
-  const fromElement = direct ?? findNearestDropTarget(logicalX, logicalY);
-  const type = fromElement?.dataset.dropTarget as "folder" | undefined;
-  const id = fromElement?.dataset.rowId;
-  if (!type || !id) return null;
-  return { type, id };
-}
-
-function findNearestDropTarget(logicalX: number, logicalY: number): HTMLElement | null {
-  const candidates = document.querySelectorAll<HTMLElement>('[data-drop-target="folder"][data-row-id]');
-  let best: HTMLElement | null = null;
-  let bestDistance = Infinity;
-  for (const candidate of candidates) {
-    const rect = candidate.getBoundingClientRect();
-    const dx = Math.max(rect.left - logicalX, 0, logicalX - rect.right);
-    const dy = Math.max(rect.top - logicalY, 0, logicalY - rect.bottom);
-    if (dx > ROW_HIT_PADDING || dy > ROW_HIT_PADDING) continue;
-    const distance = dx * dx + dy * dy;
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = candidate;
-    }
-  }
-  return best;
 }
 
 export function ProjectView({
@@ -170,20 +130,6 @@ export function ProjectView({
   const [isDragActive, setIsDragActive] = useState(false);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
-  // TEMPORARY diagnostic for the "wrong row highlighted" drag-and-drop report -
-  // shows the raw vs. converted coordinates so the actual mismatch (offset,
-  // scale, axis flip?) can be measured from a screenshot instead of guessed
-  // at blind. Remove once that's root-caused.
-  const [dragDebug, setDragDebug] = useState<{
-    physX: number;
-    physY: number;
-    logX: number;
-    logY: number;
-    scale: number;
-    winW: number;
-    winH: number;
-  } | null>(null);
-  const windowSizeRef = useRef({ width: 0, height: 0 });
   const dropTargetRef = useRef<DropTarget>(null);
   // The native drag position arrives in physical pixels; converting it with
   // the webview's own window.devicePixelRatio can silently disagree with the
@@ -210,23 +156,6 @@ export function ProjectView({
     const unlisten = win.onScaleChanged(({ payload }) => {
       scaleFactorRef.current = payload.scaleFactor;
     });
-    return () => {
-      unlisten.then((f) => f());
-    };
-  }, []);
-
-  // TEMPORARY: tracks the window's own logical size for the drag-position
-  // diagnostic above - see dragDebug.
-  useEffect(() => {
-    const win = getCurrentWindow();
-    function refreshSize() {
-      void win.innerSize().then((size) => {
-        const logical = size.toLogical(scaleFactorRef.current);
-        windowSizeRef.current = { width: logical.width, height: logical.height };
-      });
-    }
-    refreshSize();
-    const unlisten = win.onResized(refreshSize);
     return () => {
       unlisten.then((f) => f());
     };
@@ -319,30 +248,20 @@ export function ProjectView({
         // while it's open, any drop anywhere is for that file's next version.
         const logical = event.payload.position.toLogical(scaleFactorRef.current);
         setDragPosition({ x: logical.x, y: logical.y });
-        setDragDebug({
-          physX: event.payload.position.x,
-          physY: event.payload.position.y,
-          logX: logical.x,
-          logY: logical.y,
-          scale: scaleFactorRef.current,
-          winW: windowSizeRef.current.width,
-          winH: windowSizeRef.current.height,
-        });
-        const target = historyFileId
-          ? ({ type: "file", id: historyFileId } as DropTarget)
-          : resolveDropTarget(logical.x, logical.y);
+        // Version History open -> every drop is a new version of that one
+        // file. Otherwise a native drag never targets a specific row anymore
+        // - it always lands in whichever folder is currently open.
+        const target: DropTarget = historyFileId ? { type: "file", id: historyFileId } : null;
         dropTargetRef.current = target;
         setDropTarget(target);
       } else if (event.payload.type === "leave") {
         setIsDragActive(false);
         setDragPosition(null);
-        setDragDebug(null);
         dropTargetRef.current = null;
         setDropTarget(null);
       } else if (event.payload.type === "drop") {
         setIsDragActive(false);
         setDragPosition(null);
-        setDragDebug(null);
         const target = dropTargetRef.current;
         dropTargetRef.current = null;
         setDropTarget(null);
@@ -365,7 +284,6 @@ export function ProjectView({
     function resetDragState() {
       setIsDragActive(false);
       setDragPosition(null);
-      setDragDebug(null);
       dropTargetRef.current = null;
       setDropTarget(null);
       // If an in-app drag was in progress when focus was lost, its own
@@ -388,9 +306,9 @@ export function ProjectView({
   async function handleIncomingPaths(paths: string[], target: DropTarget) {
     if (paths.length === 0) return;
 
-    // Only reachable when Version History is open (resolveDropTarget never
-    // yields a "file" target on its own) - adding a version stays scoped to
-    // that dedicated view instead of the plain file list.
+    // Only reachable when Version History is open - a native drag never
+    // targets a specific file on its own, so adding a version stays scoped
+    // to that dedicated view instead of the plain file list.
     if (target?.type === "file") {
       const targetFile = files.find((f) => f.id === target.id) ?? (detail?.id === target.id ? detail : null);
       if (targetFile) {
@@ -404,7 +322,7 @@ export function ProjectView({
       }
     }
 
-    const folderId = target?.type === "folder" ? target.id : currentFolderId;
+    const folderId = currentFolderId;
 
     // A dropped folder (from Finder/Explorer, not one of the app's own rows)
     // is classified up front so it can go through import_folder instead of
@@ -714,15 +632,6 @@ export function ProjectView({
           inAppDragActiveRef.current = active;
         }}
       />
-
-      {/* TEMPORARY diagnostic for the "wrong row highlighted" drag report - remove once root-caused. */}
-      {dragDebug && (
-        <div className="pointer-events-none fixed left-2 top-16 z-[999] rounded bg-black/80 px-2 py-1 font-mono text-[11px] text-white">
-          phys ({Math.round(dragDebug.physX)}, {Math.round(dragDebug.physY)}) · logical ({Math.round(dragDebug.logX)},{" "}
-          {Math.round(dragDebug.logY)}) · scale {dragDebug.scale} · win {Math.round(dragDebug.winW)}x
-          {Math.round(dragDebug.winH)} · target {dropTarget ? `${dropTarget.type}:${dropTarget.id.slice(0, 6)}` : "none"}
-        </div>
-      )}
 
       <VersionHistory
         open={historyFileId !== null}

@@ -96,8 +96,6 @@ export function VersionHistory({
       }}
     >
       <div
-        data-drop-target={detail ? "file" : undefined}
-        data-row-id={detail?.id}
         className="animate-scale-in flex max-h-[80vh] w-[480px] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple"
         onMouseDown={(e) => e.stopPropagation()}
       >
