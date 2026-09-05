@@ -129,6 +129,86 @@ pub fn rename_dir_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
     Err(last_err.unwrap())
 }
 
+/// Relocates the entire storage root (database, projects, backups, logs) to
+/// a new location - Settings -> Storage -> "Change". Tries a plain rename
+/// first, which is atomic and instant when both paths sit on the same
+/// filesystem; only falls back to a full recursive copy-then-delete when
+/// that's impossible, which is the normal case for "move to a different
+/// drive" (an external disk, a different internal volume, ...) since a
+/// rename can never cross filesystems.
+///
+/// If `to` already exists (the user picked an existing empty folder rather
+/// than typing a brand-new name) its contents are moved into it entry by
+/// entry instead of renaming the root itself, since `rename` can't target a
+/// directory that's already there. The caller is responsible for having
+/// already confirmed `to` is empty or absent, and for having released any
+/// open handle on `from` (the SQLite connection) before calling this.
+pub fn move_storage_root(from: &Path, to: &Path) -> AppResult<()> {
+    if to.exists() {
+        for entry in std::fs::read_dir(from)? {
+            let entry = entry?;
+            let dest = to.join(entry.file_name());
+            move_path(&entry.path(), &dest)?;
+        }
+        remove_dir_all_if_exists(from)?;
+    } else {
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        move_path(from, to)?;
+    }
+    Ok(())
+}
+
+fn move_path(from: &Path, to: &Path) -> AppResult<()> {
+    match std::fs::rename(from, to) {
+        Ok(()) => Ok(()),
+        Err(e) if is_cross_device(&e) => {
+            copy_recursive(from, to)?;
+            remove_dir_all_if_exists(from).map_err(|e| {
+                AppError::with_details(
+                    "The data was copied to the new location, but the old copy couldn't be removed automatically - you can delete it by hand.",
+                    e,
+                )
+            })
+        }
+        Err(e) => Err(AppError::with_details("Unable to move the storage folder.", e)),
+    }
+}
+
+/// `rename(2)`/`MoveFile` refuse to cross filesystem boundaries (moving to a
+/// different drive or a different mounted volume) - checked via the raw OS
+/// error code rather than `ErrorKind` since a portable "crosses devices"
+/// variant isn't available on stable Rust for this MSRV.
+fn is_cross_device(e: &std::io::Error) -> bool {
+    match e.raw_os_error() {
+        Some(18) if cfg!(unix) => true,    // EXDEV
+        Some(17) if cfg!(windows) => true, // ERROR_NOT_SAME_DEVICE
+        _ => false,
+    }
+}
+
+fn copy_recursive(from: &Path, to: &Path) -> AppResult<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in walkdir::WalkDir::new(from) {
+        let entry = entry.map_err(|e| AppError::with_details("Unable to read the storage folder.", e))?;
+        let rel = entry
+            .path()
+            .strip_prefix(from)
+            .expect("WalkDir yields paths nested under `from`");
+        let dest = to.join(rel);
+        if entry.file_type().is_dir() {
+            std::fs::create_dir_all(&dest)?;
+        } else {
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(entry.path(), &dest)?;
+        }
+    }
+    Ok(())
+}
+
 /// Removes any leftover partial uploads from `temp/`. Called once on
 /// startup (spec section 66/97) - anything found here means the app closed
 /// or crashed mid-upload, and no DB row references it.

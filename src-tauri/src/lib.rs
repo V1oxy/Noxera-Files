@@ -44,6 +44,7 @@ pub fn run() {
             commands::settings::is_initialized,
             commands::settings::default_storage_path,
             commands::settings::initialize_storage,
+            commands::settings::move_storage,
             commands::settings::get_settings,
             commands::settings::update_settings,
             commands::settings::get_storage_info,

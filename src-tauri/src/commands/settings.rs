@@ -98,6 +98,70 @@ pub fn initialize_storage(
     get_settings(state)
 }
 
+/// Relocates the whole storage root (database, projects, backups, logs) to
+/// a different folder, e.g. onto a larger or external drive - Settings ->
+/// Storage -> "Change". The destination must already exist and be empty
+/// (the frontend only offers it through a folder picker, which can only
+/// point at an existing folder).
+#[tauri::command]
+pub fn move_storage(app: AppHandle, state: State<AppState>, new_path: String) -> AppResult<AppSettings> {
+    let trimmed = new_path.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::user("Please choose a destination folder."));
+    }
+    let new_root = PathBuf::from(trimmed);
+
+    let old_root = with_ready(&state, |_, storage| Ok(storage.root().to_path_buf()))?;
+
+    if new_root == old_root {
+        return Err(AppError::user("That's already the current storage location."));
+    }
+    if new_root.starts_with(&old_root) {
+        return Err(AppError::user("The destination can't be inside the current storage folder."));
+    }
+    if new_root.exists() && std::fs::read_dir(&new_root)?.next().is_some() {
+        return Err(AppError::user("The destination folder isn't empty. Choose an empty folder."));
+    }
+    std::fs::create_dir_all(&new_root)
+        .map_err(|e| AppError::with_details("Unable to create the destination folder.", e))?;
+    let probe = new_root.join(".noxera-write-test");
+    std::fs::write(&probe, b"ok")
+        .map_err(|e| AppError::with_details("The chosen folder is not writable.", e))?;
+    let _ = std::fs::remove_file(&probe);
+
+    // Release the SQLite connection before touching files on disk - an open
+    // handle on database.sqlite (especially on Windows) would make the move
+    // fail partway through.
+    {
+        let mut guard = state
+            .inner
+            .lock()
+            .map_err(|_| AppError::user("Internal state error."))?;
+        *guard = AppStateInner::Uninitialized;
+    }
+
+    if let Err(e) = crate::storage::move_storage_root(&old_root, &new_root) {
+        // Reopen the old location rather than leaving the app stuck uninitialized.
+        let _ = state::open_storage_into_state(&state, old_root);
+        return Err(e);
+    }
+
+    state::open_storage_into_state(&state, new_root.clone())?;
+    state::write_storage_config(
+        &app,
+        &StorageConfig {
+            storage_path: new_root.to_string_lossy().to_string(),
+        },
+    )?;
+
+    with_ready(&state, |_, storage| {
+        crate::utils::logger::info(storage, &format!("Storage moved to {}", storage.root().display()));
+        Ok(())
+    })?;
+
+    get_settings(state)
+}
+
 #[tauri::command]
 pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
     with_ready(&state, |conn, storage| {

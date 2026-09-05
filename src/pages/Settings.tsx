@@ -4,6 +4,7 @@ import {
   Check,
   CheckCircle2,
   DownloadCloud,
+  FolderInput,
   FolderOpen,
   Globe,
   HardDrive,
@@ -17,6 +18,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
+import { MoveStorageModal } from "@/components/MoveStorageModal";
 import { SiteFooter } from "@/components/SiteFooter";
 import { ACCENT_COLOR_PRESETS } from "@/constants/accentColors";
 import { useAccentColor } from "@/hooks/useAccentColor";
@@ -25,7 +27,14 @@ import { useSettings } from "@/hooks/useSettings";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/hooks/useToast";
 import { useUpdater } from "@/hooks/useUpdater";
-import { ApiError, createBackup, openDataFolder, updateSettings } from "@/services/api";
+import {
+  ApiError,
+  createBackup,
+  moveStorage,
+  openDataFolder,
+  pickStorageFolder,
+  updateSettings,
+} from "@/services/api";
 import type { LanguageMode, ThemeMode } from "@/types";
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -71,6 +80,7 @@ export function Settings() {
     useUpdater();
   const [backing, setBacking] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [moveStorageTarget, setMoveStorageTarget] = useState<string | null>(null);
 
   useEffect(() => {
     getVersion()
@@ -128,6 +138,19 @@ export function Settings() {
     }
   }
 
+  async function handlePickStorageTarget() {
+    const folder = await pickStorageFolder();
+    if (folder) setMoveStorageTarget(folder);
+  }
+
+  async function handleConfirmMoveStorage() {
+    if (!moveStorageTarget) return;
+    await moveStorage(moveStorageTarget);
+    setMoveStorageTarget(null);
+    await refresh();
+    showToast({ title: t("toast.storageMoved") });
+  }
+
   return (
     <div className="h-full flex-1 overflow-y-auto px-8 pb-10 pt-10">
       <div className="drag-region mb-6">
@@ -138,10 +161,16 @@ export function Settings() {
       <div className="no-drag mx-auto max-w-lg">
         <SettingsSection title={t("settings.storage")}>
           <SettingsRow label={t("settings.storageLocation")} description={storageInfo?.path ?? settings?.storagePath}>
-            <Button size="sm" variant="secondary" onClick={() => openDataFolder("storage")}>
-              <FolderOpen size={13} />
-              {t("settings.openFolder")}
-            </Button>
+            <div className="flex gap-1.5">
+              <Button size="sm" variant="secondary" onClick={() => openDataFolder("storage")}>
+                <FolderOpen size={13} />
+                {t("settings.openFolder")}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={handlePickStorageTarget}>
+                <FolderInput size={13} />
+                {t("settings.changeStorageLocation")}
+              </Button>
+            </div>
           </SettingsRow>
           <SettingsRow label={t("settings.dataUsed")} description={storageInfo?.totalSizeHuman ?? t("settings.calculating")}>
             <HardDrive size={15} className="text-label-tertiary" />
@@ -303,6 +332,13 @@ export function Settings() {
 
         <SiteFooter />
       </div>
+
+      <MoveStorageModal
+        open={moveStorageTarget !== null}
+        targetPath={moveStorageTarget}
+        onCancel={() => setMoveStorageTarget(null)}
+        onConfirm={handleConfirmMoveStorage}
+      />
     </div>
   );
 }
