@@ -1,14 +1,14 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Pencil, Trash2 } from "lucide-react";
+import { Info, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Breadcrumb, type BreadcrumbEntry } from "@/components/Breadcrumb";
 import { Button } from "@/components/Button";
 import { DeleteModal } from "@/components/DeleteModal";
-import { ExpandableDescription } from "@/components/ExpandableDescription";
 import { FileList } from "@/components/FileList";
 import { NewFolderModal } from "@/components/NewFolderModal";
+import { ProjectDescriptionModal } from "@/components/ProjectDescriptionModal";
 import { ProjectModal } from "@/components/ProjectModal";
 import { RenameModal } from "@/components/RenameModal";
 import { RestoreModal } from "@/components/RestoreModal";
@@ -127,6 +127,7 @@ export function ProjectView({
   const [deleteFolderTarget, setDeleteFolderTarget] = useState<Folder | null>(null);
   const [editProjectOpen, setEditProjectOpen] = useState(false);
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
+  const [projectDescriptionOpen, setProjectDescriptionOpen] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
@@ -236,7 +237,8 @@ export function ProjectView({
     renameFolderTarget !== null ||
     deleteFolderTarget !== null ||
     editProjectOpen ||
-    deleteProjectOpen;
+    deleteProjectOpen ||
+    projectDescriptionOpen;
 
   useEffect(() => {
     const unlisten = getCurrentWebview().onDragDropEvent((event) => {
@@ -570,23 +572,21 @@ export function ProjectView({
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden">
       <div className="drag-region flex shrink-0 items-start justify-between px-6 pb-2 pt-10">
-        <div className="min-w-0">
-          <h1 className="truncate text-[20px] font-semibold text-label-primary">{project.name}</h1>
-          {/* Reserved at a fixed height (2 lines' worth, plus the "Show more"
-              toggle's own line for a description long enough to truncate)
-              regardless of whether this project has a description, so the
-              toolbar below - search, filters, upload - always sits at the
-              same height switching between projects, truncated or not. */}
-          <div className="mt-1 max-w-xl min-h-[60px]">
-            {project.description && (
-              <ExpandableDescription
-                text={project.description}
-                textClassName="text-[12.5px] leading-relaxed text-label-secondary"
-                collapsedLines={2}
-                expandedMaxHeight={160}
-              />
-            )}
-          </div>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h1 className="min-w-0 truncate text-[20px] font-semibold text-label-primary">{project.name}</h1>
+          {/* The description lives entirely in this on-demand popup now, not inline
+              under the title - so the toolbar below (search, filters, upload)
+              always sits at the same height, whether or not a project has one. */}
+          {project.description && (
+            <button
+              type="button"
+              title={t("project.viewDescription")}
+              onClick={() => setProjectDescriptionOpen(true)}
+              className="no-drag shrink-0 rounded-full p-1 text-label-tertiary transition-colors hover:bg-black/[0.06] hover:text-label-primary dark:hover:bg-white/[0.1]"
+            >
+              <Info size={15} />
+            </button>
+          )}
         </div>
         <div className="no-drag flex shrink-0 gap-1.5 pt-1">
           <Button variant="ghost" size="sm" onClick={() => setEditProjectOpen(true)}>
@@ -765,6 +765,12 @@ export function ProjectView({
         project={project}
         onCancel={() => setEditProjectOpen(false)}
         onConfirm={handleSaveProject}
+      />
+
+      <ProjectDescriptionModal
+        open={projectDescriptionOpen}
+        project={project}
+        onClose={() => setProjectDescriptionOpen(false)}
       />
 
       <DeleteModal
