@@ -720,13 +720,18 @@ export function ProjectView({
           return uploadNewVersion(uploadTarget.file.id, uploadTarget.sourcePath, description, operationId);
         }}
         onSuccess={async (entry) => {
+          const wasNewFile = uploadTarget?.mode === "new-file";
           setUploadTarget(null);
           await refreshFiles();
           if (historyFileId === entry.id) await refreshHistory();
-          showToast({
-            title: t("toast.fileUploaded"),
-            description: t("toast.versionCreated", { version: entry.currentVersion?.versionNumber ?? "" }),
-          });
+          showToast(
+            wasNewFile
+              ? { title: t("toast.fileUploaded") }
+              : {
+                  title: t("toast.fileUploaded"),
+                  description: t("toast.versionCreated", { version: entry.currentVersion?.versionNumber ?? "" }),
+                },
+          );
         }}
         onCancel={() => setUploadTarget(null)}
       />

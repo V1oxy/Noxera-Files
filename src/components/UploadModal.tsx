@@ -111,10 +111,12 @@ export function UploadModal({
               <p className="mt-0.5 truncate text-[13px] text-label-primary">{fileLabel}</p>
             </div>
           )}
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">{t("upload.version")}</p>
-            <p className="mt-0.5 text-[13px] text-label-primary">{versionLabel}</p>
-          </div>
+          {!isNewFile && (
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">{t("upload.version")}</p>
+              <p className="mt-0.5 text-[13px] text-label-primary">{versionLabel}</p>
+            </div>
+          )}
           <div>
             <label className="text-[11px] font-medium uppercase tracking-wide text-label-tertiary">
               {isNewFile ? t("upload.comment") : t("upload.whatChanged")}
