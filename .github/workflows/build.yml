@@ -8,6 +8,16 @@ on:
       - "v*"
   workflow_dispatch:
 
+# tauri-action creates/updates the GitHub Release for a tagged build (and
+# uploads latest.json for the updater) - that needs contents:write on the
+# run's GITHUB_TOKEN. Without this, this repo's default token permissions
+# are read-only, so every tag build reaches "Couldn't find release with tag
+# ... Creating one" and then fails with "Resource not accessible by
+# integration" right at the finish line, after already having spent the
+# time building every platform's artifacts for nothing.
+permissions:
+  contents: write
+
 jobs:
   # Fast path: every push to main builds only the Windows portable exe, so a
   # fresh downloadable build is ready a few minutes after each change.
