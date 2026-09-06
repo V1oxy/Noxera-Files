@@ -10,9 +10,10 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { arrayMove, rectSortingStrategy, SortableContext } from "@dnd-kit/sortable";
-import { ChevronDown, ChevronRight, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { CollapseChevron, Collapsible } from "@/components/Collapsible";
 import { DeleteModal } from "@/components/DeleteModal";
 import { LinkCard, LinkCardOverlay } from "@/components/links/LinkCard";
 import { NameModal } from "@/components/links/NameModal";
@@ -353,7 +354,7 @@ function GroupSection({
           disabled={!canCollapse}
           className="shrink-0 rounded-apple-sm p-0.5 text-label-tertiary transition-colors hover:bg-black/[0.06] hover:text-label-primary disabled:pointer-events-none disabled:opacity-0 dark:hover:bg-white/[0.1]"
         >
-          {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+          <CollapseChevron collapsed={collapsed} size={12} />
         </button>
         <h3 className="min-w-0 truncate text-[11.5px] font-semibold uppercase tracking-wide text-label-tertiary">{title}</h3>
         <span className="shrink-0 rounded-full bg-black/[0.06] px-1.5 py-px text-[10px] font-medium tabular-nums text-label-tertiary dark:bg-white/[0.08]">
@@ -388,7 +389,7 @@ function GroupSection({
           </button>
         )}
       </div>
-      <div className={`overflow-hidden transition-[max-height,opacity] duration-200 ease-out ${collapsed ? "max-h-0 opacity-0" : "max-h-[3000px] opacity-100"}`}>
+      <Collapsible collapsed={collapsed}>
         <div
           ref={setNodeRef}
           className={`grid min-h-[56px] grid-cols-1 gap-2 rounded-apple-lg border p-2 transition-colors duration-150 sm:grid-cols-2 lg:grid-cols-3 ${
@@ -402,7 +403,7 @@ function GroupSection({
           </SortableContext>
           {links.length === 0 && <p className="col-span-full px-2 py-3 text-center text-[11.5px] text-label-tertiary">{t("links.emptyGroup")}</p>}
         </div>
-      </div>
+      </Collapsible>
     </div>
   );
 }

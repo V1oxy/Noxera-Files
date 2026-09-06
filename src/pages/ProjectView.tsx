@@ -14,7 +14,6 @@ import { RenameModal } from "@/components/RenameModal";
 import { RestoreModal } from "@/components/RestoreModal";
 import type { SearchScope } from "@/components/SearchScopeToggle";
 import type { NewTaskInitialFile } from "@/components/tracker/NewTaskModal";
-import { ProjectTasksTab } from "@/components/tracker/ProjectTasksTab";
 import { UploadModal } from "@/components/UploadModal";
 import { VersionHistory } from "@/components/VersionHistory";
 import { VersionInfoModal } from "@/components/VersionInfoModal";
@@ -101,7 +100,6 @@ export function ProjectView({
   const { t, translateError } = useLanguage();
   const runFileReorder = useSerialTask();
 
-  const [activeTab, setActiveTab] = useState<"files" | "tasks">("files");
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbEntry[]>([{ id: null, name: project.name }]);
 
@@ -635,24 +633,6 @@ export function ProjectView({
 
       <Breadcrumb entries={breadcrumb} onNavigate={navigateBreadcrumb} />
 
-      <div className="no-drag flex shrink-0 gap-1 px-6 pt-1">
-        <button
-          onClick={() => setActiveTab("files")}
-          className={`px-2.5 py-1.5 text-[12.5px] font-medium ${activeTab === "files" ? "border-b-2 border-accent text-accent" : "text-label-secondary"}`}
-        >
-          {t("project.tabFiles")}
-        </button>
-        <button
-          onClick={() => setActiveTab("tasks")}
-          className={`px-2.5 py-1.5 text-[12.5px] font-medium ${activeTab === "tasks" ? "border-b-2 border-accent text-accent" : "text-label-secondary"}`}
-        >
-          {t("project.tabTasks")}
-        </button>
-      </div>
-
-      {activeTab === "tasks" ? (
-        <ProjectTasksTab projectId={project.id} onOpenTask={onOpenTask} />
-      ) : (
       <FileList
         folders={search ? [] : folders}
         files={files}
@@ -692,7 +672,6 @@ export function ProjectView({
           inAppDragActiveRef.current = active;
         }}
       />
-      )}
 
       <VersionHistory
         open={historyFileId !== null}

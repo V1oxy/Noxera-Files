@@ -246,8 +246,6 @@ export const translations: Record<Lang, Record<string, string>> = {
 
     // Tracker
     "sidebar.tracker": "Tracker",
-    "project.tabFiles": "Files",
-    "project.tabTasks": "Tasks",
 
     "tracker.allTasks": "All Tasks",
     "tracker.newBoard": "New Board",
@@ -689,8 +687,6 @@ export const translations: Record<Lang, Record<string, string>> = {
 
     // Трекер
     "sidebar.tracker": "Трекер",
-    "project.tabFiles": "Файлы",
-    "project.tabTasks": "Задачи",
 
     "tracker.allTasks": "Все задачи",
     "tracker.newBoard": "Новая доска",

@@ -7,9 +7,10 @@ import {
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ChevronDown, ChevronRight, FolderClosed, Kanban, Layers, Link2, ListChecks, Plus, Settings as SettingsIcon } from "lucide-react";
+import { FolderClosed, Kanban, Layers, Link2, ListChecks, Plus, Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
+import { CollapseChevron, Collapsible } from "@/components/Collapsible";
 import { SortableRow } from "@/components/SortableRow";
 import { LINKS_ALL_TAB } from "@/constants/links";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -77,11 +78,7 @@ function SidebarSection({
         onClick={onToggle}
         className="mb-1 flex w-full items-center gap-1 rounded-apple-sm px-2 py-1 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
       >
-        {collapsed ? (
-          <ChevronRight size={11} className="shrink-0 text-label-tertiary" />
-        ) : (
-          <ChevronDown size={11} className="shrink-0 text-label-tertiary" />
-        )}
+        <CollapseChevron collapsed={collapsed} size={11} className="text-label-tertiary" />
         <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-label-tertiary">
           {label}
         </span>
@@ -91,13 +88,7 @@ function SidebarSection({
           </span>
         )}
       </button>
-      <div
-        className={`overflow-hidden transition-[max-height,opacity] duration-200 ease-out ${
-          collapsed ? "max-h-0 opacity-0" : "max-h-[3000px] opacity-100"
-        }`}
-      >
-        {children}
-      </div>
+      <Collapsible collapsed={collapsed}>{children}</Collapsible>
     </div>
   );
 }
