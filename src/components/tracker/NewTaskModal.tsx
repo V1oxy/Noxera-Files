@@ -1,4 +1,4 @@
-import { FileText, RefreshCw, X } from "lucide-react";
+import { FileText, HardDrive, RefreshCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
@@ -6,8 +6,12 @@ import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
 import { FilePickerModal, type FilePickerResult } from "@/components/tracker/FilePickerModal";
 import { useTrackerBoards, useTrackerPriorities, useTrackerStatuses } from "@/hooks/useTracker";
 import { useLanguage } from "@/hooks/useLanguage";
-import { ApiError, createTrackerTask } from "@/services/api";
+import { addTrackerTaskLocalFile, ApiError, createTrackerTask, pickFilesToUpload } from "@/services/api";
 import type { TrackerTaskDetail } from "@/types";
+
+function baseName(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
 
 export type NewTaskInitialFile = FilePickerResult;
 
@@ -36,6 +40,7 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
   const [receivedAt, setReceivedAt] = useState(todayDate());
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<FilePickerResult | null>(initialFile ?? null);
+  const [localFilePaths, setLocalFilePaths] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +54,7 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
     setReceivedAt(todayDate());
     setDescription("");
     setFile(initialFile ?? null);
+    setLocalFilePaths([]);
     setError(null);
     setBusy(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -70,6 +76,15 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priorities]);
 
+  async function handleAddLocalFiles() {
+    const paths = await pickFilesToUpload(true);
+    if (paths.length > 0) setLocalFilePaths((prev) => [...prev, ...paths]);
+  }
+
+  function handleRemoveLocalFile(path: string) {
+    setLocalFilePaths((prev) => prev.filter((p) => p !== path));
+  }
+
   async function handleConfirm() {
     if (!title.trim()) {
       setError(t("tracker.titleRequired"));
@@ -82,7 +97,7 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
     setBusy(true);
     setError(null);
     try {
-      const detail = await createTrackerTask({
+      let detail = await createTrackerTask({
         boardId,
         statusId,
         title: title.trim(),
@@ -92,6 +107,9 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
         receivedAt,
         files: file ? [{ fileId: file.file.id, versionId: file.alwaysLatest ? undefined : file.versionId, alwaysLatest: file.alwaysLatest }] : undefined,
       });
+      for (const path of localFilePaths) {
+        detail = await addTrackerTaskLocalFile(detail.id, path);
+      }
       onCreated(detail);
     } catch (e) {
       setError(e instanceof ApiError ? translateError(e.message) : t("tracker.createError"));
@@ -164,6 +182,28 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
                 {t("tracker.addFileFromStorage")}
               </button>
             )}
+
+            {localFilePaths.length > 0 && (
+              <div className="space-y-1.5">
+                {localFilePaths.map((path) => (
+                  <div key={path} className="flex items-center gap-2 rounded-apple border border-surface-border bg-surface-card px-2.5 py-2">
+                    <HardDrive size={14} className="shrink-0 text-label-secondary" />
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-label-primary">{baseName(path)}</span>
+                    <button onClick={() => handleRemoveLocalFile(path)} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:bg-black/[0.06] dark:hover:bg-white/[0.1]">
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={handleAddLocalFiles}
+              className="flex w-full items-center justify-center gap-2 rounded-apple-sm border border-dashed border-surface-border py-2 text-[12.5px] text-label-secondary hover:border-accent/40 hover:text-accent"
+            >
+              <HardDrive size={14} />
+              {t("tracker.addFileFromComputer")}
+            </button>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
