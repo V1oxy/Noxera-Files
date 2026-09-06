@@ -3,35 +3,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 // ---- Enums ------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Priority {
-    Low,
-    Normal,
-    High,
-    Critical,
-}
-
-impl Priority {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Priority::Low => "low",
-            Priority::Normal => "normal",
-            Priority::High => "high",
-            Priority::Critical => "critical",
-        }
-    }
-
-    pub fn parse(s: &str) -> Priority {
-        match s {
-            "low" => Priority::Low,
-            "high" => Priority::High,
-            "critical" => Priority::Critical,
-            _ => Priority::Normal,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum FieldType {
     Text,
@@ -123,6 +94,22 @@ pub struct Label {
     pub created_at: String,
 }
 
+/// A priority level - per board, edited from board settings, exactly like
+/// `Status`. A task's `priority` column stores one of these rows' id.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Priority {
+    pub id: String,
+    pub board_id: String,
+    pub name: String,
+    pub color: String,
+    pub position: i64,
+    pub is_default: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    pub task_count: i64,
+}
+
 // ---- Tasks --------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,6 +138,19 @@ pub struct TaskFile {
     pub file_size: Option<i64>,
     pub mime_type: Option<String>,
     pub unseen_update: bool,
+    pub added_at: String,
+}
+
+/// A file attached "from the computer" rather than picked from the app's own
+/// storage - its bytes exist only for this task and are never versioned.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskLocalFile {
+    pub id: String,
+    pub task_id: String,
+    pub file_name: String,
+    pub file_size: i64,
+    pub mime_type: Option<String>,
     pub added_at: String,
 }
 
@@ -184,7 +184,10 @@ pub struct Task {
     pub project_name: Option<String>,
     pub customer: Option<String>,
     pub assignee: Option<String>,
-    pub priority: Priority,
+    pub priority_id: String,
+    pub priority_name: String,
+    pub priority_color: String,
+    pub priority_position: i64,
     pub pinned: bool,
     pub archived: bool,
     pub position: i64,
@@ -205,6 +208,7 @@ pub struct TaskDetail {
     pub task: Task,
     pub field_values: Vec<FieldValue>,
     pub files: Vec<TaskFile>,
+    pub local_files: Vec<TaskLocalFile>,
     pub events: Vec<TaskEvent>,
 }
 
@@ -239,6 +243,13 @@ pub struct LabelInput {
     pub color: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PriorityInput {
+    pub name: String,
+    pub color: String,
+}
+
 /// Serde's standard "double option" trick: a field that's absent from the
 /// JSON payload means "leave unchanged" (`None`), while a field present but
 /// set to `null` means "clear it" (`Some(None)`) - the only way an
@@ -263,7 +274,7 @@ pub struct TaskInput {
     pub project_id: Option<String>,
     pub customer: Option<String>,
     pub assignee: Option<String>,
-    pub priority: Option<Priority>,
+    pub priority_id: Option<String>,
     pub received_at: Option<String>,
     pub due_at: Option<String>,
     pub label_ids: Option<Vec<String>>,
@@ -306,7 +317,7 @@ pub struct TaskFilter {
     pub status_id: Option<String>,
     pub customer: Option<String>,
     pub assignee: Option<String>,
-    pub priority: Option<Priority>,
+    pub priority_id: Option<String>,
     pub label_id: Option<String>,
     pub has_files: Option<bool>,
     pub overdue_only: Option<bool>,
@@ -331,7 +342,7 @@ pub struct TaskUpdateInput {
     pub customer: Option<Option<String>>,
     #[serde(default, deserialize_with = "double_option")]
     pub assignee: Option<Option<String>>,
-    pub priority: Option<Priority>,
+    pub priority_id: Option<String>,
     pub received_at: Option<String>,
     #[serde(default, deserialize_with = "double_option")]
     pub due_at: Option<Option<String>>,
@@ -351,14 +362,7 @@ pub struct DuplicateOptions {
     pub due_at: bool,
 }
 
-// ---- Tracker-wide settings (spec section 32: Priorities / Display) -----------
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PriorityConfig {
-    pub label: String,
-    pub color: String,
-}
+// ---- Tracker-wide settings (spec section 32: Display) -------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -387,17 +391,11 @@ impl Default for CardDisplayConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackerSettings {
-    pub priorities: std::collections::HashMap<String, PriorityConfig>,
     pub card_display: CardDisplayConfig,
 }
 
 impl Default for TrackerSettings {
     fn default() -> Self {
-        let mut priorities = std::collections::HashMap::new();
-        priorities.insert("low".to_string(), PriorityConfig { label: "Low".into(), color: "#8E8E93".into() });
-        priorities.insert("normal".to_string(), PriorityConfig { label: "Normal".into(), color: "#0A84FF".into() });
-        priorities.insert("high".to_string(), PriorityConfig { label: "High".into(), color: "#FF9F0A".into() });
-        priorities.insert("critical".to_string(), PriorityConfig { label: "Critical".into(), color: "#FF453A".into() });
-        Self { priorities, card_display: CardDisplayConfig::default() }
+        Self { card_display: CardDisplayConfig::default() }
     }
 }

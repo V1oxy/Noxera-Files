@@ -86,6 +86,29 @@ pub fn detach(conn: &Connection, id: &str) -> rusqlite::Result<usize> {
     conn.execute("DELETE FROM tracker_task_files WHERE id = ?1", params![id])
 }
 
+/// Flips an attachment between "always latest" and "pinned to a fixed
+/// version". `last_seen_version_id` should be the file's current version
+/// when switching to always-latest (so the next sync doesn't mistake the
+/// version already showing for a brand-new update), and `None` when pinning.
+pub fn set_always_latest(
+    conn: &Connection,
+    id: &str,
+    always_latest: bool,
+    last_seen_version_id: Option<&str>,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE tracker_task_files SET always_latest = ?2, last_seen_version_id = ?3, unseen_update = 0 WHERE id = ?1",
+        params![id, always_latest, last_seen_version_id],
+    )
+}
+
+pub fn set_pinned_version(conn: &Connection, id: &str, version_id: &str) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE tracker_task_files SET version_id = ?2 WHERE id = ?1",
+        params![id, version_id],
+    )
+}
+
 pub fn clear_unseen(conn: &Connection, task_id: &str) -> rusqlite::Result<usize> {
     conn.execute(
         "UPDATE tracker_task_files SET unseen_update = 0 WHERE task_id = ?1 AND unseen_update = 1",

@@ -2,9 +2,11 @@ use tauri::State;
 
 use crate::database::{
     tracker_boards as boards_db, tracker_fields as fields_db, tracker_labels as labels_db,
-    tracker_statuses as statuses_db,
+    tracker_priorities as priorities_db, tracker_statuses as statuses_db,
 };
-use crate::models::{Board, BoardInput, Field, FieldInput, Label, LabelInput, Status, StatusInput};
+use crate::models::{
+    Board, BoardInput, Field, FieldInput, Label, LabelInput, Priority, PriorityInput, Status, StatusInput,
+};
 use crate::state::AppState;
 use crate::utils::id::new_id;
 use crate::utils::{now_iso, AppError, AppResult};
@@ -27,6 +29,15 @@ const STARTER_STATUSES: [(&str, &str, bool); 4] = [
     ("Done", "#30D158", true),
 ];
 
+/// Mirrors `database::schema::DEFAULT_PRIORITIES` - a new board created from
+/// the UI gets the same starter set a migrated/fresh-install board gets.
+const STARTER_PRIORITIES: [(&str, &str, bool); 4] = [
+    ("Low", "#8E8E93", false),
+    ("Normal", "#0A84FF", true),
+    ("High", "#FF9F0A", false),
+    ("Critical", "#FF453A", false),
+];
+
 #[tauri::command]
 pub fn create_tracker_board(state: State<AppState>, input: BoardInput) -> AppResult<Board> {
     let name = input.name.trim().to_string();
@@ -43,6 +54,9 @@ pub fn create_tracker_board(state: State<AppState>, input: BoardInput) -> AppRes
             if *is_done {
                 statuses_db::set_is_done(conn, &sid, true, &now)?;
             }
+        }
+        for (pname, color, make_default) in STARTER_PRIORITIES.iter() {
+            priorities_db::create(conn, &new_id(), &id, pname, color, *make_default, &now)?;
         }
         crate::utils::logger::info(storage, &format!("Tracker board created: \"{name}\" ({id})"));
         boards_db::get(conn, &id)?.ok_or_else(|| AppError::user("Failed to create board."))
@@ -202,6 +216,102 @@ pub fn delete_tracker_status(
             }
         }
         crate::utils::logger::info(storage, &format!("Tracker status deleted: {status_id}"));
+        Ok(())
+    })
+}
+
+// ---- Priorities ---------------------------------------------------------------
+
+#[tauri::command]
+pub fn get_tracker_priorities(state: State<AppState>, board_id: String) -> AppResult<Vec<Priority>> {
+    with_ready(&state, |conn, _| Ok(priorities_db::list_for_board(conn, &board_id)?))
+}
+
+#[tauri::command]
+pub fn create_tracker_priority(state: State<AppState>, board_id: String, input: PriorityInput) -> AppResult<Priority> {
+    let name = input.name.trim().to_string();
+    if name.is_empty() {
+        return Err(AppError::user("Priority name cannot be empty."));
+    }
+    with_ready(&state, |conn, _| {
+        if !boards_db::exists(conn, &board_id)? {
+            return Err(AppError::user("This board no longer exists."));
+        }
+        let id = new_id();
+        priorities_db::create(conn, &id, &board_id, &name, &input.color, false, &now_iso())?;
+        priorities_db::get(conn, &id)?.ok_or_else(|| AppError::user("Failed to create priority."))
+    })
+}
+
+#[tauri::command]
+pub fn update_tracker_priority(state: State<AppState>, priority_id: String, input: PriorityInput) -> AppResult<Priority> {
+    let name = input.name.trim().to_string();
+    if name.is_empty() {
+        return Err(AppError::user("Priority name cannot be empty."));
+    }
+    with_ready(&state, |conn, _| {
+        let updated = priorities_db::update(conn, &priority_id, &name, &input.color, &now_iso())?;
+        if updated == 0 {
+            return Err(AppError::user("This priority no longer exists."));
+        }
+        priorities_db::get(conn, &priority_id)?.ok_or_else(|| AppError::user("Failed to update priority."))
+    })
+}
+
+#[tauri::command]
+pub fn set_tracker_priority_default(state: State<AppState>, priority_id: String) -> AppResult<Vec<Priority>> {
+    with_ready(&state, |conn, _| {
+        let priority = priorities_db::get(conn, &priority_id)?
+            .ok_or_else(|| AppError::user("This priority no longer exists."))?;
+        priorities_db::set_default(conn, &priority_id, &priority.board_id, &now_iso())?;
+        Ok(priorities_db::list_for_board(conn, &priority.board_id)?)
+    })
+}
+
+#[tauri::command]
+pub fn reorder_tracker_priorities(state: State<AppState>, ordered_ids: Vec<String>) -> AppResult<()> {
+    with_ready(&state, |conn, _| {
+        for (i, id) in ordered_ids.iter().enumerate() {
+            priorities_db::set_position(conn, id, i as i64)?;
+        }
+        Ok(())
+    })
+}
+
+/// Deleting a priority never deletes its tasks (mirrors status deletion). If
+/// any remain, the frontend must supply `reassign_to_priority_id`.
+#[tauri::command]
+pub fn delete_tracker_priority(
+    state: State<AppState>,
+    priority_id: String,
+    reassign_to_priority_id: Option<String>,
+) -> AppResult<()> {
+    with_ready(&state, |conn, storage| {
+        let priority = priorities_db::get(conn, &priority_id)?
+            .ok_or_else(|| AppError::user("This priority no longer exists."))?;
+        if priorities_db::count_for_board(conn, &priority.board_id)? <= 1 {
+            return Err(AppError::user("A board must keep at least one priority."));
+        }
+        let task_count = priorities_db::count_tasks(conn, &priority_id)?;
+        if task_count > 0 {
+            let target = reassign_to_priority_id
+                .ok_or_else(|| AppError::user("Choose a priority to move its tasks to first."))?;
+            if target == priority_id {
+                return Err(AppError::user("Choose a different priority to move its tasks to."));
+            }
+            if priorities_db::get(conn, &target)?.is_none() {
+                return Err(AppError::user("The target priority no longer exists."));
+            }
+            priorities_db::reassign_tasks(conn, &priority_id, &target, &now_iso())?;
+        }
+        let was_default = priority.is_default;
+        priorities_db::delete(conn, &priority_id)?;
+        if was_default {
+            if let Some(first) = priorities_db::list_for_board(conn, &priority.board_id)?.into_iter().next() {
+                priorities_db::set_default(conn, &first.id, &priority.board_id, &now_iso())?;
+            }
+        }
+        crate::utils::logger::info(storage, &format!("Tracker priority deleted: {priority_id}"));
         Ok(())
     })
 }

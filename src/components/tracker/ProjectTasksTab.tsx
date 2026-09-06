@@ -1,7 +1,7 @@
 import { Paperclip } from "lucide-react";
 
 import { EmptyState } from "@/components/EmptyState";
-import { DueBadge, PriorityBadge, StatusPill, UpdateIndicator } from "@/components/tracker/shared";
+import { PriorityBadge, StatusPill, UpdateIndicator } from "@/components/tracker/shared";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useProjectTrackerTasks } from "@/hooks/useTracker";
 
@@ -37,8 +37,7 @@ export function ProjectTasksTab({ projectId, onOpenTask }: ProjectTasksTabProps)
                 </span>
               )}
               {task.hasUnseenUpdate && <UpdateIndicator />}
-              <DueBadge task={task} />
-              <PriorityBadge priority={task.priority} />
+              <PriorityBadge name={task.priorityName} color={task.priorityColor} />
               <StatusPill name={task.statusName} color={task.statusColor} />
             </div>
           </button>

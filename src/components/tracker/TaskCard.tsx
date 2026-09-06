@@ -2,14 +2,13 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FolderClosed } from "lucide-react";
 
-import { FileCountBadge, PinIndicator, PriorityBadge, UpdateIndicator, DueBadge } from "@/components/tracker/shared";
-import type { CardDisplayConfig, PriorityConfig, TrackerTask } from "@/types";
+import { FileCountBadge, PinIndicator, PriorityBadge, UpdateIndicator } from "@/components/tracker/shared";
+import type { CardDisplayConfig, TrackerTask } from "@/types";
 
 interface TaskCardProps {
   task: TrackerTask;
   compact: boolean;
   display?: CardDisplayConfig;
-  priorities?: Record<string, PriorityConfig>;
   onOpen: (task: TrackerTask) => void;
 }
 
@@ -46,11 +45,10 @@ function TaskCardBody({ task, compact, display }: { task: TrackerTask; compact: 
         <p className="mt-1.5 line-clamp-2 text-[11.5px] leading-relaxed text-label-secondary">{task.description}</p>
       )}
 
-      {(display.showPriority || (display.showUpdateIndicator && task.hasUnseenUpdate) || display.showDueDate) && (
+      {(display.showPriority || (display.showUpdateIndicator && task.hasUnseenUpdate)) && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {display.showPriority && <PriorityBadge priority={task.priority} />}
+          {display.showPriority && <PriorityBadge name={task.priorityName} color={task.priorityColor} />}
           {display.showUpdateIndicator && task.hasUnseenUpdate && <UpdateIndicator />}
-          {display.showDueDate && <DueBadge task={task} />}
         </div>
       )}
 

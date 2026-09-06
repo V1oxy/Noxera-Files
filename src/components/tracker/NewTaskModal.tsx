@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/Button";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
 import { FilePickerModal, type FilePickerResult } from "@/components/tracker/FilePickerModal";
-import { useTrackerBoards, useTrackerStatuses } from "@/hooks/useTracker";
+import { useTrackerBoards, useTrackerPriorities, useTrackerStatuses } from "@/hooks/useTracker";
 import { useLanguage } from "@/hooks/useLanguage";
 import { ApiError, createTrackerTask } from "@/services/api";
-import type { Priority, TrackerTaskDetail } from "@/types";
+import type { TrackerTaskDetail } from "@/types";
 
 export type NewTaskInitialFile = FilePickerResult;
 
@@ -29,12 +29,11 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
   const { boards } = useTrackerBoards();
   const [boardId, setBoardId] = useState<string>("");
   const { statuses } = useTrackerStatuses(boardId || null);
+  const { priorities } = useTrackerPriorities(boardId || null);
   const [statusId, setStatusId] = useState<string>("");
   const [title, setTitle] = useState("");
-  const [customer, setCustomer] = useState("");
-  const [priority, setPriority] = useState<Priority>("normal");
+  const [priorityId, setPriorityId] = useState<string>("");
   const [receivedAt, setReceivedAt] = useState(todayDate());
-  const [dueAt, setDueAt] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<FilePickerResult | null>(initialFile ?? null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -46,10 +45,8 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
     setBoardId(defaultBoardId ?? boards[0]?.id ?? "");
     setStatusId(defaultStatusId ?? "");
     setTitle("");
-    setCustomer("");
-    setPriority("normal");
+    setPriorityId("");
     setReceivedAt(todayDate());
-    setDueAt("");
     setDescription("");
     setFile(initialFile ?? null);
     setError(null);
@@ -64,6 +61,14 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statuses]);
+
+  useEffect(() => {
+    if (!priorityId && priorities.length > 0) {
+      const def = priorities.find((p) => p.isDefault) ?? priorities[0];
+      setPriorityId(def.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priorities]);
 
   async function handleConfirm() {
     if (!title.trim()) {
@@ -83,10 +88,8 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
         title: title.trim(),
         description: description.trim() || undefined,
         projectId: file?.project.id,
-        customer: customer.trim() || undefined,
-        priority,
+        priorityId: priorityId || undefined,
         receivedAt,
-        dueAt: dueAt || undefined,
         files: file ? [{ fileId: file.file.id, versionId: file.alwaysLatest ? undefined : file.versionId, alwaysLatest: file.alwaysLatest }] : undefined,
       });
       onCreated(detail);
@@ -115,7 +118,7 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>{t("tracker.board")}</label>
-                <select value={boardId} onChange={(e) => { setBoardId(e.target.value); setStatusId(""); }} disabled={busy} className={`mt-1 ${inputClass}`}>
+                <select value={boardId} onChange={(e) => { setBoardId(e.target.value); setStatusId(""); setPriorityId(""); }} disabled={busy} className={`mt-1 ${inputClass}`}>
                   {boards.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
@@ -162,28 +165,20 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
               </button>
             )}
 
-            <div>
-              <label className={labelClass}>{t("tracker.fieldCustomer")}</label>
-              <input value={customer} onChange={(e) => setCustomer(e.target.value)} disabled={busy} className={`mt-1 ${inputClass}`} />
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>{t("tracker.fieldPriority")}</label>
-                <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)} disabled={busy} className={`mt-1 ${inputClass}`}>
-                  <option value="low">{t("tracker.priority.low")}</option>
-                  <option value="normal">{t("tracker.priority.normal")}</option>
-                  <option value="high">{t("tracker.priority.high")}</option>
-                  <option value="critical">{t("tracker.priority.critical")}</option>
+                <select value={priorityId} onChange={(e) => setPriorityId(e.target.value)} disabled={busy} className={`mt-1 ${inputClass}`}>
+                  {priorities.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label className={labelClass}>{t("tracker.fieldReceivedAt")}</label>
                 <input type="date" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} disabled={busy} className={`mt-1 ${inputClass}`} />
-              </div>
-              <div>
-                <label className={labelClass}>{t("tracker.fieldDueAt")}</label>
-                <input type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} disabled={busy} className={`mt-1 ${inputClass}`} />
               </div>
             </div>
 

@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileText,
   FolderClosed,
+  HardDrive,
   MessageSquare,
   Pin,
   PinOff,
@@ -23,22 +24,27 @@ import { FilePickerModal, type FilePickerResult } from "@/components/tracker/Fil
 import { LabelChip, formatEventTime } from "@/components/tracker/shared";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/useToast";
-import { useTrackerFields, useTrackerLabels, useTrackerStatuses, useTrackerTaskDetail } from "@/hooks/useTracker";
+import { useTrackerFields, useTrackerLabels, useTrackerPriorities, useTrackerStatuses, useTrackerTaskDetail } from "@/hooks/useTracker";
 import {
   ApiError,
-  attachTrackerTaskFile,
   addTrackerTaskComment,
+  addTrackerTaskLocalFile,
+  attachTrackerTaskFile,
   deleteTrackerTask,
   detachTrackerTaskFile,
-  moveTrackerTask,
+  openTrackerTaskLocalFile,
   openVersion,
+  pickFilesToUpload,
+  removeTrackerTaskLocalFile,
   setTrackerTaskArchived,
   setTrackerTaskFieldValues,
+  setTrackerTaskFilePin,
   setTrackerTaskLabels,
   setTrackerTaskPinned,
   updateTrackerTask,
+  moveTrackerTask,
 } from "@/services/api";
-import type { Priority, TrackerTaskEvent, TrackerTaskFile, TrackerTaskUpdateInput } from "@/types";
+import type { TrackerTaskEvent, TrackerTaskFile, TrackerTaskLocalFile, TrackerTaskUpdateInput } from "@/types";
 import { formatBytes } from "@/utils/format";
 
 interface TaskDetailPanelProps {
@@ -90,6 +96,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   const { statuses } = useTrackerStatuses(detail?.boardId ?? null);
   const { fields } = useTrackerFields(detail?.boardId ?? null);
   const { labels } = useTrackerLabels(detail?.boardId ?? null);
+  const { priorities } = useTrackerPriorities(detail?.boardId ?? null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -170,6 +177,40 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
     }
   }
 
+  async function handleToggleFilePin(taskFile: TrackerTaskFile) {
+    try {
+      await setTrackerTaskFilePin(taskFile.id, !taskFile.alwaysLatest);
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  async function handleAddLocalFiles() {
+    const paths = await pickFilesToUpload(true);
+    if (paths.length === 0) return;
+    for (const path of paths) {
+      await addTrackerTaskLocalFile(taskId, path);
+    }
+    await refresh();
+    onChanged();
+  }
+
+  async function handleRemoveLocalFile(localFile: TrackerTaskLocalFile) {
+    await removeTrackerTaskLocalFile(localFile.id);
+    await refresh();
+    onChanged();
+  }
+
+  async function handleOpenLocalFile(localFile: TrackerTaskLocalFile) {
+    try {
+      await openTrackerTaskLocalFile(localFile.id);
+    } catch (e) {
+      showToast({ title: t("toast.openFileError"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
   async function handleAddComment() {
     if (!comment.trim()) return;
     await addTrackerTaskComment(taskId, comment.trim());
@@ -196,13 +237,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   }
 
   const statusOptions = statuses.map((s) => ({ value: s.id, label: s.name }));
-  const priorityOptions: { value: Priority; label: string }[] = [
-    { value: "low", label: t("tracker.priority.low") },
-    { value: "normal", label: t("tracker.priority.normal") },
-    { value: "high", label: t("tracker.priority.high") },
-    { value: "critical", label: t("tracker.priority.critical") },
-  ];
-  const dateColsClass = detail.completedAt ? "grid-cols-3" : "grid-cols-2";
+  const priorityOptions = priorities.map((p) => ({ value: p.id, label: p.name }));
 
   return (
     <>
@@ -219,7 +254,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
               />
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <PillSelect value={detail.statusId} onChange={handleStatusChange} options={statusOptions} />
-                <PillSelect value={detail.priority} onChange={(v) => patch({ priority: v as Priority })} options={priorityOptions} />
+                <PillSelect value={detail.priorityId} onChange={(v) => patch({ priorityId: v })} options={priorityOptions} />
                 {detail.projectName && detail.projectId && (
                   <button
                     onClick={() => onOpenProject(detail.projectId!)}
@@ -262,14 +297,10 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                   />
                 </div>
 
-                <div className={`grid ${dateColsClass} gap-3`}>
+                <div className={`grid ${detail.completedAt ? "grid-cols-2" : "grid-cols-1"} gap-3`}>
                   <div className={fieldGroupClass}>
                     <label className={labelClass}>{t("tracker.fieldReceivedAt")}</label>
                     <input type="date" value={detail.receivedAt.slice(0, 10)} onChange={(e) => patch({ receivedAt: e.target.value })} className={inputClass} />
-                  </div>
-                  <div className={fieldGroupClass}>
-                    <label className={labelClass}>{t("tracker.fieldDueAt")}</label>
-                    <input type="date" value={detail.dueAt?.slice(0, 10) ?? ""} onChange={(e) => patch({ dueAt: e.target.value || null })} className={inputClass} />
                   </div>
                   {detail.completedAt && (
                     <div className={fieldGroupClass}>
@@ -284,16 +315,8 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                   )}
                 </div>
 
+                {fields.length > 0 && (
                 <div className="grid grid-cols-2 gap-3">
-                  <div className={fieldGroupClass}>
-                    <label className={labelClass}>{t("tracker.fieldCustomer")}</label>
-                    <input
-                      defaultValue={detail.customer ?? ""}
-                      key={`customer-${detail.id}`}
-                      onBlur={(e) => e.target.value !== (detail.customer ?? "") && patch({ customer: e.target.value.trim() || null })}
-                      className={inputClass}
-                    />
-                  </div>
                   {fields.map((field) => {
                     const value = fieldValueMap.get(field.id) ?? "";
                     if (field.fieldType === "select") {
@@ -328,6 +351,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                     );
                   })}
                 </div>
+                )}
 
                 {labels.length > 0 && (
                   <div className={fieldGroupClass}>
@@ -379,7 +403,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
             <div className="flex w-80 shrink-0 flex-col border-l border-surface-border bg-black/[0.012] dark:bg-white/[0.015]">
               <div className="flex shrink-0 gap-4 border-b border-surface-border px-4 pt-3">
                 <button onClick={() => setTab("files")} className={`relative pb-2.5 text-[12px] font-medium transition-colors ${tab === "files" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
-                  {t("tracker.tabFiles")} {detail.files.length > 0 && `(${detail.files.length})`}
+                  {t("tracker.tabFiles")} {detail.files.length + detail.localFiles.length > 0 && `(${detail.files.length + detail.localFiles.length})`}
                   {tab === "files" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}
                 </button>
                 <button onClick={() => setTab("history")} className={`relative pb-2.5 text-[12px] font-medium transition-colors ${tab === "history" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
@@ -405,16 +429,21 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                               <p className="mt-0.5 flex items-center gap-1 text-[11px] text-label-secondary">
                                 <span className="font-medium">v{f.versionNumber}</span>
                                 <span className="text-label-tertiary">·</span>
-                                {f.alwaysLatest ? (
-                                  <span className="flex items-center gap-0.5 text-accent">
-                                    <RefreshCw size={9} />
-                                    {t("tracker.versionCurrentBadge")}
-                                  </span>
-                                ) : (
-                                  <span className="text-label-tertiary">{formatBytes(f.fileSize ?? 0)}</span>
-                                )}
+                                <span className="text-label-tertiary">{formatBytes(f.fileSize ?? 0)}</span>
                               </p>
-                              {f.projectName && <p className="mt-0.5 text-[10.5px] text-label-tertiary">{t("tracker.fileProjectLabel", { name: f.projectName })}</p>}
+                              <button
+                                onClick={() => handleToggleFilePin(f)}
+                                title={t(f.alwaysLatest ? "tracker.switchToPinnedVersion" : "tracker.switchToLatestVersion")}
+                                className={`mt-1 flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                                  f.alwaysLatest
+                                    ? "bg-accent/[0.12] text-accent hover:bg-accent/[0.18]"
+                                    : "bg-black/[0.06] text-label-secondary hover:bg-black/[0.1] dark:bg-white/[0.08]"
+                                }`}
+                              >
+                                <RefreshCw size={9} />
+                                {t(f.alwaysLatest ? "tracker.versionCurrentBadge" : "tracker.versionPinnedBadge")}
+                              </button>
+                              {f.projectName && <p className="mt-1 text-[10.5px] text-label-tertiary">{t("tracker.fileProjectLabel", { name: f.projectName })}</p>}
                               {f.unseenUpdate && (
                                 <p className="mt-1 flex items-center gap-1.5 text-[10.5px] font-medium text-accent">
                                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
@@ -436,13 +465,44 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                       )}
                     </div>
                   ))}
-                  <button
-                    onClick={() => setPickerOpen(true)}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-apple-sm border border-dashed border-surface-border py-2 text-[11.5px] text-label-secondary transition-colors hover:border-accent/40 hover:text-accent"
-                  >
-                    <Plus size={13} />
-                    {t("tracker.addFile")}
-                  </button>
+                  {detail.localFiles.map((lf) => (
+                    <div key={lf.id} className="group rounded-apple border border-surface-border bg-surface-card p-2.5 shadow-card">
+                      <div className="flex items-start gap-2">
+                        <HardDrive size={15} className="mt-0.5 shrink-0 text-label-secondary" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[12.5px] font-medium text-label-primary">{lf.fileName}</p>
+                          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-label-secondary">
+                            <span className="text-label-tertiary">{formatBytes(lf.fileSize)}</span>
+                            <span className="text-label-tertiary">·</span>
+                            <span className="text-label-tertiary">{t("tracker.localFileBadge")}</span>
+                          </p>
+                        </div>
+                        <button onClick={() => handleRemoveLocalFile(lf)} title={t("tracker.removeFile")} className="shrink-0 rounded-apple-sm p-0.5 text-label-tertiary opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100">
+                          <X size={12} />
+                        </button>
+                      </div>
+                      <button onClick={() => handleOpenLocalFile(lf)} className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-accent hover:underline">
+                        <ExternalLink size={11} />
+                        {t("menu.open")}
+                      </button>
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      onClick={() => setPickerOpen(true)}
+                      className="flex items-center justify-center gap-1.5 rounded-apple-sm border border-dashed border-surface-border py-2 text-[11.5px] text-label-secondary transition-colors hover:border-accent/40 hover:text-accent"
+                    >
+                      <Plus size={13} />
+                      {t("tracker.addFileFromStorage")}
+                    </button>
+                    <button
+                      onClick={handleAddLocalFiles}
+                      className="flex items-center justify-center gap-1.5 rounded-apple-sm border border-dashed border-surface-border py-2 text-[11.5px] text-label-secondary transition-colors hover:border-accent/40 hover:text-accent"
+                    >
+                      <HardDrive size={13} />
+                      {t("tracker.addFileFromComputer")}
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-1 flex-col overflow-hidden">
@@ -510,6 +570,15 @@ function eventText(event: TrackerTaskEvent, t: (key: string, vars?: Record<strin
       return { title: t("tracker.event.fileAddedTitle"), detail: String(payload.fileName ?? "") };
     case "file_removed":
       return { title: t("tracker.event.fileRemovedTitle"), detail: String(payload.fileName ?? "") };
+    case "local_file_added":
+      return { title: t("tracker.event.localFileAddedTitle"), detail: String(payload.fileName ?? "") };
+    case "local_file_removed":
+      return { title: t("tracker.event.localFileRemovedTitle"), detail: String(payload.fileName ?? "") };
+    case "file_pin_changed":
+      return {
+        title: t(payload.alwaysLatest ? "tracker.event.filePinnedToLatestTitle" : "tracker.event.filePinnedToVersionTitle"),
+        detail: String(payload.fileName ?? ""),
+      };
     case "file_version_updated":
       return {
         title: String(payload.fileName ?? t("tracker.event.fileVersionUpdatedTitle")),

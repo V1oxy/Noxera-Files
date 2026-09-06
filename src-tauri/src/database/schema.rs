@@ -100,6 +100,20 @@ CREATE TABLE IF NOT EXISTS tracker_labels (
     created_at  TEXT NOT NULL
 );
 
+-- Priority levels are per-board, edited from board settings, exactly like
+-- statuses - a task's `priority` column (below) stores one of these rows'
+-- id, not a fixed global slug.
+CREATE TABLE IF NOT EXISTS tracker_priorities (
+    id          TEXT PRIMARY KEY,
+    board_id    TEXT NOT NULL REFERENCES tracker_boards(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    color       TEXT NOT NULL DEFAULT '#8E8E93',
+    position    INTEGER NOT NULL DEFAULT 0,
+    is_default  INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tracker_tasks (
     id            TEXT PRIMARY KEY,
     board_id      TEXT NOT NULL REFERENCES tracker_boards(id) ON DELETE CASCADE,
@@ -167,6 +181,21 @@ CREATE TABLE IF NOT EXISTS tracker_task_events (
     author     TEXT,
     created_at TEXT NOT NULL
 );
+
+-- A file attached "from the computer" rather than picked from the app's own
+-- storage - its bytes live only under this task (tracker_attachments/<task_id>/
+-- on disk), never inside `files`/`file_versions`, and are removed for good
+-- the moment this row or its task goes away.
+CREATE TABLE IF NOT EXISTS tracker_task_local_files (
+    id           TEXT PRIMARY KEY,
+    task_id      TEXT NOT NULL REFERENCES tracker_tasks(id) ON DELETE CASCADE,
+    file_name    TEXT NOT NULL,
+    storage_path TEXT NOT NULL,
+    file_size    INTEGER NOT NULL,
+    mime_type    TEXT,
+    position     INTEGER NOT NULL DEFAULT 0,
+    added_at     TEXT NOT NULL
+);
 "#;
 
 /// Index definitions only. Run last (after `TABLES_SQL` and `migrate()`),
@@ -184,6 +213,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_file_versions_file_version
 CREATE INDEX IF NOT EXISTS idx_tracker_statuses_board_id ON tracker_statuses(board_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_fields_board_id ON tracker_fields(board_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_labels_board_id ON tracker_labels(board_id);
+CREATE INDEX IF NOT EXISTS idx_tracker_priorities_board_id ON tracker_priorities(board_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_tasks_board_id ON tracker_tasks(board_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_tasks_status_id ON tracker_tasks(status_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_tasks_project_id ON tracker_tasks(project_id);
@@ -192,6 +222,7 @@ CREATE INDEX IF NOT EXISTS idx_tracker_field_values_field_id ON tracker_field_va
 CREATE INDEX IF NOT EXISTS idx_tracker_task_files_task_id ON tracker_task_files(task_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_task_files_file_id ON tracker_task_files(file_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_task_events_task_id ON tracker_task_events(task_id);
+CREATE INDEX IF NOT EXISTS idx_tracker_task_local_files_task_id ON tracker_task_local_files(task_id);
 "#;
 
 /// Statements applied after `TABLES_SQL`, guarded by their own existence
@@ -230,8 +261,73 @@ pub fn migrate(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    backfill_priorities(conn)?;
     seed_default_board(conn)?;
 
+    Ok(())
+}
+
+/// The default priority set every board gets, in position order - matches
+/// what used to be the app-wide fixed set before priorities became per-board.
+const DEFAULT_PRIORITIES: [(&str, &str, &str); 4] = [
+    ("low", "Low", "#8E8E93"),
+    ("normal", "Normal", "#0A84FF"),
+    ("high", "High", "#FF9F0A"),
+    ("critical", "Critical", "#FF453A"),
+];
+
+/// Inserts the default priority rows for one board and returns each one's
+/// old slug alongside its new row id, so a caller migrating existing tasks
+/// can map `tracker_tasks.priority` (which used to hold that slug directly)
+/// onto the new row.
+fn seed_default_priorities(
+    conn: &rusqlite::Connection,
+    board_id: &str,
+    now: &str,
+) -> rusqlite::Result<Vec<(&'static str, String)>> {
+    let mut mapping = Vec::new();
+    for (i, (slug, name, color)) in DEFAULT_PRIORITIES.iter().enumerate() {
+        let id = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO tracker_priorities (id, board_id, name, color, position, is_default, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+            rusqlite::params![id, board_id, name, color, i as i64, *slug == "normal", now],
+        )?;
+        mapping.push((*slug, id));
+    }
+    Ok(mapping)
+}
+
+/// Gives every board that predates the `tracker_priorities` table its own
+/// default set (seeded once, guarded by "does this board have any priorities
+/// yet") and remaps its tasks' `priority` column from the old fixed slug
+/// ('low'/'normal'/'high'/'critical') to the new row's id - a no-op on every
+/// run after the first, since a board never has zero priorities again once
+/// it has at least the four default rows.
+fn backfill_priorities(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    let board_ids: Vec<String> = {
+        let mut stmt = conn.prepare("SELECT id FROM tracker_boards")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    for board_id in board_ids {
+        let has_priorities: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tracker_priorities WHERE board_id = ?1)",
+            rusqlite::params![board_id],
+            |r| r.get(0),
+        )?;
+        if has_priorities {
+            continue;
+        }
+        let now = chrono::Utc::now().to_rfc3339();
+        let mapping = seed_default_priorities(conn, &board_id, &now)?;
+        for (slug, id) in mapping {
+            conn.execute(
+                "UPDATE tracker_tasks SET priority = ?1 WHERE board_id = ?2 AND priority = ?3",
+                rusqlite::params![id, board_id, slug],
+            )?;
+        }
+    }
     Ok(())
 }
 
@@ -265,6 +361,7 @@ fn seed_default_board(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
             rusqlite::params![status_id, board_id, name, color, i as i64, i == 0, is_done, now],
         )?;
     }
+    seed_default_priorities(conn, &board_id, &now)?;
     Ok(())
 }
 

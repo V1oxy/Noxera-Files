@@ -8,7 +8,7 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/useToast";
 import { useTrackerSettings } from "@/hooks/useTracker";
 import { ApiError, createTrackerBoard, deleteTrackerBoard, reorderTrackerBoards, updateTrackerSettings } from "@/services/api";
-import type { CardDisplayConfig, Priority, TrackerBoard, TrackerSettings as TrackerSettingsType } from "@/types";
+import type { CardDisplayConfig, TrackerBoard, TrackerSettings as TrackerSettingsType } from "@/types";
 
 function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -18,8 +18,6 @@ function SettingsSection({ title, children }: { title: string; children: ReactNo
     </section>
   );
 }
-
-const PRIORITY_ORDER: Priority[] = ["low", "normal", "high", "critical"];
 
 interface TrackerSettingsPageProps {
   boards: TrackerBoard[];
@@ -72,14 +70,6 @@ export function TrackerSettingsPage({ boards, onBoardsChanged }: TrackerSettings
     }
   }
 
-  function updatePriority(priority: Priority, patch: Partial<{ label: string; color: string }>) {
-    setDraft((prev) => {
-      if (!prev) return prev;
-      const current = prev.priorities[priority] ?? { label: priority, color: "#8E8E93" };
-      return { ...prev, priorities: { ...prev.priorities, [priority]: { ...current, ...patch } } };
-    });
-  }
-
   function toggleDisplay(key: keyof CardDisplayConfig) {
     setDraft((prev) => (prev ? { ...prev, cardDisplay: { ...prev.cardDisplay, [key]: !prev.cardDisplay[key] } } : prev));
   }
@@ -124,24 +114,11 @@ export function TrackerSettingsPage({ boards, onBoardsChanged }: TrackerSettings
 
         {draft && (
           <>
-            <SettingsSection title={t("tracker.settingsTab.priorities")}>
-              {PRIORITY_ORDER.map((p) => {
-                const cfg = draft.priorities[p] ?? { label: p, color: "#8E8E93" };
-                return (
-                  <div key={p} className="flex items-center gap-2 border-b border-surface-border px-4 py-2.5 last:border-b-0">
-                    <input type="color" value={cfg.color} onChange={(e) => updatePriority(p, { color: e.target.value })} className="h-7 w-7 shrink-0 cursor-pointer rounded border border-surface-border bg-transparent" />
-                    <input value={cfg.label} onChange={(e) => updatePriority(p, { label: e.target.value })} className="min-w-0 flex-1 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 h-8 text-[13px] text-label-primary outline-none dark:bg-white/[0.05]" />
-                  </div>
-                );
-              })}
-            </SettingsSection>
-
             <SettingsSection title={t("tracker.settingsTab.display")}>
               {(
                 [
                   ["showProject", t("tracker.fieldProject")],
                   ["showPriority", t("tracker.fieldPriority")],
-                  ["showDueDate", t("tracker.fieldDueAt")],
                   ["showFileCount", t("tracker.tabFiles")],
                   ["showUpdateIndicator", t("tracker.fileUpdated")],
                 ] as [keyof CardDisplayConfig, string][]

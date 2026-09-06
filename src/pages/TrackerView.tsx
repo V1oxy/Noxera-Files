@@ -140,7 +140,6 @@ export function TrackerView({
             tasks={tasks}
             cardSize={board.cardSize}
             display={settings?.cardDisplay}
-            priorities={settings?.priorities}
             onOpenTask={(task) => setSelectedTaskId(task.id)}
             onMove={handleMove}
             onQuickAdd={handleQuickAdd}

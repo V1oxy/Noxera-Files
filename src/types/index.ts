@@ -112,7 +112,6 @@ export interface UploadProgressEvent {
 
 // ---- Tracker ------------------------------------------------------------------
 
-export type Priority = "low" | "normal" | "high" | "critical";
 export type TrackerFieldType = "text" | "number" | "date" | "datetime" | "select" | "boolean" | "url";
 export type TaskSortField = "created" | "receivedAt" | "dueAt" | "priority" | "updatedAt" | "completedAt" | "title" | "customer";
 export type CardSize = "compact" | "normal";
@@ -161,9 +160,30 @@ export interface TrackerLabel {
   createdAt: string;
 }
 
+export interface TrackerPriority {
+  id: string;
+  boardId: string;
+  name: string;
+  color: string;
+  position: number;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+  taskCount: number;
+}
+
 export interface TrackerFieldValue {
   fieldId: string;
   value: string | null;
+}
+
+export interface TrackerTaskLocalFile {
+  id: string;
+  taskId: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string | null;
+  addedAt: string;
 }
 
 export interface TrackerTaskFile {
@@ -213,7 +233,10 @@ export interface TrackerTask {
   projectName: string | null;
   customer: string | null;
   assignee: string | null;
-  priority: Priority;
+  priorityId: string;
+  priorityName: string;
+  priorityColor: string;
+  priorityPosition: number;
   pinned: boolean;
   archived: boolean;
   position: number;
@@ -230,6 +253,7 @@ export interface TrackerTask {
 export interface TrackerTaskDetail extends TrackerTask {
   fieldValues: TrackerFieldValue[];
   files: TrackerTaskFile[];
+  localFiles: TrackerTaskLocalFile[];
   events: TrackerTaskEvent[];
 }
 
@@ -254,6 +278,11 @@ export interface TrackerLabelInput {
   color: string;
 }
 
+export interface TrackerPriorityInput {
+  name: string;
+  color: string;
+}
+
 export interface NewTrackerTaskFile {
   fileId: string;
   versionId?: string | null;
@@ -268,7 +297,7 @@ export interface TrackerTaskInput {
   projectId?: string | null;
   customer?: string | null;
   assignee?: string | null;
-  priority?: Priority;
+  priorityId?: string;
   receivedAt?: string | null;
   dueAt?: string | null;
   labelIds?: string[];
@@ -287,7 +316,7 @@ export interface TrackerTaskUpdateInput {
   projectId?: string | null;
   customer?: string | null;
   assignee?: string | null;
-  priority?: Priority;
+  priorityId?: string;
   receivedAt?: string;
   dueAt?: string | null;
   completedAt?: string | null;
@@ -310,7 +339,7 @@ export interface TrackerTaskFilter {
   statusId?: string;
   customer?: string;
   assignee?: string;
-  priority?: Priority;
+  priorityId?: string;
   labelId?: string;
   hasFiles?: boolean;
   overdueOnly?: boolean;
@@ -323,11 +352,6 @@ export interface TrackerTaskFilter {
   sortDir?: SortDirection;
 }
 
-export interface PriorityConfig {
-  label: string;
-  color: string;
-}
-
 export interface CardDisplayConfig {
   showProject: boolean;
   showPriority: boolean;
@@ -338,6 +362,5 @@ export interface CardDisplayConfig {
 }
 
 export interface TrackerSettings {
-  priorities: Record<string, PriorityConfig>;
   cardDisplay: CardDisplayConfig;
 }

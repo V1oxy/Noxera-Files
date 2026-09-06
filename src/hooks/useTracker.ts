@@ -7,6 +7,7 @@ import {
   getTrackerBoards,
   getTrackerFields,
   getTrackerLabels,
+  getTrackerPriorities,
   getTrackerSettings,
   getTrackerStatuses,
   getTrackerTask,
@@ -21,6 +22,7 @@ import type {
   TrackerBoard,
   TrackerField,
   TrackerLabel,
+  TrackerPriority,
   TrackerSettings,
   TrackerStatus,
   TrackerTask,
@@ -121,6 +123,31 @@ export function useTrackerLabels(boardId: string | null) {
   }, [refresh]);
 
   return { labels, loading, refresh };
+}
+
+export function useTrackerPriorities(boardId: string | null) {
+  const [priorities, setPriorities] = useState<TrackerPriority[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    if (!boardId) {
+      setPriorities([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      setPriorities(await getTrackerPriorities(boardId));
+    } finally {
+      setLoading(false);
+    }
+  }, [boardId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { priorities, loading, refresh };
 }
 
 export function useTrackerTasks(boardId: string | null, includeArchived = false) {

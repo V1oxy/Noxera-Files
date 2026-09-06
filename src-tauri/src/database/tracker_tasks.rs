@@ -1,12 +1,13 @@
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
-use crate::models::{Priority, SortDirection, Task, TaskDetail, TaskFilter, TaskSortField, TaskUpdateInput};
+use crate::models::{SortDirection, Task, TaskDetail, TaskFilter, TaskSortField, TaskUpdateInput};
 
-use super::{tracker_events, tracker_field_values, tracker_task_files};
+use super::{tracker_events, tracker_field_values, tracker_task_files, tracker_task_local_files};
 
 const SELECT_BASE: &str = "SELECT t.id, t.board_id, b.name AS board_name, t.status_id, s.name AS status_name, \
     s.color AS status_color, s.is_done AS status_is_done, t.title, t.description, t.project_id, p.name AS project_name, \
-    t.customer, t.assignee, t.priority, t.pinned, t.archived, t.position, t.received_at, t.due_at, t.completed_at, \
+    t.customer, t.assignee, t.priority AS priority_id, pr.name AS priority_name, pr.color AS priority_color, \
+    pr.position AS priority_position, t.pinned, t.archived, t.position, t.received_at, t.due_at, t.completed_at, \
     t.created_at, t.updated_at, \
     (SELECT COUNT(*) FROM tracker_task_files tf WHERE tf.task_id = t.id) AS file_count, \
     (SELECT COUNT(*) FROM tracker_task_files tf WHERE tf.task_id = t.id AND tf.unseen_update = 1) AS unseen_count, \
@@ -16,6 +17,7 @@ const SELECT_BASE: &str = "SELECT t.id, t.board_id, b.name AS board_name, t.stat
     FROM tracker_tasks t \
     JOIN tracker_boards b ON b.id = t.board_id \
     JOIN tracker_statuses s ON s.id = t.status_id \
+    JOIN tracker_priorities pr ON pr.id = t.priority \
     LEFT JOIN projects p ON p.id = t.project_id";
 
 /// A row plus the extra blob columns needed for full-text search, which
@@ -27,7 +29,6 @@ struct RowWithSearchBlob {
 }
 
 fn map_row(row: &Row) -> rusqlite::Result<RowWithSearchBlob> {
-    let priority: String = row.get("priority")?;
     let label_ids_concat: Option<String> = row.get("label_ids_concat")?;
     let label_ids = label_ids_concat
         .map(|s| s.split(',').map(str::to_string).collect())
@@ -50,7 +51,10 @@ fn map_row(row: &Row) -> rusqlite::Result<RowWithSearchBlob> {
         project_name: row.get("project_name")?,
         customer: row.get("customer")?,
         assignee: row.get("assignee")?,
-        priority: Priority::parse(&priority),
+        priority_id: row.get("priority_id")?,
+        priority_name: row.get("priority_name")?,
+        priority_color: row.get("priority_color")?,
+        priority_position: row.get("priority_position")?,
         pinned: row.get("pinned")?,
         archived: row.get("archived")?,
         position: row.get("position")?,
@@ -134,8 +138,8 @@ fn matches_filter(task: &Task, blob: &str, filter: &TaskFilter) -> bool {
             return false;
         }
     }
-    if let Some(priority) = filter.priority {
-        if task.priority != priority {
+    if let Some(priority_id) = &filter.priority_id {
+        if task.priority_id != *priority_id {
             return false;
         }
     }
@@ -194,17 +198,9 @@ fn sort_key(task: &Task, field: TaskSortField) -> &str {
         TaskSortField::CompletedAt => task.completed_at.as_deref().unwrap_or(""),
         TaskSortField::Title => &task.title,
         TaskSortField::Customer => task.customer.as_deref().unwrap_or(""),
-        // Priority is sorted separately below (it's an enum, not a string).
+        // Priority is sorted separately below (by its board-defined position,
+        // not a string).
         TaskSortField::Priority => "",
-    }
-}
-
-fn priority_rank(p: Priority) -> u8 {
-    match p {
-        Priority::Low => 0,
-        Priority::Normal => 1,
-        Priority::High => 2,
-        Priority::Critical => 3,
     }
 }
 
@@ -225,7 +221,7 @@ pub fn list_all(conn: &Connection, filter: &TaskFilter) -> rusqlite::Result<Vec<
     let field = filter.sort_field.unwrap_or(TaskSortField::Created);
     let dir = filter.sort_dir.unwrap_or(SortDirection::Desc);
     if field == TaskSortField::Priority {
-        tasks.sort_by_key(|t| priority_rank(t.priority));
+        tasks.sort_by_key(|t| t.priority_position);
     } else if field == TaskSortField::Title || field == TaskSortField::Customer {
         // Case-insensitive for the two free-text fields, so "apple" and
         // "Banana" sort by their letters rather than by ASCII case.
@@ -271,12 +267,13 @@ pub fn get_detail(conn: &Connection, id: &str, now: &str) -> rusqlite::Result<Op
     };
     let field_values = tracker_field_values::list_for_task(conn, id)?;
     let files = tracker_task_files::list_for_task(conn, id)?;
+    let local_files = tracker_task_local_files::list_for_task(conn, id)?;
     let events = tracker_events::list_for_task(conn, id)?;
     // Opening the task is the acknowledgement point for "file updated"
     // badges (spec section 9) - clear it *after* building `files` above so
     // this exact response still shows the badge that brought the user here.
     tracker_task_files::clear_unseen(conn, id)?;
-    Ok(Some(TaskDetail { task, field_values, files, events }))
+    Ok(Some(TaskDetail { task, field_values, files, local_files, events }))
 }
 
 pub fn next_position(conn: &Connection, status_id: &str) -> rusqlite::Result<i64> {
@@ -298,7 +295,7 @@ pub fn create(
     project_id: Option<&str>,
     customer: Option<&str>,
     assignee: Option<&str>,
-    priority: Priority,
+    priority_id: &str,
     received_at: &str,
     due_at: Option<&str>,
     now: &str,
@@ -311,7 +308,7 @@ pub fn create(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0, ?10, ?11, ?12, NULL, ?13, ?13)",
         params![
             id, board_id, status_id, title, description, project_id, customer, assignee,
-            priority.as_str(), position, received_at, due_at, now,
+            priority_id, position, received_at, due_at, now,
         ],
     )?;
     Ok(())
@@ -323,7 +320,7 @@ pub struct RawTaskColumns {
     pub project_id: Option<String>,
     pub customer: Option<String>,
     pub assignee: Option<String>,
-    pub priority: String,
+    pub priority_id: String,
     pub received_at: String,
     pub due_at: Option<String>,
     pub completed_at: Option<String>,
@@ -342,7 +339,7 @@ fn get_raw(conn: &Connection, id: &str) -> rusqlite::Result<Option<RawTaskColumn
                 project_id: row.get(2)?,
                 customer: row.get(3)?,
                 assignee: row.get(4)?,
-                priority: row.get(5)?,
+                priority_id: row.get(5)?,
                 received_at: row.get(6)?,
                 due_at: row.get(7)?,
                 completed_at: row.get(8)?,
@@ -373,7 +370,7 @@ pub fn apply_update(
         project_id: patch.project_id.clone().unwrap_or_else(|| existing.project_id.clone()),
         customer: patch.customer.clone().unwrap_or_else(|| existing.customer.clone()),
         assignee: patch.assignee.clone().unwrap_or_else(|| existing.assignee.clone()),
-        priority: patch.priority.map(|p| p.as_str().to_string()).unwrap_or_else(|| existing.priority.clone()),
+        priority_id: patch.priority_id.clone().unwrap_or_else(|| existing.priority_id.clone()),
         received_at: patch.received_at.clone().unwrap_or_else(|| existing.received_at.clone()),
         due_at: patch.due_at.clone().unwrap_or_else(|| existing.due_at.clone()),
         completed_at: patch.completed_at.clone().unwrap_or_else(|| existing.completed_at.clone()),
@@ -384,7 +381,7 @@ pub fn apply_update(
          priority = ?7, received_at = ?8, due_at = ?9, completed_at = ?10, pinned = ?11, updated_at = ?12 WHERE id = ?1",
         params![
             id, merged.title, merged.description, merged.project_id, merged.customer, merged.assignee,
-            merged.priority, merged.received_at, merged.due_at, merged.completed_at, merged.pinned, now,
+            merged.priority_id, merged.received_at, merged.due_at, merged.completed_at, merged.pinned, now,
         ],
     )?;
     Ok(Some((existing, merged)))

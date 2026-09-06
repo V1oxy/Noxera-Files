@@ -55,7 +55,6 @@ export function DuplicateTaskModal({ open, taskId, onCancel, onDuplicated }: Dup
     { key: "priority", label: t("tracker.fieldPriority") },
     { key: "assignee", label: t("tracker.fieldAssignee") },
     { key: "files", label: t("tracker.tabFiles") },
-    { key: "dueAt", label: t("tracker.fieldDueAt") },
   ];
 
   return (

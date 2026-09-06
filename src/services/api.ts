@@ -29,6 +29,8 @@ import type {
   TrackerFieldValue,
   TrackerLabel,
   TrackerLabelInput,
+  TrackerPriority,
+  TrackerPriorityInput,
   TrackerSettings,
   TrackerStatus,
   TrackerStatusInput,
@@ -257,6 +259,20 @@ export const updateTrackerLabel = (labelId: string, input: TrackerLabelInput) =>
 export const reorderTrackerLabels = (orderedIds: string[]) => call<void>("reorder_tracker_labels", { orderedIds });
 export const deleteTrackerLabel = (labelId: string) => call<void>("delete_tracker_label", { labelId });
 
+// ---- Tracker: priorities ----------------------------------------------------
+
+export const getTrackerPriorities = (boardId: string) => call<TrackerPriority[]>("get_tracker_priorities", { boardId });
+export const createTrackerPriority = (boardId: string, input: TrackerPriorityInput) =>
+  call<TrackerPriority>("create_tracker_priority", { boardId, input });
+export const updateTrackerPriority = (priorityId: string, input: TrackerPriorityInput) =>
+  call<TrackerPriority>("update_tracker_priority", { priorityId, input });
+export const setTrackerPriorityDefault = (priorityId: string) =>
+  call<TrackerPriority[]>("set_tracker_priority_default", { priorityId });
+export const reorderTrackerPriorities = (orderedIds: string[]) =>
+  call<void>("reorder_tracker_priorities", { orderedIds });
+export const deleteTrackerPriority = (priorityId: string, reassignToPriorityId?: string | null) =>
+  call<void>("delete_tracker_priority", { priorityId, reassignToPriorityId: reassignToPriorityId ?? null });
+
 // ---- Tracker: tasks ---------------------------------------------------------------
 
 export const getTrackerTasks = (boardId: string, includeArchived?: boolean) =>
@@ -287,6 +303,14 @@ export const attachTrackerTaskFile = (taskId: string, file: NewTrackerTaskFile) 
   call<TrackerTaskDetail>("attach_tracker_task_file", { taskId, file });
 export const detachTrackerTaskFile = (taskFileId: string) =>
   call<TrackerTaskDetail>("detach_tracker_task_file", { taskFileId });
+export const setTrackerTaskFilePin = (taskFileId: string, alwaysLatest: boolean) =>
+  call<TrackerTaskDetail>("set_tracker_task_file_pin", { taskFileId, alwaysLatest });
+export const addTrackerTaskLocalFile = (taskId: string, sourcePath: string) =>
+  call<TrackerTaskDetail>("add_tracker_task_local_file", { taskId, sourcePath });
+export const removeTrackerTaskLocalFile = (localFileId: string) =>
+  call<TrackerTaskDetail>("remove_tracker_task_local_file", { localFileId });
+export const openTrackerTaskLocalFile = (localFileId: string) =>
+  call<void>("open_tracker_task_local_file", { localFileId });
 export const addTrackerTaskComment = (taskId: string, text: string) =>
   call<TrackerTaskEvent>("add_tracker_task_comment", { taskId, text });
 

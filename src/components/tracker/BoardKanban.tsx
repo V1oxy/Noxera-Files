@@ -15,14 +15,13 @@ import { useEffect, useState } from "react";
 
 import { TaskCard, TaskCardOverlay } from "@/components/tracker/TaskCard";
 import { useLanguage } from "@/hooks/useLanguage";
-import type { CardDisplayConfig, CardSize, PriorityConfig, TrackerStatus, TrackerTask } from "@/types";
+import type { CardDisplayConfig, CardSize, TrackerStatus, TrackerTask } from "@/types";
 
 interface BoardKanbanProps {
   statuses: TrackerStatus[];
   tasks: TrackerTask[];
   cardSize: CardSize;
   display?: CardDisplayConfig;
-  priorities?: Record<string, PriorityConfig>;
   onOpenTask: (task: TrackerTask) => void;
   onMove: (taskId: string, statusId: string, orderedIds: string[]) => void;
   onQuickAdd: (statusId: string, title: string) => void;
@@ -88,7 +87,6 @@ function Column({
   tasks,
   cardSize,
   display,
-  priorities,
   onOpenTask,
   isDropTarget,
   quickAddOpen,
@@ -100,7 +98,6 @@ function Column({
   tasks: TrackerTask[];
   cardSize: CardSize;
   display?: CardDisplayConfig;
-  priorities?: Record<string, PriorityConfig>;
   onOpenTask: (task: TrackerTask) => void;
   isDropTarget: boolean;
   quickAddOpen: boolean;
@@ -135,7 +132,7 @@ function Column({
       >
         <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} compact={cardSize === "compact"} display={display} priorities={priorities} onOpen={onOpenTask} />
+            <TaskCard key={task.id} task={task} compact={cardSize === "compact"} display={display} onOpen={onOpenTask} />
           ))}
         </SortableContext>
         {quickAddOpen && <QuickAddRow onSubmit={onQuickAddSubmit} onCancel={onQuickAddCancel} />}
@@ -149,7 +146,6 @@ export function BoardKanban({
   tasks,
   cardSize,
   display,
-  priorities,
   onOpenTask,
   onMove,
   onQuickAdd,
@@ -269,7 +265,6 @@ export function BoardKanban({
               tasks={columns[status.id] ?? []}
               cardSize={cardSize}
               display={display}
-              priorities={priorities}
               onOpenTask={onOpenTask}
               isDropTarget={overContainerId === status.id && activeTask !== null}
               quickAddOpen={quickAddStatusId === status.id}

@@ -6,28 +6,33 @@ import { DeleteModal } from "@/components/DeleteModal";
 import { Modal, ModalBody, ModalHeader } from "@/components/Modal";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/useToast";
-import { useTrackerFields, useTrackerLabels, useTrackerStatuses } from "@/hooks/useTracker";
+import { useTrackerFields, useTrackerLabels, useTrackerPriorities, useTrackerStatuses } from "@/hooks/useTracker";
 import {
   ApiError,
   createTrackerField,
   createTrackerLabel,
+  createTrackerPriority,
   createTrackerStatus,
   deleteTrackerBoard,
   deleteTrackerField,
   deleteTrackerLabel,
+  deleteTrackerPriority,
   deleteTrackerStatus,
   reorderTrackerFields,
   reorderTrackerLabels,
+  reorderTrackerPriorities,
   reorderTrackerStatuses,
   setTrackerBoardCardSize,
+  setTrackerPriorityDefault,
   setTrackerStatusDefault,
   setTrackerStatusIsDone,
   updateTrackerBoard,
   updateTrackerField,
   updateTrackerLabel,
+  updateTrackerPriority,
   updateTrackerStatus,
 } from "@/services/api";
-import type { CardSize, TrackerBoard, TrackerField, TrackerFieldType, TrackerLabel, TrackerStatus } from "@/types";
+import type { CardSize, TrackerBoard, TrackerField, TrackerFieldType, TrackerLabel, TrackerPriority, TrackerStatus } from "@/types";
 
 interface BoardSettingsModalProps {
   open: boolean;
@@ -37,7 +42,7 @@ interface BoardSettingsModalProps {
   onBoardDeleted: () => void;
 }
 
-type Tab = "general" | "statuses" | "fields" | "labels";
+type Tab = "general" | "statuses" | "priorities" | "fields" | "labels";
 
 const swatchClass = "h-6 w-6 shrink-0 rounded-full border border-black/10";
 const COLORS = ["#8E8E93", "#0A84FF", "#30D158", "#FF9F0A", "#FF453A", "#BF5AF2", "#64D2FF", "#FFD60A"];
@@ -52,7 +57,7 @@ export function BoardSettingsModal({ open, board, onClose, onBoardChanged, onBoa
     <Modal open={open} onClose={onClose} width={560}>
       <ModalHeader title={t("tracker.boardSettingsTitle", { name: board.name })} />
       <div className="flex gap-1 border-b border-surface-border px-5">
-        {(["general", "statuses", "fields", "labels"] as Tab[]).map((tb) => (
+        {(["general", "statuses", "priorities", "fields", "labels"] as Tab[]).map((tb) => (
           <button
             key={tb}
             onClick={() => setTab(tb)}
@@ -66,6 +71,7 @@ export function BoardSettingsModal({ open, board, onClose, onBoardChanged, onBoa
         <div className="max-h-[55vh] overflow-y-auto">
           {tab === "general" && <GeneralTab board={board} onBoardChanged={onBoardChanged} onBoardDeleted={onBoardDeleted} onClose={onClose} />}
           {tab === "statuses" && <StatusesTab boardId={board.id} />}
+          {tab === "priorities" && <PrioritiesTab boardId={board.id} />}
           {tab === "fields" && <FieldsTab boardId={board.id} />}
           {tab === "labels" && <LabelsTab boardId={board.id} />}
         </div>
@@ -269,6 +275,128 @@ function StatusesTab({ boardId }: { boardId: string }) {
             {statuses.filter((s) => s.id !== reassignTarget.id).map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
+              </option>
+            ))}
+          </select>
+          <div className="mt-2 flex justify-end gap-1.5">
+            <Button size="sm" variant="secondary" onClick={() => setReassignTarget(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button size="sm" variant="danger" onClick={confirmReassignDelete}>
+              {t("common.delete")}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PrioritiesTab({ boardId }: { boardId: string }) {
+  const { t, translateError } = useLanguage();
+  const { showToast } = useToast();
+  const { priorities, refresh } = useTrackerPriorities(boardId);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState(COLORS[0]);
+  const [reassignTarget, setReassignTarget] = useState<TrackerPriority | null>(null);
+  const [reassignTo, setReassignTo] = useState("");
+
+  async function handleAdd() {
+    if (!name.trim()) return;
+    await createTrackerPriority(boardId, { name: name.trim(), color });
+    setName("");
+    await refresh();
+  }
+
+  async function handleReorder(index: number, dir: -1 | 1) {
+    const next = [...priorities];
+    const target = index + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    await reorderTrackerPriorities(next.map((p) => p.id));
+    await refresh();
+  }
+
+  async function handleDelete(priority: TrackerPriority) {
+    if (priority.taskCount > 0) {
+      setReassignTarget(priority);
+      setReassignTo(priorities.find((p) => p.id !== priority.id)?.id ?? "");
+      return;
+    }
+    try {
+      await deleteTrackerPriority(priority.id);
+      await refresh();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  async function confirmReassignDelete() {
+    if (!reassignTarget || !reassignTo) return;
+    try {
+      await deleteTrackerPriority(reassignTarget.id, reassignTo);
+      setReassignTarget(null);
+      await refresh();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {priorities.map((priority, i) => (
+        <div key={priority.id} className="flex items-center gap-2 rounded-apple-sm border border-surface-border px-2.5 py-2">
+          <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: priority.color }} />
+          <input
+            defaultValue={priority.name}
+            onBlur={(e) => e.target.value.trim() && e.target.value !== priority.name && updateTrackerPriority(priority.id, { name: e.target.value.trim(), color: priority.color }).then(refresh)}
+            className="min-w-0 flex-1 bg-transparent text-[12.5px] text-label-primary outline-none"
+          />
+          <span className="shrink-0 text-[10.5px] text-label-tertiary">{priority.taskCount}</span>
+          <button
+            title={t("tracker.setDefaultPriority")}
+            onClick={() => setTrackerPriorityDefault(priority.id).then(refresh)}
+            className={`shrink-0 rounded-apple-sm p-1 ${priority.isDefault ? "text-accent" : "text-label-tertiary hover:text-label-primary"}`}
+          >
+            <Star size={13} fill={priority.isDefault ? "currentColor" : "none"} />
+          </button>
+          <button onClick={() => handleReorder(i, -1)} disabled={i === 0} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
+            <ArrowUp size={13} />
+          </button>
+          <button onClick={() => handleReorder(i, 1)} disabled={i === priorities.length - 1} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
+            <ArrowDown size={13} />
+          </button>
+          <button onClick={() => handleDelete(priority)} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:bg-danger/10 hover:text-danger">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ))}
+
+      <div className="flex items-center gap-2 rounded-apple-sm border border-dashed border-surface-border px-2.5 py-2">
+        <div className="flex gap-1">
+          {COLORS.map((c) => (
+            <button key={c} onClick={() => setColor(c)} className={`${swatchClass} ${color === c ? "ring-2 ring-accent ring-offset-1" : ""}`} style={{ backgroundColor: c }} />
+          ))}
+        </div>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          placeholder={t("tracker.newPriorityPlaceholder")}
+          className="min-w-0 flex-1 bg-transparent text-[12.5px] text-label-primary outline-none placeholder:text-label-tertiary"
+        />
+        <button onClick={handleAdd} className="shrink-0 rounded-apple-sm bg-accent p-1 text-white">
+          <Plus size={13} />
+        </button>
+      </div>
+
+      {reassignTarget && (
+        <div className="rounded-apple border border-accent/40 bg-accent/[0.06] p-3">
+          <p className="text-[12.5px] text-label-primary">{t("tracker.reassignPriorityPrompt", { count: reassignTarget.taskCount, name: reassignTarget.name })}</p>
+          <select value={reassignTo} onChange={(e) => setReassignTo(e.target.value)} className="mt-2 w-full rounded-apple-sm border border-surface-border bg-surface-content px-2 h-8 text-[12.5px] outline-none">
+            {priorities.filter((p) => p.id !== reassignTarget.id).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
               </option>
             ))}
           </select>

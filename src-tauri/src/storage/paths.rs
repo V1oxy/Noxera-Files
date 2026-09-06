@@ -39,6 +39,17 @@ impl StorageRoot {
         self.0.join("temp")
     }
 
+    /// Where a task's "attach from computer" files live - separate from
+    /// `projects/`, since these never belong to the file manager's own
+    /// version history (spec: local-only task attachments).
+    pub fn tracker_attachments_dir(&self) -> PathBuf {
+        self.0.join("tracker_attachments")
+    }
+
+    pub fn task_attachment_dir(&self, task_id: &str) -> AppResult<PathBuf> {
+        safe_join(&self.tracker_attachments_dir(), task_id)
+    }
+
     pub fn ensure_dirs(&self) -> std::io::Result<()> {
         for dir in [
             self.0.clone(),
