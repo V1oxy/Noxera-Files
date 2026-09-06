@@ -120,6 +120,7 @@ function MainShell() {
         settingsActive={view === "settings"}
         updateAvailable={updateStatus === "available" || updateStatus === "readyToRestart"}
         trackerVisible={trackerEnabled}
+        projectListActive={view === "project"}
         trackerActive={view === "tracker"}
         trackerBoards={trackerBoards}
         trackerView={tracker.state.view}

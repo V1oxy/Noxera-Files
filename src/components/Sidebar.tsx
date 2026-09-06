@@ -25,6 +25,7 @@ interface SidebarProps {
   settingsActive: boolean;
   updateAvailable?: boolean;
   trackerVisible: boolean;
+  projectListActive: boolean;
   trackerActive: boolean;
   trackerBoards: TrackerBoard[];
   trackerView: TrackerViewState | null;
@@ -45,6 +46,7 @@ export function Sidebar({
   settingsActive,
   updateAvailable,
   trackerVisible,
+  projectListActive,
   trackerActive,
   trackerBoards,
   trackerView,
@@ -115,7 +117,7 @@ export function Sidebar({
                   <button
                     onClick={() => onSelectProject(project.id)}
                     className={`group flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
-                      selectedProjectId === project.id && !settingsActive && !trackerActive
+                      selectedProjectId === project.id && projectListActive
                         ? "bg-accent/[0.14] text-accent font-medium"
                         : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
                     }`}
@@ -123,7 +125,7 @@ export function Sidebar({
                     <FolderClosed
                       size={15}
                       strokeWidth={1.75}
-                      className={selectedProjectId === project.id && !settingsActive && !trackerActive ? "text-accent" : "text-label-secondary"}
+                      className={selectedProjectId === project.id && projectListActive ? "text-accent" : "text-label-secondary"}
                     />
                     <span className="min-w-0 flex-1 truncate">{project.name}</span>
                   </button>

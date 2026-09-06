@@ -106,7 +106,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   const [pickerOpen, setPickerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
-  const [tab, setTab] = useState<"files" | "history">("files");
+  const [tab, setTab] = useState<"files" | "comments" | "history">("files");
   const [isDragActive, setIsDragActive] = useState(false);
 
   useEffect(() => {
@@ -163,6 +163,12 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
     detail?.fieldValues.forEach((fv) => map.set(fv.fieldId, fv.value));
     return map;
   }, [detail?.fieldValues]);
+
+  // Comments are stored alongside automatic events in one log (so the
+  // backend never has to reconcile two separate timelines), but shown in
+  // their own tab - History stays a pure technical audit trail.
+  const commentEvents = useMemo(() => detail?.events.filter((ev) => ev.kind === "comment") ?? [], [detail?.events]);
+  const historyEvents = useMemo(() => detail?.events.filter((ev) => ev.kind !== "comment") ?? [], [detail?.events]);
 
   if (!detail) return null;
 
@@ -281,12 +287,23 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
     onDeleted();
   }
 
+  // Clicking the backdrop fires this on mousedown, before the still-focused
+  // title/description field's own onBlur has a chance to save - closing
+  // straight to onClose() would silently drop whatever was just typed, so
+  // flush both fields here first regardless of whether blur already fired
+  // (patch() no-ops when nothing actually changed).
+  function handleRequestClose() {
+    if (title.trim() && title !== detail!.title) void patch({ title: title.trim() });
+    if (description !== (detail!.description ?? "")) void patch({ description: description.trim() || null });
+    onClose();
+  }
+
   const statusOptions = statuses.map((s) => ({ value: s.id, label: s.name }));
   const priorityOptions = priorities.map((p) => ({ value: p.id, label: p.name }));
 
   return (
     <>
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in" onMouseDown={(e) => e.target === e.currentTarget && handleRequestClose()}>
         <div className="animate-scale-in relative flex h-[82vh] w-[760px] max-w-[95vw] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple" onMouseDown={(e) => e.stopPropagation()}>
           {isDragActive && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-apple-lg border-2 border-dashed border-accent bg-accent/[0.08] backdrop-blur-[1px]">
@@ -328,7 +345,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
               <button onClick={handleTogglePin} title={t(detail.pinned ? "tracker.unpin" : "tracker.pin")} className="rounded-apple-sm p-1.5 text-label-tertiary hover:bg-black/[0.06] hover:text-label-primary dark:hover:bg-white/[0.1]">
                 {detail.pinned ? <PinOff size={15} /> : <Pin size={15} />}
               </button>
-              <button onClick={onClose} className="rounded-apple-sm p-1.5 text-label-tertiary hover:bg-black/[0.06] hover:text-label-primary dark:hover:bg-white/[0.1]">
+              <button onClick={handleRequestClose} className="rounded-apple-sm p-1.5 text-label-tertiary hover:bg-black/[0.06] hover:text-label-primary dark:hover:bg-white/[0.1]">
                 <X size={16} />
               </button>
             </div>
@@ -459,6 +476,10 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                   {t("tracker.tabFiles")} {detail.files.length + detail.localFiles.length > 0 && `(${detail.files.length + detail.localFiles.length})`}
                   {tab === "files" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}
                 </button>
+                <button onClick={() => setTab("comments")} className={`relative pb-2.5 text-[12px] font-medium transition-colors ${tab === "comments" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
+                  {t("tracker.tabComments")} {commentEvents.length > 0 && `(${commentEvents.length})`}
+                  {tab === "comments" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}
+                </button>
                 <button onClick={() => setTab("history")} className={`relative pb-2.5 text-[12px] font-medium transition-colors ${tab === "history" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
                   {t("tracker.tabHistory")}
                   {tab === "history" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}
@@ -540,7 +561,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                       </button>
                     </div>
                   ))}
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="flex flex-col gap-1.5">
                     <button
                       onClick={() => setPickerOpen(true)}
                       className="flex items-center justify-center gap-1.5 rounded-apple-sm border border-dashed border-surface-border py-2 text-[11.5px] text-label-secondary transition-colors hover:border-accent/40 hover:text-accent"
@@ -557,11 +578,14 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                     </button>
                   </div>
                 </div>
-              ) : (
+              ) : tab === "comments" ? (
                 <div className="flex flex-1 flex-col overflow-hidden">
                   <div className="flex-1 overflow-y-auto px-4 py-3">
-                    {detail.events.map((ev, i) => (
-                      <HistoryEntry key={ev.id} event={ev} isLast={i === detail.events.length - 1} />
+                    {commentEvents.length === 0 && (
+                      <p className="px-1 py-4 text-center text-[12px] text-label-tertiary">{t("tracker.noCommentsYet")}</p>
+                    )}
+                    {commentEvents.map((ev, i) => (
+                      <CommentEntry key={ev.id} event={ev} isLast={i === commentEvents.length - 1} />
                     ))}
                   </div>
                   <div className="flex shrink-0 gap-1.5 border-t border-surface-border p-2.5">
@@ -576,6 +600,15 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                       <MessageSquare size={13} />
                     </Button>
                   </div>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto px-4 py-3">
+                  {historyEvents.length === 0 && (
+                    <p className="px-1 py-4 text-center text-[12px] text-label-tertiary">{t("tracker.noHistoryYet")}</p>
+                  )}
+                  {historyEvents.map((ev, i) => (
+                    <HistoryEntry key={ev.id} event={ev} isLast={i === historyEvents.length - 1} />
+                  ))}
                 </div>
               )}
             </div>
@@ -647,28 +680,35 @@ function eventText(event: TrackerTaskEvent, t: (key: string, vars?: Record<strin
       return { title: t("tracker.event.unpinned") };
     case "duplicated":
       return { title: t("tracker.event.duplicatedTitle"), detail: String(payload.sourceTitle ?? "") };
-    case "comment":
-      return { title: t("tracker.event.commentTitle"), detail: String(payload.text ?? "") };
     default:
       return { title: event.kind };
   }
 }
 
+function CommentEntry({ event, isLast }: { event: TrackerTaskEvent; isLast: boolean }) {
+  const { locale } = useLanguage();
+  const text = String((event.payload as Record<string, unknown> | null)?.text ?? "");
+
+  return (
+    <div className={`rounded-apple border border-surface-border bg-surface-card p-2.5 shadow-card ${isLast ? "" : "mb-2"}`}>
+      <p className="text-[10px] text-label-tertiary">{formatEventTime(event.createdAt, locale)}</p>
+      <p className="mt-0.5 text-[12.5px] leading-relaxed text-label-primary">{text}</p>
+    </div>
+  );
+}
+
 function HistoryEntry({ event, isLast }: { event: TrackerTaskEvent; isLast: boolean }) {
   const { t, locale } = useLanguage();
-  const isComment = event.kind === "comment";
   const { title, detail } = useMemo(() => eventText(event, t), [event, t]);
 
   return (
     <div className="relative flex gap-2.5 pb-4 last:pb-0">
       {!isLast && <span className="absolute left-[4.5px] top-[14px] bottom-0 w-px bg-surface-border" />}
-      <span className={`relative z-10 mt-1 h-[9px] w-[9px] shrink-0 rounded-full ring-2 ring-surface-modal ${isComment ? "bg-accent" : "bg-label-tertiary/60"}`} />
+      <span className="relative z-10 mt-1 h-[9px] w-[9px] shrink-0 rounded-full bg-label-tertiary/60 ring-2 ring-surface-modal" />
       <div className="min-w-0 flex-1">
         <p className="text-[10px] text-label-tertiary">{formatEventTime(event.createdAt, locale)}</p>
-        <p className={`mt-0.5 text-[12px] leading-snug ${isComment ? "font-medium text-label-primary" : "text-label-secondary"}`}>{title}</p>
-        {detail && (
-          <p className={`mt-0.5 text-[11.5px] leading-relaxed ${isComment ? "text-label-secondary" : "text-label-tertiary"}`}>{detail}</p>
-        )}
+        <p className="mt-0.5 text-[12px] leading-snug text-label-secondary">{title}</p>
+        {detail && <p className="mt-0.5 text-[11.5px] leading-relaxed text-label-tertiary">{detail}</p>}
       </div>
     </div>
   );

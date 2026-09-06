@@ -177,6 +177,7 @@ export function AllTasksView({ filter, onFilterChange, sortField, sortDir, onSor
                   {task.boardName}
                   {task.projectName ? ` · ${task.projectName}` : ""}
                 </p>
+                {task.description && <p className="mt-0.5 truncate text-[11px] text-label-tertiary">{task.description}</p>}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {task.fileCount > 0 && (

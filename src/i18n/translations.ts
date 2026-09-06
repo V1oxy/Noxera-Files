@@ -343,8 +343,11 @@ export const translations: Record<Lang, Record<string, string>> = {
     "tracker.linkedTasks": "Tasks",
 
     "tracker.tabFiles": "Files",
+    "tracker.tabComments": "Comments",
     "tracker.tabHistory": "History",
     "tracker.commentPlaceholder": "Write a comment...",
+    "tracker.noCommentsYet": "No comments yet.",
+    "tracker.noHistoryYet": "No activity yet.",
     "tracker.pin": "Pin",
     "tracker.unpin": "Unpin",
     "tracker.archive": "Archive",
@@ -751,8 +754,11 @@ export const translations: Record<Lang, Record<string, string>> = {
     "tracker.linkedTasks": "Задачи",
 
     "tracker.tabFiles": "Файлы",
+    "tracker.tabComments": "Комментарии",
     "tracker.tabHistory": "История",
     "tracker.commentPlaceholder": "Написать комментарий...",
+    "tracker.noCommentsYet": "Пока нет комментариев.",
+    "tracker.noHistoryYet": "Пока нет активности.",
     "tracker.pin": "Закрепить",
     "tracker.unpin": "Открепить",
     "tracker.archive": "В архив",
