@@ -1,5 +1,7 @@
 pub mod files;
 pub mod folders;
+pub mod link_groups;
+pub mod links;
 pub mod projects;
 pub mod schema;
 pub mod settings;

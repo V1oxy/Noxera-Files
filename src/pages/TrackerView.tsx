@@ -9,10 +9,12 @@ import { BoardSettingsModal } from "@/components/tracker/BoardSettingsModal";
 import { NewTaskModal, type NewTaskInitialFile } from "@/components/tracker/NewTaskModal";
 import { TaskDetailPanel } from "@/components/tracker/TaskDetailPanel";
 import { useLanguage } from "@/hooks/useLanguage";
+import { useSerialTask } from "@/hooks/useSerialTask";
+import { useToast } from "@/hooks/useToast";
 import type { TrackerUiState, TrackerViewState } from "@/hooks/useTracker";
 import { useTrackerStatuses, useTrackerTasks } from "@/hooks/useTracker";
-import { createTrackerTask, moveTrackerTask, setTrackerBoardCardSize } from "@/services/api";
-import type { CardSize, TrackerBoard, TrackerTask } from "@/types";
+import { ApiError, createTrackerTask, moveTrackerTask, setTrackerBoardCardSize } from "@/services/api";
+import type { CardSize, TrackerBoard } from "@/types";
 
 interface TrackerViewProps {
   boards: TrackerBoard[];
@@ -37,7 +39,9 @@ export function TrackerView({
   onPendingNewTaskFileHandled,
   onOpenProject,
 }: TrackerViewProps) {
-  const { t } = useLanguage();
+  const { t, translateError } = useLanguage();
+  const { showToast } = useToast();
+  const runMove = useSerialTask();
 
   const view: TrackerViewState = uiState.view ?? (boards[0] ? { kind: "board", boardId: boards[0].id } : { kind: "all" });
   const board = view.kind === "board" ? boards.find((b) => b.id === view.boardId) ?? null : null;
@@ -85,15 +89,33 @@ export function TrackerView({
     }
   }
 
-  async function handleMove(taskId: string, statusId: string, orderedIds: string[]) {
-    await moveTrackerTask(taskId, statusId, orderedIds);
-    refreshCurrentList();
+  // Queued (not fired immediately) so two drags in quick succession can
+  // never race each other to the backend - the second `moveTrackerTask`
+  // call always waits for the first to land, instead of whichever response
+  // happens to arrive last silently overwriting the other's order.
+  function handleMove(taskId: string, statusId: string, orderedIds: string[]) {
+    runMove(async () => {
+      try {
+        await moveTrackerTask(taskId, statusId, orderedIds);
+        refreshCurrentList();
+      } catch (e) {
+        showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+        // BoardKanban already moved the card optimistically - force a
+        // refetch so the board falls back to what's actually saved instead
+        // of silently showing a move that was never persisted.
+        void refreshTasks();
+      }
+    });
   }
 
   async function handleQuickAdd(statusId: string, title: string) {
     if (!board) return;
-    await createTrackerTask({ boardId: board.id, statusId, title });
-    refreshCurrentList();
+    try {
+      await createTrackerTask({ boardId: board.id, statusId, title });
+      refreshCurrentList();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
   }
 
   async function handleCardSizeToggle() {

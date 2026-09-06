@@ -84,6 +84,7 @@ export interface AppSettings {
   pendingWhatsNewVersion: string | null;
   pendingWhatsNewNotes: string | null;
   trackerEnabled: boolean;
+  linksEnabled: boolean;
 }
 
 export interface StorageInfo {
@@ -361,6 +362,58 @@ export interface CardDisplayConfig {
   showUpdateIndicator: boolean;
 }
 
-export interface TrackerSettings {
-  cardDisplay: CardDisplayConfig;
+// ---- Links ----------------------------------------------------------------------
+
+export interface LinkGroup {
+  id: string;
+  projectId: string;
+  name: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+  linkCount: number;
+}
+
+export interface Link {
+  id: string;
+  projectId: string;
+  projectName: string;
+  groupId: string | null;
+  groupName: string | null;
+  title: string;
+  url: string;
+  description: string | null;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LinkGroupInput {
+  name: string;
+}
+
+export interface LinkInput {
+  projectId: string;
+  groupId?: string | null;
+  title: string;
+  url: string;
+  description?: string | null;
+}
+
+/**
+ * Every field optional and means "leave unchanged" when omitted - set to
+ * `null` (not just leave it out) to clear a nullable field, matching the
+ * Rust side's serde "double option" patch semantics (see tracker task
+ * updates for the same pattern).
+ */
+export interface LinkUpdateInput {
+  title?: string;
+  url?: string;
+  description?: string | null;
+  groupId?: string | null;
+}
+
+export interface LinkFilter {
+  search?: string;
+  projectId?: string;
 }

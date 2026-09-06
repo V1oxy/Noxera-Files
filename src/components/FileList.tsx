@@ -2,7 +2,6 @@ import {
   DndContext,
   type DragEndEvent,
   type DragOverEvent,
-  type DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,

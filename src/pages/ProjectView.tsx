@@ -22,6 +22,7 @@ import { useFiles } from "@/hooks/useFiles";
 import { useFolders } from "@/hooks/useFolders";
 import { useGlobalSearch } from "@/hooks/useGlobalSearch";
 import { useLanguage } from "@/hooks/useLanguage";
+import { useSerialTask } from "@/hooks/useSerialTask";
 import { useToast } from "@/hooks/useToast";
 import { useVersions } from "@/hooks/useVersions";
 import {
@@ -98,6 +99,7 @@ export function ProjectView({
 }: ProjectViewProps) {
   const { showToast } = useToast();
   const { t, translateError } = useLanguage();
+  const runFileReorder = useSerialTask();
 
   const [activeTab, setActiveTab] = useState<"files" | "tasks">("files");
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
@@ -523,9 +525,25 @@ export function ProjectView({
     showToast({ title: t("toast.folderRenamed") });
   }
 
-  async function handleReorderFiles(orderedIds: string[]) {
-    await reorderFiles(orderedIds);
-    await refreshFiles();
+  // Queued (not fired immediately) so two drags in quick succession can
+  // never race each other to the backend - see `runFileReorder` below.
+  function handleReorderFiles(orderedIds: string[]) {
+    runFileReorder(async () => {
+      try {
+        await reorderFiles(orderedIds);
+        await refreshFiles();
+      } catch (e) {
+        // FileList already reordered its rows optimistically - refetch so
+        // it falls back to what's actually saved instead of silently
+        // showing an order that was never persisted.
+        await refreshFiles();
+        showToast({
+          title: t("common.actionErrorFallback"),
+          description: e instanceof ApiError ? translateError(e.message) : undefined,
+          variant: "error",
+        });
+      }
+    });
   }
 
   async function handleMoveFile(fileId: string, targetFolderId: string) {

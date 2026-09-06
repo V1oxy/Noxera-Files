@@ -72,9 +72,10 @@ function SettingsRow({
 
 interface SettingsProps {
   onTrackerEnabledChanged?: (enabled: boolean) => void;
+  onLinksEnabledChanged?: (enabled: boolean) => void;
 }
 
-export function Settings({ onTrackerEnabledChanged }: SettingsProps = {}) {
+export function Settings({ onTrackerEnabledChanged, onLinksEnabledChanged }: SettingsProps = {}) {
   const { settings, storageInfo, refresh } = useSettings();
   const { theme, setTheme } = useTheme();
   const { accentColor, setAccentColor } = useAccentColor();
@@ -132,6 +133,21 @@ export function Settings({ onTrackerEnabledChanged }: SettingsProps = {}) {
       const updated = await updateSettings({ trackerEnabled: !settings.trackerEnabled });
       await refresh();
       onTrackerEnabledChanged?.(updated.trackerEnabled);
+    } catch (e) {
+      showToast({
+        title: t("toast.settingUpdateError"),
+        description: e instanceof ApiError ? translateError(e.message) : undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  async function handleToggleLinks() {
+    if (!settings) return;
+    try {
+      const updated = await updateSettings({ linksEnabled: !settings.linksEnabled });
+      await refresh();
+      onLinksEnabledChanged?.(updated.linksEnabled);
     } catch (e) {
       showToast({
         title: t("toast.settingUpdateError"),
@@ -298,6 +314,21 @@ export function Settings({ onTrackerEnabledChanged }: SettingsProps = {}) {
               <span
                 className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
                   settings?.trackerEnabled ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </SettingsRow>
+          <SettingsRow label={t("settings.linksEnabled")} description={t("settings.linksEnabledDescription")}>
+            <button
+              type="button"
+              onClick={handleToggleLinks}
+              className={`relative inline-block h-5 w-9 shrink-0 rounded-full border-0 p-0 transition-colors ${
+                settings?.linksEnabled ? "bg-accent" : "bg-black/15 dark:bg-white/20"
+              }`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  settings?.linksEnabled ? "translate-x-4" : "translate-x-0"
                 }`}
               />
             </button>

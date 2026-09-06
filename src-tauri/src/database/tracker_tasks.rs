@@ -225,7 +225,7 @@ pub fn list_all(conn: &Connection, filter: &TaskFilter) -> rusqlite::Result<Vec<
     } else if field == TaskSortField::Title || field == TaskSortField::Customer {
         // Case-insensitive for the two free-text fields, so "apple" and
         // "Banana" sort by their letters rather than by ASCII case.
-        tasks.sort_by(|a, b| sort_key(a, field).to_lowercase().cmp(&sort_key(b, field).to_lowercase()));
+        tasks.sort_by_key(|a| sort_key(a, field).to_lowercase());
     } else {
         tasks.sort_by(|a, b| sort_key(a, field).cmp(sort_key(b, field)));
     }

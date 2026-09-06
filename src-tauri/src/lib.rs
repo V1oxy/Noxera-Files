@@ -129,10 +129,20 @@ pub fn run() {
             commands::tracker_tasks::remove_tracker_task_local_file,
             commands::tracker_tasks::open_tracker_task_local_file,
             commands::tracker_tasks::add_tracker_task_comment,
-            commands::tracker_settings::get_tracker_settings,
-            commands::tracker_settings::update_tracker_settings,
             commands::tracker_settings::get_tracker_ui_state,
             commands::tracker_settings::set_tracker_ui_state,
+            commands::links::get_links,
+            commands::links::create_link,
+            commands::links::update_link,
+            commands::links::delete_link,
+            commands::links::move_link,
+            commands::links::open_link,
+            commands::links::get_link_groups,
+            commands::links::get_all_link_groups,
+            commands::links::create_link_group,
+            commands::links::update_link_group,
+            commands::links::reorder_link_groups,
+            commands::links::delete_link_group,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

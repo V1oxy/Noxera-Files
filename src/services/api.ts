@@ -17,6 +17,12 @@ import type {
   FolderPathEntry,
   GlobalFileHit,
   ImportFolderResult,
+  Link,
+  LinkFilter,
+  LinkGroup,
+  LinkGroupInput,
+  LinkInput,
+  LinkUpdateInput,
   NewTrackerTaskFile,
   Project,
   SortDirection,
@@ -31,7 +37,6 @@ import type {
   TrackerLabelInput,
   TrackerPriority,
   TrackerPriorityInput,
-  TrackerSettings,
   TrackerStatus,
   TrackerStatusInput,
   TrackerTask,
@@ -88,6 +93,7 @@ export const updateSettings = (update: {
   pendingWhatsNewVersion?: string;
   pendingWhatsNewNotes?: string;
   trackerEnabled?: boolean;
+  linksEnabled?: boolean;
 }) => call<AppSettings>("update_settings", { update });
 export const getStorageInfo = () => call<StorageInfo>("get_storage_info");
 export const openDataFolder = (which: "storage" | "backups" | "logs") =>
@@ -316,8 +322,24 @@ export const addTrackerTaskComment = (taskId: string, text: string) =>
 
 // ---- Tracker: settings ---------------------------------------------------------
 
-export const getTrackerSettings = () => call<TrackerSettings>("get_tracker_settings");
-export const updateTrackerSettings = (settings: TrackerSettings) =>
-  call<TrackerSettings>("update_tracker_settings", { settings });
 export const getTrackerUiState = () => call<string | null>("get_tracker_ui_state");
 export const setTrackerUiState = (value: string) => call<void>("set_tracker_ui_state", { value });
+
+// ---- Links ------------------------------------------------------------------
+
+export const getLinks = (filter: LinkFilter) => call<Link[]>("get_links", { filter });
+export const createLink = (input: LinkInput) => call<Link>("create_link", { input });
+export const updateLink = (linkId: string, patch: LinkUpdateInput) => call<Link>("update_link", { linkId, patch });
+export const deleteLink = (linkId: string) => call<void>("delete_link", { linkId });
+export const moveLink = (linkId: string, groupId: string | null, orderedIds: string[]) =>
+  call<void>("move_link", { linkId, groupId, orderedIds });
+export const openLink = (url: string) => call<void>("open_link", { url });
+
+export const getLinkGroups = (projectId: string) => call<LinkGroup[]>("get_link_groups", { projectId });
+export const getAllLinkGroups = () => call<LinkGroup[]>("get_all_link_groups");
+export const createLinkGroup = (projectId: string, input: LinkGroupInput) =>
+  call<LinkGroup>("create_link_group", { projectId, input });
+export const updateLinkGroup = (groupId: string, input: LinkGroupInput) =>
+  call<LinkGroup>("update_link_group", { groupId, input });
+export const reorderLinkGroups = (orderedIds: string[]) => call<void>("reorder_link_groups", { orderedIds });
+export const deleteLinkGroup = (groupId: string) => call<void>("delete_link_group", { groupId });

@@ -15,9 +15,11 @@ import { LanguageProvider, useLanguage } from "@/hooks/useLanguage";
 import { ThemeProvider, useTheme } from "@/hooks/useTheme";
 import { useProjects } from "@/hooks/useProjects";
 import { ToastProvider } from "@/hooks/useToast";
+import { useSerialTask } from "@/hooks/useSerialTask";
 import { useTrackerBoards, useTrackerUiState } from "@/hooks/useTracker";
 import { UpdaterProvider, useUpdater } from "@/hooks/useUpdater";
 import { useWhatsNew } from "@/hooks/useWhatsNew";
+import { LinksView } from "@/pages/LinksView";
 import { Onboarding } from "@/pages/Onboarding";
 import { type PendingFileOpen, ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
@@ -33,19 +35,22 @@ function MainShell() {
   const { data: whatsNewData, dismiss: dismissWhatsNew } = useWhatsNew();
   const { projects, refresh: refreshProjects } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [view, setView] = useState<"project" | "settings" | "tracker">("project");
+  const [view, setView] = useState<"project" | "settings" | "tracker" | "links">("project");
   const [createOpen, setCreateOpen] = useState(false);
   const [newBoardOpen, setNewBoardOpen] = useState(false);
   const [navResetNonce, setNavResetNonce] = useState(0);
   const [pendingFileOpen, setPendingFileOpen] = useState<PendingFileOpen | null>(null);
   const { boards: trackerBoards, refresh: refreshTrackerBoards } = useTrackerBoards();
   const tracker = useTrackerUiState();
+  const runProjectReorder = useSerialTask();
+  const runBoardReorder = useSerialTask();
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [pendingNewTaskFile, setPendingNewTaskFile] = useState<NewTaskInitialFile | null>(null);
   // Defaults to visible so the section doesn't flash hidden while settings
   // are still loading - flipped to false only once we actually know the
   // user turned it off (see Settings' onTrackerEnabledChanged).
   const [trackerEnabled, setTrackerEnabled] = useState(true);
+  const [linksEnabled, setLinksEnabled] = useState(true);
 
   function openTask(taskId: string) {
     setPendingTaskId(taskId);
@@ -64,6 +69,7 @@ function MainShell() {
         setLanguage(s.language, false);
         setAccentColor(s.accentColor, false);
         setTrackerEnabled(s.trackerEnabled);
+        setLinksEnabled(s.linksEnabled);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,6 +90,14 @@ function MainShell() {
       setView("project");
     }
   }, [trackerEnabled, view]);
+
+  // Same reasoning as the tracker redirect above - the links module's data
+  // is untouched by hiding it, only the current screen needs to move.
+  useEffect(() => {
+    if (!linksEnabled && view === "links") {
+      setView("project");
+    }
+  }, [linksEnabled, view]);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
 
@@ -116,7 +130,7 @@ function MainShell() {
         onNewProject={() => setCreateOpen(true)}
         onOpenSettings={() => setView("settings")}
         onReorderProjects={(orderedIds) => {
-          void reorderProjects(orderedIds).then(() => refreshProjects());
+          runProjectReorder(() => reorderProjects(orderedIds).then(() => refreshProjects()));
         }}
         settingsActive={view === "settings"}
         updateAvailable={updateStatus === "available" || updateStatus === "readyToRestart"}
@@ -135,13 +149,18 @@ function MainShell() {
         }}
         onNewTrackerBoard={() => setNewBoardOpen(true)}
         onReorderTrackerBoards={(orderedIds) => {
-          void reorderTrackerBoards(orderedIds).then(() => refreshTrackerBoards());
+          runBoardReorder(() => reorderTrackerBoards(orderedIds).then(() => refreshTrackerBoards()));
         }}
+        linksVisible={linksEnabled}
+        linksActive={view === "links"}
+        onSelectLinks={() => setView("links")}
       />
 
       <div className="relative isolate flex flex-1 flex-col overflow-hidden">
         {view === "settings" ? (
-          <Settings onTrackerEnabledChanged={setTrackerEnabled} />
+          <Settings onTrackerEnabledChanged={setTrackerEnabled} onLinksEnabledChanged={setLinksEnabled} />
+        ) : view === "links" && linksEnabled ? (
+          <LinksView projects={projects} />
         ) : view === "tracker" && trackerEnabled ? (
           <TrackerView
             boards={trackerBoards}

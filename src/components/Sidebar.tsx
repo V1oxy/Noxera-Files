@@ -7,7 +7,7 @@ import {
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { FolderClosed, Kanban, Layers, ListChecks, Plus, Settings as SettingsIcon } from "lucide-react";
+import { FolderClosed, Kanban, Layers, Link2, ListChecks, Plus, Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { SortableRow } from "@/components/SortableRow";
@@ -33,6 +33,9 @@ interface SidebarProps {
   onSelectAllTasks: () => void;
   onNewTrackerBoard: () => void;
   onReorderTrackerBoards: (orderedIds: string[]) => void;
+  linksVisible: boolean;
+  linksActive: boolean;
+  onSelectLinks: () => void;
 }
 
 export function Sidebar({
@@ -53,6 +56,9 @@ export function Sidebar({
   onSelectAllTasks,
   onNewTrackerBoard,
   onReorderTrackerBoards,
+  linksVisible,
+  linksActive,
+  onSelectLinks,
 }: SidebarProps) {
   const { t } = useLanguage();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -198,6 +204,28 @@ export function Sidebar({
               <Plus size={15} strokeWidth={1.75} />
               {t("tracker.newBoard")}
             </button>
+          </>
+        )}
+
+        {linksVisible && (
+          <>
+            <div className="mb-1 mt-5 flex items-center px-2 pt-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-label-tertiary">{t("sidebar.links")}</p>
+            </div>
+
+            <nav className="flex flex-col gap-0.5">
+              <button
+                onClick={onSelectLinks}
+                className={`flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
+                  linksActive
+                    ? "bg-accent/[0.14] font-medium text-accent"
+                    : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                }`}
+              >
+                <Link2 size={15} strokeWidth={1.75} className={linksActive ? "text-accent" : "text-label-secondary"} />
+                <span className="min-w-0 flex-1 truncate">{t("sidebar.links")}</span>
+              </button>
+            </nav>
           </>
         )}
       </div>

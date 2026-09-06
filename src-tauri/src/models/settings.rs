@@ -21,6 +21,8 @@ pub struct AppSettings {
     /// database untouched) - it's purely a UI visibility switch, so it can
     /// be turned back on later with everything exactly as it was.
     pub tracker_enabled: bool,
+    /// Same idea as `tracker_enabled`, for the Links section.
+    pub links_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -34,6 +36,7 @@ pub struct SettingsUpdate {
     pub pending_whats_new_version: Option<String>,
     pub pending_whats_new_notes: Option<String>,
     pub tracker_enabled: Option<bool>,
+    pub links_enabled: Option<bool>,
 }
 
 /// Persisted outside the SQLite database (in the OS app-config directory)

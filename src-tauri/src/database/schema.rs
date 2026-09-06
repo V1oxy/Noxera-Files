@@ -196,6 +196,31 @@ CREATE TABLE IF NOT EXISTS tracker_task_local_files (
     position     INTEGER NOT NULL DEFAULT 0,
     added_at     TEXT NOT NULL
 );
+
+-- Links: a small per-project bookmark manager. A link always belongs to a
+-- project, optionally to a group within it - deleting a group never deletes
+-- its links (ON DELETE SET NULL), it just ungroups them, matching the
+-- product requirement that groups are purely organizational.
+CREATE TABLE IF NOT EXISTS link_groups (
+    id          TEXT PRIMARY KEY,
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    position    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS links (
+    id          TEXT PRIMARY KEY,
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    group_id    TEXT REFERENCES link_groups(id) ON DELETE SET NULL,
+    title       TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    description TEXT,
+    position    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
 "#;
 
 /// Index definitions only. Run last (after `TABLES_SQL` and `migrate()`),
@@ -223,6 +248,9 @@ CREATE INDEX IF NOT EXISTS idx_tracker_task_files_task_id ON tracker_task_files(
 CREATE INDEX IF NOT EXISTS idx_tracker_task_files_file_id ON tracker_task_files(file_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_task_events_task_id ON tracker_task_events(task_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_task_local_files_task_id ON tracker_task_local_files(task_id);
+CREATE INDEX IF NOT EXISTS idx_link_groups_project_id ON link_groups(project_id);
+CREATE INDEX IF NOT EXISTS idx_links_project_id ON links(project_id);
+CREATE INDEX IF NOT EXISTS idx_links_group_id ON links(group_id);
 "#;
 
 /// Statements applied after `TABLES_SQL`, guarded by their own existence

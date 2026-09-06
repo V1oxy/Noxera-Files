@@ -92,7 +92,7 @@ function PillSelect({
 }
 
 export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onDeleted }: TaskDetailPanelProps) {
-  const { t, locale, translateError } = useLanguage();
+  const { t, translateError } = useLanguage();
   const { showToast } = useToast();
   const { detail, refresh } = useTrackerTaskDetail(taskId);
   const { statuses } = useTrackerStatuses(detail?.boardId ?? null);
@@ -183,40 +183,60 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   }
 
   async function handleStatusChange(statusId: string) {
-    await moveTrackerTask(taskId, statusId, [taskId]);
-    await refresh();
-    onChanged();
+    try {
+      await moveTrackerTask(taskId, statusId, [taskId]);
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
   }
 
   async function handleFieldValue(fieldId: string, value: string) {
-    const next = detail!.fieldValues.filter((fv) => fv.fieldId !== fieldId);
-    next.push({ fieldId, value: value || null });
-    await setTrackerTaskFieldValues(taskId, next);
-    await refresh();
+    try {
+      const next = detail!.fieldValues.filter((fv) => fv.fieldId !== fieldId);
+      next.push({ fieldId, value: value || null });
+      await setTrackerTaskFieldValues(taskId, next);
+      await refresh();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
   }
 
   async function handleLabelToggle(labelId: string) {
-    const has = detail!.labelIds.includes(labelId);
-    const next = has ? detail!.labelIds.filter((id) => id !== labelId) : [...detail!.labelIds, labelId];
-    await setTrackerTaskLabels(taskId, next);
-    await refresh();
+    try {
+      const has = detail!.labelIds.includes(labelId);
+      const next = has ? detail!.labelIds.filter((id) => id !== labelId) : [...detail!.labelIds, labelId];
+      await setTrackerTaskLabels(taskId, next);
+      await refresh();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
   }
 
   async function handleAddFile(result: FilePickerResult) {
-    await attachTrackerTaskFile(taskId, {
-      fileId: result.file.id,
-      versionId: result.alwaysLatest ? undefined : result.versionId,
-      alwaysLatest: result.alwaysLatest,
-    });
-    setPickerOpen(false);
-    await refresh();
-    onChanged();
+    try {
+      await attachTrackerTaskFile(taskId, {
+        fileId: result.file.id,
+        versionId: result.alwaysLatest ? undefined : result.versionId,
+        alwaysLatest: result.alwaysLatest,
+      });
+      setPickerOpen(false);
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
   }
 
   async function handleRemoveFile(taskFile: TrackerTaskFile) {
-    await detachTrackerTaskFile(taskFile.id);
-    await refresh();
-    onChanged();
+    try {
+      await detachTrackerTaskFile(taskFile.id);
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
   }
 
   async function handleOpenFile(taskFile: TrackerTaskFile) {
@@ -241,17 +261,25 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   async function handleAddLocalFiles() {
     const paths = await pickFilesToUpload(true);
     if (paths.length === 0) return;
-    for (const path of paths) {
-      await addTrackerTaskLocalFile(taskId, path);
+    try {
+      for (const path of paths) {
+        await addTrackerTaskLocalFile(taskId, path);
+      }
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
     }
-    await refresh();
-    onChanged();
   }
 
   async function handleRemoveLocalFile(localFile: TrackerTaskLocalFile) {
-    await removeTrackerTaskLocalFile(localFile.id);
-    await refresh();
-    onChanged();
+    try {
+      await removeTrackerTaskLocalFile(localFile.id);
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
   }
 
   async function handleOpenLocalFile(localFile: TrackerTaskLocalFile) {
@@ -264,22 +292,34 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
 
   async function handleAddComment() {
     if (!comment.trim()) return;
-    await addTrackerTaskComment(taskId, comment.trim());
-    setComment("");
-    await refresh();
+    try {
+      await addTrackerTaskComment(taskId, comment.trim());
+      setComment("");
+      await refresh();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
   }
 
   async function handleTogglePin() {
-    await setTrackerTaskPinned(taskId, !detail!.pinned);
-    await refresh();
-    onChanged();
+    try {
+      await setTrackerTaskPinned(taskId, !detail!.pinned);
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
   }
 
   async function handleToggleArchive() {
-    await setTrackerTaskArchived(taskId, !detail!.archived);
-    await refresh();
-    onChanged();
-    showToast({ title: detail!.archived ? t("tracker.restoredFromArchive") : t("tracker.archived") });
+    try {
+      await setTrackerTaskArchived(taskId, !detail!.archived);
+      await refresh();
+      onChanged();
+      showToast({ title: detail!.archived ? t("tracker.restoredFromArchive") : t("tracker.archived") });
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
   }
 
   async function handleDelete() {

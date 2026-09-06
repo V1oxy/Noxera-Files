@@ -3,16 +3,6 @@ import { Paperclip, Pin, RefreshCw } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { formatFullDateTime } from "@/utils/format";
 
-export function PriorityDot({ name, color, size = 7 }: { name: string; color: string; size?: number }) {
-  return (
-    <span
-      title={name}
-      className="inline-block shrink-0 rounded-full"
-      style={{ width: size, height: size, backgroundColor: color }}
-    />
-  );
-}
-
 export function PriorityBadge({ name, color, className = "" }: { name: string; color: string; className?: string }) {
   return (
     <span

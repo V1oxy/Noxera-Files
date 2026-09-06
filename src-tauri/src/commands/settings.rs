@@ -21,6 +21,7 @@ const KEY_LAST_WHATS_NEW_VERSION: &str = "last_whats_new_version";
 const KEY_PENDING_WHATS_NEW_VERSION: &str = "pending_whats_new_version";
 const KEY_PENDING_WHATS_NEW_NOTES: &str = "pending_whats_new_notes";
 const KEY_TRACKER_ENABLED: &str = "tracker_enabled";
+const KEY_LINKS_ENABLED: &str = "links_enabled";
 
 const ACCENT_COLORS: [&str; 10] = [
     "green", "blue", "teal", "purple", "pink", "red", "orange", "amber", "indigo", "graphite",
@@ -114,6 +115,9 @@ pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
         let tracker_enabled = settings_db::get(conn, KEY_TRACKER_ENABLED)?
             .map(|v| v == "true")
             .unwrap_or(true);
+        let links_enabled = settings_db::get(conn, KEY_LINKS_ENABLED)?
+            .map(|v| v == "true")
+            .unwrap_or(true);
         Ok(AppSettings {
             theme,
             language,
@@ -124,6 +128,7 @@ pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
             pending_whats_new_version,
             pending_whats_new_notes,
             tracker_enabled,
+            links_enabled,
         })
     })
 }
@@ -176,6 +181,10 @@ pub fn update_settings(
         if let Some(enabled) = update.tracker_enabled {
             settings_db::set(conn, KEY_TRACKER_ENABLED, if enabled { "true" } else { "false" })?;
             crate::utils::logger::info(storage, &format!("Setting changed: tracker_enabled = {enabled}"));
+        }
+        if let Some(enabled) = update.links_enabled {
+            settings_db::set(conn, KEY_LINKS_ENABLED, if enabled { "true" } else { "false" })?;
+            crate::utils::logger::info(storage, &format!("Setting changed: links_enabled = {enabled}"));
         }
         Ok(())
     })?;
