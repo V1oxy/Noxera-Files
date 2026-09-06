@@ -10,7 +10,7 @@ import { NewTaskModal, type NewTaskInitialFile } from "@/components/tracker/NewT
 import { TaskDetailPanel } from "@/components/tracker/TaskDetailPanel";
 import { useLanguage } from "@/hooks/useLanguage";
 import type { TrackerUiState, TrackerViewState } from "@/hooks/useTracker";
-import { useTrackerSettings, useTrackerStatuses, useTrackerTasks } from "@/hooks/useTracker";
+import { useTrackerStatuses, useTrackerTasks } from "@/hooks/useTracker";
 import { createTrackerTask, moveTrackerTask, setTrackerBoardCardSize } from "@/services/api";
 import type { CardSize, TrackerBoard, TrackerTask } from "@/types";
 
@@ -38,7 +38,6 @@ export function TrackerView({
   onOpenProject,
 }: TrackerViewProps) {
   const { t } = useLanguage();
-  const { settings } = useTrackerSettings();
 
   const view: TrackerViewState = uiState.view ?? (boards[0] ? { kind: "board", boardId: boards[0].id } : { kind: "all" });
   const board = view.kind === "board" ? boards.find((b) => b.id === view.boardId) ?? null : null;
@@ -139,7 +138,6 @@ export function TrackerView({
             statuses={statuses}
             tasks={tasks}
             cardSize={board.cardSize}
-            display={settings?.cardDisplay}
             onOpenTask={(task) => setSelectedTaskId(task.id)}
             onMove={handleMove}
             onQuickAdd={handleQuickAdd}

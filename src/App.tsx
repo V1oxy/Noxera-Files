@@ -7,6 +7,7 @@ import { ProjectModal } from "@/components/ProjectModal";
 import { Sidebar } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { ToastContainer } from "@/components/Toast";
+import { NewBoardModal } from "@/components/tracker/NewBoardModal";
 import type { NewTaskInitialFile } from "@/components/tracker/NewTaskModal";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
 import { AccentColorProvider, useAccentColor } from "@/hooks/useAccentColor";
@@ -20,9 +21,8 @@ import { useWhatsNew } from "@/hooks/useWhatsNew";
 import { Onboarding } from "@/pages/Onboarding";
 import { type PendingFileOpen, ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
-import { TrackerSettingsPage } from "@/pages/TrackerSettings";
 import { TrackerView } from "@/pages/TrackerView";
-import { createProject, getSettings, isInitialized, reorderProjects, reorderTrackerBoards } from "@/services/api";
+import { createProject, createTrackerBoard, getSettings, isInitialized, reorderProjects, reorderTrackerBoards } from "@/services/api";
 import type { GlobalFileHit } from "@/types";
 
 function MainShell() {
@@ -33,8 +33,9 @@ function MainShell() {
   const { data: whatsNewData, dismiss: dismissWhatsNew } = useWhatsNew();
   const { projects, refresh: refreshProjects } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [view, setView] = useState<"project" | "settings" | "tracker" | "trackerSettings">("project");
+  const [view, setView] = useState<"project" | "settings" | "tracker">("project");
   const [createOpen, setCreateOpen] = useState(false);
+  const [newBoardOpen, setNewBoardOpen] = useState(false);
   const [navResetNonce, setNavResetNonce] = useState(0);
   const [pendingFileOpen, setPendingFileOpen] = useState<PendingFileOpen | null>(null);
   const { boards: trackerBoards, refresh: refreshTrackerBoards } = useTrackerBoards();
@@ -79,7 +80,7 @@ function MainShell() {
   // disappeared from the sidebar - the tracker's own data is untouched, so
   // there's nothing to clean up here, just the current screen.
   useEffect(() => {
-    if (!trackerEnabled && (view === "tracker" || view === "trackerSettings")) {
+    if (!trackerEnabled && view === "tracker") {
       setView("project");
     }
   }, [trackerEnabled, view]);
@@ -132,8 +133,7 @@ function MainShell() {
           tracker.update({ view: { kind: "all" } });
           setView("tracker");
         }}
-        onNewTrackerBoard={() => setView("trackerSettings")}
-        onOpenTrackerSettings={() => setView("trackerSettings")}
+        onNewTrackerBoard={() => setNewBoardOpen(true)}
         onReorderTrackerBoards={(orderedIds) => {
           void reorderTrackerBoards(orderedIds).then(() => refreshTrackerBoards());
         }}
@@ -142,8 +142,6 @@ function MainShell() {
       <div className="relative isolate flex flex-1 flex-col overflow-hidden">
         {view === "settings" ? (
           <Settings onTrackerEnabledChanged={setTrackerEnabled} />
-        ) : view === "trackerSettings" && trackerEnabled ? (
-          <TrackerSettingsPage boards={trackerBoards} onBoardsChanged={() => refreshTrackerBoards()} />
         ) : view === "tracker" && trackerEnabled ? (
           <TrackerView
             boards={trackerBoards}
@@ -197,6 +195,18 @@ function MainShell() {
           await refreshProjects();
           setSelectedProjectId(project.id);
           setView("project");
+        }}
+      />
+
+      <NewBoardModal
+        open={newBoardOpen}
+        onCancel={() => setNewBoardOpen(false)}
+        onConfirm={async (name) => {
+          const board = await createTrackerBoard({ name });
+          setNewBoardOpen(false);
+          await refreshTrackerBoards();
+          tracker.update({ view: { kind: "board", boardId: board.id } });
+          setView("tracker");
         }}
       />
 

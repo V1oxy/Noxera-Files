@@ -8,13 +8,11 @@ import {
   getTrackerFields,
   getTrackerLabels,
   getTrackerPriorities,
-  getTrackerSettings,
   getTrackerStatuses,
   getTrackerTask,
   getTrackerTasks,
   getTrackerUiState,
   setTrackerUiState,
-  updateTrackerSettings,
 } from "@/services/api";
 import type {
   SortDirection,
@@ -23,7 +21,6 @@ import type {
   TrackerField,
   TrackerLabel,
   TrackerPriority,
-  TrackerSettings,
   TrackerStatus,
   TrackerTask,
   TrackerTaskDetail,
@@ -267,32 +264,6 @@ export function useTrackerTaskDetail(taskId: string | null) {
   }, [refresh]);
 
   return { detail, loading, error, refresh };
-}
-
-export function useTrackerSettings() {
-  const [settings, setSettings] = useState<TrackerSettings | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      setSettings(await getTrackerSettings());
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  const save = useCallback(async (next: TrackerSettings) => {
-    const saved = await updateTrackerSettings(next);
-    setSettings(saved);
-    return saved;
-  }, []);
-
-  return { settings, loading, refresh, save };
 }
 
 // ---- Persisted UI state (spec section 35) --------------------------------------

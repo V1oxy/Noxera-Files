@@ -7,7 +7,7 @@ import {
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { FolderClosed, Kanban, Layers, ListChecks, Plus, Settings as SettingsIcon, Sliders } from "lucide-react";
+import { FolderClosed, Kanban, Layers, ListChecks, Plus, Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { SortableRow } from "@/components/SortableRow";
@@ -32,7 +32,6 @@ interface SidebarProps {
   onSelectTrackerBoard: (boardId: string) => void;
   onSelectAllTasks: () => void;
   onNewTrackerBoard: () => void;
-  onOpenTrackerSettings: () => void;
   onReorderTrackerBoards: (orderedIds: string[]) => void;
 }
 
@@ -53,7 +52,6 @@ export function Sidebar({
   onSelectTrackerBoard,
   onSelectAllTasks,
   onNewTrackerBoard,
-  onOpenTrackerSettings,
   onReorderTrackerBoards,
 }: SidebarProps) {
   const { t } = useLanguage();
@@ -149,15 +147,8 @@ export function Sidebar({
 
         {trackerVisible && (
           <>
-            <div className="mb-1 mt-5 flex items-center justify-between px-2 pt-1">
+            <div className="mb-1 mt-5 flex items-center px-2 pt-1">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-label-tertiary">{t("sidebar.tracker")}</p>
-              <button
-                onClick={onOpenTrackerSettings}
-                title={t("tracker.settingsTitle")}
-                className="rounded-apple-sm p-0.5 text-label-tertiary transition-colors hover:bg-black/[0.06] hover:text-label-primary dark:hover:bg-white/[0.1]"
-              >
-                <Sliders size={12} />
-              </button>
             </div>
 
             <nav className="flex flex-col gap-0.5">
