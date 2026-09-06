@@ -83,6 +83,7 @@ export interface AppSettings {
   lastWhatsNewVersion: string | null;
   pendingWhatsNewVersion: string | null;
   pendingWhatsNewNotes: string | null;
+  trackerEnabled: boolean;
 }
 
 export interface StorageInfo {

@@ -85,6 +85,7 @@ export const updateSettings = (update: {
   lastWhatsNewVersion?: string;
   pendingWhatsNewVersion?: string;
   pendingWhatsNewNotes?: string;
+  trackerEnabled?: boolean;
 }) => call<AppSettings>("update_settings", { update });
 export const getStorageInfo = () => call<StorageInfo>("get_storage_info");
 export const openDataFolder = (which: "storage" | "backups" | "logs") =>

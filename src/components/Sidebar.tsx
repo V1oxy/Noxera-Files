@@ -24,6 +24,7 @@ interface SidebarProps {
   onReorderProjects: (orderedIds: string[]) => void;
   settingsActive: boolean;
   updateAvailable?: boolean;
+  trackerVisible: boolean;
   trackerActive: boolean;
   trackerBoards: TrackerBoard[];
   trackerView: TrackerViewState | null;
@@ -42,6 +43,7 @@ export function Sidebar({
   onReorderProjects,
   settingsActive,
   updateAvailable,
+  trackerVisible,
   trackerActive,
   trackerBoards,
   trackerView,
@@ -123,55 +125,59 @@ export function Sidebar({
           {t("sidebar.newProject")}
         </button>
 
-        <div className="mb-1 mt-5 flex items-center justify-between px-2 pt-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-label-tertiary">{t("sidebar.tracker")}</p>
-          <button
-            onClick={onOpenTrackerSettings}
-            title={t("tracker.settingsTitle")}
-            className="rounded-apple-sm p-0.5 text-label-tertiary transition-colors hover:bg-black/[0.06] hover:text-label-primary dark:hover:bg-white/[0.1]"
-          >
-            <Sliders size={12} />
-          </button>
-        </div>
-
-        <nav className="flex flex-col gap-0.5">
-          <button
-            onClick={onSelectAllTasks}
-            className={`flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
-              trackerActive && trackerView?.kind === "all"
-                ? "bg-accent/[0.14] font-medium text-accent"
-                : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
-            }`}
-          >
-            <ListChecks size={15} strokeWidth={1.75} className={trackerActive && trackerView?.kind === "all" ? "text-accent" : "text-label-secondary"} />
-            <span className="min-w-0 flex-1 truncate">{t("tracker.allTasks")}</span>
-          </button>
-
-          {trackerBoards.map((board) => {
-            const active = trackerActive && trackerView?.kind === "board" && trackerView.boardId === board.id;
-            return (
+        {trackerVisible && (
+          <>
+            <div className="mb-1 mt-5 flex items-center justify-between px-2 pt-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-label-tertiary">{t("sidebar.tracker")}</p>
               <button
-                key={board.id}
-                onClick={() => onSelectTrackerBoard(board.id)}
+                onClick={onOpenTrackerSettings}
+                title={t("tracker.settingsTitle")}
+                className="rounded-apple-sm p-0.5 text-label-tertiary transition-colors hover:bg-black/[0.06] hover:text-label-primary dark:hover:bg-white/[0.1]"
+              >
+                <Sliders size={12} />
+              </button>
+            </div>
+
+            <nav className="flex flex-col gap-0.5">
+              <button
+                onClick={onSelectAllTasks}
                 className={`flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
-                  active ? "bg-accent/[0.14] font-medium text-accent" : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                  trackerActive && trackerView?.kind === "all"
+                    ? "bg-accent/[0.14] font-medium text-accent"
+                    : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
                 }`}
               >
-                <Kanban size={15} strokeWidth={1.75} className={active ? "text-accent" : "text-label-secondary"} />
-                <span className="min-w-0 flex-1 truncate">{board.name}</span>
-                {board.taskCount > 0 && <span className="shrink-0 text-[11px] text-label-tertiary">{board.taskCount}</span>}
+                <ListChecks size={15} strokeWidth={1.75} className={trackerActive && trackerView?.kind === "all" ? "text-accent" : "text-label-secondary"} />
+                <span className="min-w-0 flex-1 truncate">{t("tracker.allTasks")}</span>
               </button>
-            );
-          })}
-        </nav>
 
-        <button
-          onClick={onNewTrackerBoard}
-          className="mt-1 flex w-full items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] text-label-secondary transition-colors hover:bg-black/[0.04] hover:text-label-primary dark:hover:bg-white/[0.06]"
-        >
-          <Plus size={15} strokeWidth={1.75} />
-          {t("tracker.newBoard")}
-        </button>
+              {trackerBoards.map((board) => {
+                const active = trackerActive && trackerView?.kind === "board" && trackerView.boardId === board.id;
+                return (
+                  <button
+                    key={board.id}
+                    onClick={() => onSelectTrackerBoard(board.id)}
+                    className={`flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
+                      active ? "bg-accent/[0.14] font-medium text-accent" : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <Kanban size={15} strokeWidth={1.75} className={active ? "text-accent" : "text-label-secondary"} />
+                    <span className="min-w-0 flex-1 truncate">{board.name}</span>
+                    {board.taskCount > 0 && <span className="shrink-0 text-[11px] text-label-tertiary">{board.taskCount}</span>}
+                  </button>
+                );
+              })}
+            </nav>
+
+            <button
+              onClick={onNewTrackerBoard}
+              className="mt-1 flex w-full items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] text-label-secondary transition-colors hover:bg-black/[0.04] hover:text-label-primary dark:hover:bg-white/[0.06]"
+            >
+              <Plus size={15} strokeWidth={1.75} />
+              {t("tracker.newBoard")}
+            </button>
+          </>
+        )}
       </div>
 
       <div className="no-drag border-t border-surface-border px-3 py-3">

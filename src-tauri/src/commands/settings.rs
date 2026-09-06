@@ -20,6 +20,7 @@ const KEY_ACCENT_COLOR: &str = "accent_color";
 const KEY_LAST_WHATS_NEW_VERSION: &str = "last_whats_new_version";
 const KEY_PENDING_WHATS_NEW_VERSION: &str = "pending_whats_new_version";
 const KEY_PENDING_WHATS_NEW_NOTES: &str = "pending_whats_new_notes";
+const KEY_TRACKER_ENABLED: &str = "tracker_enabled";
 
 const ACCENT_COLORS: [&str; 10] = [
     "green", "blue", "teal", "purple", "pink", "red", "orange", "amber", "indigo", "graphite",
@@ -110,6 +111,9 @@ pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
         let last_whats_new_version = settings_db::get(conn, KEY_LAST_WHATS_NEW_VERSION)?;
         let pending_whats_new_version = settings_db::get(conn, KEY_PENDING_WHATS_NEW_VERSION)?;
         let pending_whats_new_notes = settings_db::get(conn, KEY_PENDING_WHATS_NEW_NOTES)?;
+        let tracker_enabled = settings_db::get(conn, KEY_TRACKER_ENABLED)?
+            .map(|v| v == "true")
+            .unwrap_or(true);
         Ok(AppSettings {
             theme,
             language,
@@ -119,6 +123,7 @@ pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
             last_whats_new_version,
             pending_whats_new_version,
             pending_whats_new_notes,
+            tracker_enabled,
         })
     })
 }
@@ -167,6 +172,10 @@ pub fn update_settings(
         }
         if let Some(notes) = &update.pending_whats_new_notes {
             settings_db::set(conn, KEY_PENDING_WHATS_NEW_NOTES, notes)?;
+        }
+        if let Some(enabled) = update.tracker_enabled {
+            settings_db::set(conn, KEY_TRACKER_ENABLED, if enabled { "true" } else { "false" })?;
+            crate::utils::logger::info(storage, &format!("Setting changed: tracker_enabled = {enabled}"));
         }
         Ok(())
     })?;

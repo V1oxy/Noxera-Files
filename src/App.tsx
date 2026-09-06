@@ -41,6 +41,10 @@ function MainShell() {
   const tracker = useTrackerUiState();
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [pendingNewTaskFile, setPendingNewTaskFile] = useState<NewTaskInitialFile | null>(null);
+  // Defaults to visible so the section doesn't flash hidden while settings
+  // are still loading - flipped to false only once we actually know the
+  // user turned it off (see Settings' onTrackerEnabledChanged).
+  const [trackerEnabled, setTrackerEnabled] = useState(true);
 
   function openTask(taskId: string) {
     setPendingTaskId(taskId);
@@ -58,6 +62,7 @@ function MainShell() {
         setTheme(s.theme, false);
         setLanguage(s.language, false);
         setAccentColor(s.accentColor, false);
+        setTrackerEnabled(s.trackerEnabled);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -68,6 +73,16 @@ function MainShell() {
       setSelectedProjectId(projects[0].id);
     }
   }, [projects, selectedProjectId]);
+
+  // Turning the module off while it's open sends the user back to their
+  // projects instead of leaving them stranded on a screen that just
+  // disappeared from the sidebar - the tracker's own data is untouched, so
+  // there's nothing to clean up here, just the current screen.
+  useEffect(() => {
+    if (!trackerEnabled && (view === "tracker" || view === "trackerSettings")) {
+      setView("project");
+    }
+  }, [trackerEnabled, view]);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
 
@@ -104,6 +119,7 @@ function MainShell() {
         }}
         settingsActive={view === "settings"}
         updateAvailable={updateStatus === "available" || updateStatus === "readyToRestart"}
+        trackerVisible={trackerEnabled}
         trackerActive={view === "tracker"}
         trackerBoards={trackerBoards}
         trackerView={tracker.state.view}
@@ -121,10 +137,10 @@ function MainShell() {
 
       <div className="relative isolate flex flex-1 flex-col overflow-hidden">
         {view === "settings" ? (
-          <Settings />
-        ) : view === "trackerSettings" ? (
+          <Settings onTrackerEnabledChanged={setTrackerEnabled} />
+        ) : view === "trackerSettings" && trackerEnabled ? (
           <TrackerSettingsPage boards={trackerBoards} onBoardsChanged={() => refreshTrackerBoards()} />
-        ) : view === "tracker" ? (
+        ) : view === "tracker" && trackerEnabled ? (
           <TrackerView
             boards={trackerBoards}
             onBoardsChanged={() => refreshTrackerBoards()}
