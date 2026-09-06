@@ -2,6 +2,7 @@ import {
   Download,
   ExternalLink,
   History,
+  ListPlus,
   MoreHorizontal,
   Pencil,
   Sparkles,
@@ -24,6 +25,7 @@ interface FileRowActions {
   onShowWhatsNew: (file: FileEntry) => void;
   onRename: (file: FileEntry) => void;
   onDelete: (file: FileEntry) => void;
+  onCreateTask: (file: FileEntry) => void;
 }
 
 export function FileRow({
@@ -100,6 +102,7 @@ export function FileRow({
             { label: t("menu.uploadNewVersion"), icon: Upload, onClick: () => actions.onUploadNewVersion(file) },
             { label: t("menu.whatsNew"), icon: Sparkles, onClick: () => actions.onShowWhatsNew(file), dividerBefore: true },
             { label: t("menu.versionHistory"), icon: History, onClick: () => actions.onViewHistory(file) },
+            { label: t("tracker.createTaskFromFile"), icon: ListPlus, onClick: () => actions.onCreateTask(file), dividerBefore: true },
             { label: t("menu.rename"), icon: Pencil, onClick: () => actions.onRename(file), dividerBefore: true },
             { label: t("menu.delete"), icon: Trash2, onClick: () => actions.onDelete(file), danger: true, dividerBefore: true },
           ]}

@@ -58,6 +58,7 @@ interface FileListProps {
   onShowWhatsNew: (file: FileEntry) => void;
   onRename: (file: FileEntry) => void;
   onDelete: (file: FileEntry) => void;
+  onCreateTask: (file: FileEntry) => void;
   onOpenFolder: (folder: Folder) => void;
   onRenameFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;

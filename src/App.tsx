@@ -7,17 +7,21 @@ import { ProjectModal } from "@/components/ProjectModal";
 import { Sidebar } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { ToastContainer } from "@/components/Toast";
+import type { NewTaskInitialFile } from "@/components/tracker/NewTaskModal";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
 import { AccentColorProvider, useAccentColor } from "@/hooks/useAccentColor";
 import { LanguageProvider, useLanguage } from "@/hooks/useLanguage";
 import { ThemeProvider, useTheme } from "@/hooks/useTheme";
 import { useProjects } from "@/hooks/useProjects";
 import { ToastProvider } from "@/hooks/useToast";
+import { useTrackerBoards, useTrackerUiState } from "@/hooks/useTracker";
 import { UpdaterProvider, useUpdater } from "@/hooks/useUpdater";
 import { useWhatsNew } from "@/hooks/useWhatsNew";
 import { Onboarding } from "@/pages/Onboarding";
 import { type PendingFileOpen, ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
+import { TrackerSettingsPage } from "@/pages/TrackerSettings";
+import { TrackerView } from "@/pages/TrackerView";
 import { createProject, getSettings, isInitialized, reorderProjects } from "@/services/api";
 import type { GlobalFileHit } from "@/types";
 
@@ -29,10 +33,24 @@ function MainShell() {
   const { data: whatsNewData, dismiss: dismissWhatsNew } = useWhatsNew();
   const { projects, refresh: refreshProjects } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [view, setView] = useState<"project" | "settings">("project");
+  const [view, setView] = useState<"project" | "settings" | "tracker" | "trackerSettings">("project");
   const [createOpen, setCreateOpen] = useState(false);
   const [navResetNonce, setNavResetNonce] = useState(0);
   const [pendingFileOpen, setPendingFileOpen] = useState<PendingFileOpen | null>(null);
+  const { boards: trackerBoards, refresh: refreshTrackerBoards } = useTrackerBoards();
+  const tracker = useTrackerUiState();
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+  const [pendingNewTaskFile, setPendingNewTaskFile] = useState<NewTaskInitialFile | null>(null);
+
+  function openTask(taskId: string) {
+    setPendingTaskId(taskId);
+    setView("tracker");
+  }
+
+  function createTaskFromFile(file: NewTaskInitialFile) {
+    setPendingNewTaskFile(file);
+    setView("tracker");
+  }
 
   useEffect(() => {
     getSettings()
@@ -63,6 +81,12 @@ function MainShell() {
     setPendingFileOpen({ requestId: Date.now(), fileId: hit.id, folderId: hit.folderId });
   }
 
+  function handleOpenProjectFromTracker(projectId: string) {
+    setSelectedProjectId(projectId);
+    setView("project");
+    setNavResetNonce((n) => n + 1);
+  }
+
   return (
     <div className="flex flex-1 overflow-hidden bg-surface-content">
       <Sidebar
@@ -80,11 +104,38 @@ function MainShell() {
         }}
         settingsActive={view === "settings"}
         updateAvailable={updateStatus === "available" || updateStatus === "readyToRestart"}
+        trackerActive={view === "tracker"}
+        trackerBoards={trackerBoards}
+        trackerView={tracker.state.view}
+        onSelectTrackerBoard={(boardId) => {
+          tracker.update({ view: { kind: "board", boardId } });
+          setView("tracker");
+        }}
+        onSelectAllTasks={() => {
+          tracker.update({ view: { kind: "all" } });
+          setView("tracker");
+        }}
+        onNewTrackerBoard={() => setView("trackerSettings")}
+        onOpenTrackerSettings={() => setView("trackerSettings")}
       />
 
       <div className="relative isolate flex flex-1 flex-col overflow-hidden">
         {view === "settings" ? (
           <Settings />
+        ) : view === "trackerSettings" ? (
+          <TrackerSettingsPage boards={trackerBoards} onBoardsChanged={() => refreshTrackerBoards()} />
+        ) : view === "tracker" ? (
+          <TrackerView
+            boards={trackerBoards}
+            onBoardsChanged={() => refreshTrackerBoards()}
+            uiState={tracker.state}
+            updateUiState={tracker.update}
+            pendingTaskId={pendingTaskId}
+            onPendingTaskHandled={() => setPendingTaskId(null)}
+            pendingNewTaskFile={pendingNewTaskFile}
+            onPendingNewTaskFileHandled={() => setPendingNewTaskFile(null)}
+            onOpenProject={handleOpenProjectFromTracker}
+          />
         ) : selectedProject ? (
           <ProjectView
             key={selectedProject.id}
@@ -98,6 +149,8 @@ function MainShell() {
             pendingFileOpen={pendingFileOpen}
             onPendingFileOpenHandled={() => setPendingFileOpen(null)}
             onNavigateToFile={handleNavigateToFile}
+            onOpenTask={openTask}
+            onCreateTaskFromFile={createTaskFromFile}
           />
         ) : (
           <div className="flex flex-1 items-center justify-center">

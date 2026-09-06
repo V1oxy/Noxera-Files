@@ -13,6 +13,8 @@ import { ProjectModal } from "@/components/ProjectModal";
 import { RenameModal } from "@/components/RenameModal";
 import { RestoreModal } from "@/components/RestoreModal";
 import type { SearchScope } from "@/components/SearchScopeToggle";
+import type { NewTaskInitialFile } from "@/components/tracker/NewTaskModal";
+import { ProjectTasksTab } from "@/components/tracker/ProjectTasksTab";
 import { UploadModal } from "@/components/UploadModal";
 import { VersionHistory } from "@/components/VersionHistory";
 import { VersionInfoModal } from "@/components/VersionInfoModal";
@@ -79,6 +81,8 @@ interface ProjectViewProps {
   onPendingFileOpenHandled: () => void;
   /** A global search result was clicked - the caller (MainShell) owns project selection and decides whether that requires switching projects. */
   onNavigateToFile: (hit: GlobalFileHit) => void;
+  onOpenTask: (taskId: string) => void;
+  onCreateTaskFromFile: (file: NewTaskInitialFile) => void;
 }
 
 export function ProjectView({
@@ -89,10 +93,13 @@ export function ProjectView({
   pendingFileOpen,
   onPendingFileOpenHandled,
   onNavigateToFile,
+  onOpenTask,
+  onCreateTaskFromFile,
 }: ProjectViewProps) {
   const { showToast } = useToast();
   const { t, translateError } = useLanguage();
 
+  const [activeTab, setActiveTab] = useState<"files" | "tasks">("files");
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbEntry[]>([{ id: null, name: project.name }]);
 
@@ -569,6 +576,16 @@ export function ProjectView({
     onProjectDeleted();
   }
 
+  function handleCreateTaskFromFile(file: FileEntry) {
+    if (!file.currentVersion) return;
+    onCreateTaskFromFile({ project, file, versionId: file.currentVersion.id, alwaysLatest: true });
+  }
+
+  function handleCreateTaskFromVersion(version: FileVersion) {
+    if (!detail) return;
+    onCreateTaskFromFile({ project, file: detail, versionId: version.id, alwaysLatest: false });
+  }
+
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden">
       <div className="drag-region flex shrink-0 items-start justify-between px-6 pb-2 pt-10">
@@ -600,6 +617,24 @@ export function ProjectView({
 
       <Breadcrumb entries={breadcrumb} onNavigate={navigateBreadcrumb} />
 
+      <div className="no-drag flex shrink-0 gap-1 px-6 pt-1">
+        <button
+          onClick={() => setActiveTab("files")}
+          className={`px-2.5 py-1.5 text-[12.5px] font-medium ${activeTab === "files" ? "border-b-2 border-accent text-accent" : "text-label-secondary"}`}
+        >
+          {t("project.tabFiles")}
+        </button>
+        <button
+          onClick={() => setActiveTab("tasks")}
+          className={`px-2.5 py-1.5 text-[12.5px] font-medium ${activeTab === "tasks" ? "border-b-2 border-accent text-accent" : "text-label-secondary"}`}
+        >
+          {t("project.tabTasks")}
+        </button>
+      </div>
+
+      {activeTab === "tasks" ? (
+        <ProjectTasksTab projectId={project.id} onOpenTask={onOpenTask} />
+      ) : (
       <FileList
         folders={search ? [] : folders}
         files={files}
@@ -628,6 +663,7 @@ export function ProjectView({
         onShowWhatsNew={(f) => setWhatsNewTarget(f)}
         onRename={(f) => setRenameTarget(f)}
         onDelete={(f) => setDeleteFileTarget(f)}
+        onCreateTask={handleCreateTaskFromFile}
         onOpenFolder={openFolder}
         onRenameFolder={(f) => setRenameFolderTarget(f)}
         onDeleteFolder={(f) => setDeleteFolderTarget(f)}
@@ -638,6 +674,7 @@ export function ProjectView({
           inAppDragActiveRef.current = active;
         }}
       />
+      )}
 
       <VersionHistory
         open={historyFileId !== null}
@@ -657,6 +694,8 @@ export function ProjectView({
         onRestore={(v) => setRestoreTarget(v)}
         onDelete={(v) => setDeleteVersionTarget(v)}
         onEditDescription={handleEditVersionDescription}
+        onCreateTask={handleCreateTaskFromVersion}
+        onOpenTask={onOpenTask}
       />
 
       <VersionInfoModal

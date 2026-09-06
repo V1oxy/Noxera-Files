@@ -1,4 +1,4 @@
-import { Check, Download, ExternalLink, Pencil, RotateCcw, Trash2, X } from "lucide-react";
+import { Check, Download, ExternalLink, ListPlus, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/Button";
@@ -18,6 +18,7 @@ interface VersionCardProps {
   onRestore: (version: FileVersion) => void;
   onDelete: (version: FileVersion) => void;
   onEditDescription: (version: FileVersion, description: string) => Promise<void>;
+  onCreateTask: (version: FileVersion) => void;
 }
 
 export function VersionCard({
@@ -29,6 +30,7 @@ export function VersionCard({
   onRestore,
   onDelete,
   onEditDescription,
+  onCreateTask,
 }: VersionCardProps) {
   const { t, locale, translateError } = useLanguage();
   const [editing, setEditing] = useState(false);
@@ -144,6 +146,10 @@ export function VersionCard({
         <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/10" onClick={() => onDelete(version)}>
           <Trash2 size={13} />
           {t("common.delete")}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => onCreateTask(version)}>
+          <ListPlus size={13} />
+          {t("tracker.createTaskFromVersion")}
         </Button>
       </div>
     </div>

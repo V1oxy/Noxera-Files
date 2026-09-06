@@ -1,9 +1,11 @@
-import { FileUp, X } from "lucide-react";
+import { FileUp, ListChecks, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/Button";
+import { StatusPill } from "@/components/tracker/shared";
 import { VersionCard } from "@/components/VersionCard";
 import { useLanguage } from "@/hooks/useLanguage";
+import { useFileTrackerTasks } from "@/hooks/useTracker";
 import type { FileDetail, FileVersion } from "@/types";
 
 interface VersionHistoryProps {
@@ -19,6 +21,8 @@ interface VersionHistoryProps {
   onRestore: (version: FileVersion) => void;
   onDelete: (version: FileVersion) => void;
   onEditDescription: (version: FileVersion, description: string) => Promise<void>;
+  onCreateTask: (version: FileVersion) => void;
+  onOpenTask: (taskId: string) => void;
 }
 
 export function VersionHistory({
@@ -34,8 +38,11 @@ export function VersionHistory({
   onRestore,
   onDelete,
   onEditDescription,
+  onCreateTask,
+  onOpenTask,
 }: VersionHistoryProps) {
   const { t } = useLanguage();
+  const { tasks: linkedTasks } = useFileTrackerTasks(detail?.id ?? null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const [hoveringZone, setHoveringZone] = useState(false);
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
@@ -115,6 +122,26 @@ export function VersionHistory({
         </div>
 
         <div ref={dropZoneRef} className="relative flex-1 overflow-y-auto px-5 py-4">
+          {linkedTasks.length > 0 && (
+            <div className="mb-3 rounded-apple border border-surface-border bg-surface-card p-2.5">
+              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-label-tertiary">
+                <ListChecks size={12} />
+                {t("tracker.linkedTasks")}
+              </p>
+              <div className="space-y-1">
+                {linkedTasks.map((task) => (
+                  <button
+                    key={task.id}
+                    onClick={() => onOpenTask(task.id)}
+                    className="flex w-full items-center justify-between gap-2 rounded-apple-sm px-1.5 py-1 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] text-label-primary">{task.title}</span>
+                    <StatusPill name={task.statusName} color={task.statusColor} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             {loading && <p className="text-[12.5px] text-label-secondary">{t("files.loading")}</p>}
             {!loading &&
@@ -129,6 +156,7 @@ export function VersionHistory({
                   onRestore={onRestore}
                   onDelete={onDelete}
                   onEditDescription={onEditDescription}
+                  onCreateTask={onCreateTask}
                 />
               ))}
           </div>

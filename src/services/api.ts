@@ -9,6 +9,7 @@ import type {
   AppErrorPayload,
   AppSettings,
   BackupResult,
+  DuplicateTaskOptions,
   FileDetail,
   FileEntry,
   FileVersion,
@@ -16,10 +17,27 @@ import type {
   FolderPathEntry,
   GlobalFileHit,
   ImportFolderResult,
+  NewTrackerTaskFile,
   Project,
   SortDirection,
   SortField,
   StorageInfo,
+  TrackerBoard,
+  TrackerBoardInput,
+  TrackerField,
+  TrackerFieldInput,
+  TrackerFieldValue,
+  TrackerLabel,
+  TrackerLabelInput,
+  TrackerSettings,
+  TrackerStatus,
+  TrackerStatusInput,
+  TrackerTask,
+  TrackerTaskDetail,
+  TrackerTaskEvent,
+  TrackerTaskFilter,
+  TrackerTaskInput,
+  TrackerTaskUpdateInput,
   UploadProgressEvent,
 } from "@/types";
 
@@ -189,3 +207,92 @@ export async function downloadVersion(versionId: string, defaultFilename: string
 export function onUploadProgress(handler: (e: UploadProgressEvent) => void): Promise<UnlistenFn> {
   return listen<UploadProgressEvent>("upload-progress", (event) => handler(event.payload));
 }
+
+// ---- Tracker: boards ------------------------------------------------------------
+
+export const getTrackerBoards = () => call<TrackerBoard[]>("get_tracker_boards");
+export const createTrackerBoard = (input: TrackerBoardInput) => call<TrackerBoard>("create_tracker_board", { input });
+export const updateTrackerBoard = (boardId: string, input: TrackerBoardInput) =>
+  call<TrackerBoard>("update_tracker_board", { boardId, input });
+export const setTrackerBoardCardSize = (boardId: string, cardSize: "compact" | "normal") =>
+  call<TrackerBoard>("set_tracker_board_card_size", { boardId, cardSize });
+export const reorderTrackerBoards = (orderedIds: string[]) =>
+  call<TrackerBoard[]>("reorder_tracker_boards", { orderedIds });
+export const deleteTrackerBoard = (boardId: string) => call<void>("delete_tracker_board", { boardId });
+
+// ---- Tracker: statuses ------------------------------------------------------------
+
+export const getTrackerStatuses = (boardId: string) => call<TrackerStatus[]>("get_tracker_statuses", { boardId });
+export const createTrackerStatus = (boardId: string, input: TrackerStatusInput) =>
+  call<TrackerStatus>("create_tracker_status", { boardId, input });
+export const updateTrackerStatus = (statusId: string, input: TrackerStatusInput) =>
+  call<TrackerStatus>("update_tracker_status", { statusId, input });
+export const setTrackerStatusDefault = (statusId: string) =>
+  call<TrackerStatus[]>("set_tracker_status_default", { statusId });
+export const setTrackerStatusIsDone = (statusId: string, isDone: boolean) =>
+  call<TrackerStatus>("set_tracker_status_is_done", { statusId, isDone });
+export const reorderTrackerStatuses = (orderedIds: string[]) =>
+  call<void>("reorder_tracker_statuses", { orderedIds });
+export const deleteTrackerStatus = (statusId: string, reassignToStatusId?: string | null) =>
+  call<void>("delete_tracker_status", { statusId, reassignToStatusId: reassignToStatusId ?? null });
+
+// ---- Tracker: custom fields ---------------------------------------------------
+
+export const getTrackerFields = (boardId: string) => call<TrackerField[]>("get_tracker_fields", { boardId });
+export const createTrackerField = (boardId: string, input: TrackerFieldInput) =>
+  call<TrackerField>("create_tracker_field", { boardId, input });
+export const updateTrackerField = (fieldId: string, input: TrackerFieldInput) =>
+  call<TrackerField>("update_tracker_field", { fieldId, input });
+export const reorderTrackerFields = (orderedIds: string[]) => call<void>("reorder_tracker_fields", { orderedIds });
+export const deleteTrackerField = (fieldId: string) => call<void>("delete_tracker_field", { fieldId });
+
+// ---- Tracker: labels ------------------------------------------------------------
+
+export const getTrackerLabels = (boardId: string) => call<TrackerLabel[]>("get_tracker_labels", { boardId });
+export const createTrackerLabel = (boardId: string, input: TrackerLabelInput) =>
+  call<TrackerLabel>("create_tracker_label", { boardId, input });
+export const updateTrackerLabel = (labelId: string, input: TrackerLabelInput) =>
+  call<TrackerLabel>("update_tracker_label", { labelId, input });
+export const reorderTrackerLabels = (orderedIds: string[]) => call<void>("reorder_tracker_labels", { orderedIds });
+export const deleteTrackerLabel = (labelId: string) => call<void>("delete_tracker_label", { labelId });
+
+// ---- Tracker: tasks ---------------------------------------------------------------
+
+export const getTrackerTasks = (boardId: string, includeArchived?: boolean) =>
+  call<TrackerTask[]>("get_tracker_tasks", { boardId, includeArchived: includeArchived ?? null });
+export const getAllTrackerTasks = (filter: TrackerTaskFilter) =>
+  call<TrackerTask[]>("get_all_tracker_tasks", { filter });
+export const getProjectTrackerTasks = (projectId: string) =>
+  call<TrackerTask[]>("get_project_tracker_tasks", { projectId });
+export const getFileTrackerTasks = (fileId: string) => call<TrackerTask[]>("get_file_tracker_tasks", { fileId });
+export const getTrackerTask = (taskId: string) => call<TrackerTaskDetail>("get_tracker_task", { taskId });
+export const createTrackerTask = (input: TrackerTaskInput) => call<TrackerTaskDetail>("create_tracker_task", { input });
+export const updateTrackerTask = (taskId: string, patch: TrackerTaskUpdateInput) =>
+  call<TrackerTaskDetail>("update_tracker_task", { taskId, patch });
+export const setTrackerTaskFieldValues = (taskId: string, values: TrackerFieldValue[]) =>
+  call<TrackerTaskDetail>("set_tracker_task_field_values", { taskId, values });
+export const setTrackerTaskLabels = (taskId: string, labelIds: string[]) =>
+  call<TrackerTaskDetail>("set_tracker_task_labels", { taskId, labelIds });
+export const moveTrackerTask = (taskId: string, statusId: string, orderedIds: string[]) =>
+  call<TrackerTask>("move_tracker_task", { taskId, statusId, orderedIds });
+export const setTrackerTaskPinned = (taskId: string, pinned: boolean) =>
+  call<TrackerTask>("set_tracker_task_pinned", { taskId, pinned });
+export const setTrackerTaskArchived = (taskId: string, archived: boolean) =>
+  call<TrackerTask>("set_tracker_task_archived", { taskId, archived });
+export const deleteTrackerTask = (taskId: string) => call<void>("delete_tracker_task", { taskId });
+export const duplicateTrackerTask = (taskId: string, options: DuplicateTaskOptions) =>
+  call<TrackerTaskDetail>("duplicate_tracker_task", { taskId, options });
+export const attachTrackerTaskFile = (taskId: string, file: NewTrackerTaskFile) =>
+  call<TrackerTaskDetail>("attach_tracker_task_file", { taskId, file });
+export const detachTrackerTaskFile = (taskFileId: string) =>
+  call<TrackerTaskDetail>("detach_tracker_task_file", { taskFileId });
+export const addTrackerTaskComment = (taskId: string, text: string) =>
+  call<TrackerTaskEvent>("add_tracker_task_comment", { taskId, text });
+
+// ---- Tracker: settings ---------------------------------------------------------
+
+export const getTrackerSettings = () => call<TrackerSettings>("get_tracker_settings");
+export const updateTrackerSettings = (settings: TrackerSettings) =>
+  call<TrackerSettings>("update_tracker_settings", { settings });
+export const getTrackerUiState = () => call<string | null>("get_tracker_ui_state");
+export const setTrackerUiState = (value: string) => call<void>("set_tracker_ui_state", { value });
