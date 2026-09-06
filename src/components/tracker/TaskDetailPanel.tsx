@@ -15,6 +15,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/Button";
@@ -34,6 +35,7 @@ import {
   detachTrackerTaskFile,
   openTrackerTaskLocalFile,
   openVersion,
+  pathIsDirectory,
   pickFilesToUpload,
   removeTrackerTaskLocalFile,
   setTrackerTaskArchived,
@@ -105,6 +107,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [tab, setTab] = useState<"files" | "history">("files");
+  const [isDragActive, setIsDragActive] = useState(false);
 
   useEffect(() => {
     if (detail) {
@@ -112,6 +115,48 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
       setDescription(detail.description ?? "");
     }
   }, [detail?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // An OS-level drag from Finder/Explorer dropped anywhere on this modal
+  // attaches the file(s) to the task the same way "add from computer" does -
+  // this listener is window-wide, but TaskDetailPanel is only ever mounted
+  // while it's the front-most modal (Sidebar/BoardKanban's own dnd-kit drags
+  // can't be in progress at the same time - they're behind the backdrop).
+  useEffect(() => {
+    const unlisten = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "over") {
+        setIsDragActive(true);
+      } else if (event.payload.type === "leave") {
+        setIsDragActive(false);
+      } else if (event.payload.type === "drop") {
+        setIsDragActive(false);
+        void handleDropPaths(event.payload.paths);
+      }
+    });
+    return () => {
+      unlisten.then((f) => f());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
+
+  async function handleDropPaths(paths: string[]) {
+    if (paths.length === 0) return;
+    const kinds = await Promise.all(paths.map((p) => pathIsDirectory(p).catch(() => false)));
+    const filePaths = paths.filter((_, i) => !kinds[i]);
+    if (filePaths.length === 0) return;
+    let succeeded = 0;
+    for (const p of filePaths) {
+      try {
+        await addTrackerTaskLocalFile(taskId, p);
+        succeeded++;
+      } catch {
+        // continue with the rest of the batch
+      }
+    }
+    if (succeeded > 0) {
+      await refresh();
+      onChanged();
+    }
+  }
 
   const fieldValueMap = useMemo(() => {
     const map = new Map<string, string | null>();
@@ -242,7 +287,15 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   return (
     <>
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-        <div className="animate-scale-in flex h-[82vh] w-[760px] max-w-[95vw] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="animate-scale-in relative flex h-[82vh] w-[760px] max-w-[95vw] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple" onMouseDown={(e) => e.stopPropagation()}>
+          {isDragActive && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-apple-lg border-2 border-dashed border-accent bg-accent/[0.08] backdrop-blur-[1px]">
+              <div className="flex flex-col items-center gap-2 text-accent">
+                <HardDrive size={28} />
+                <p className="text-[13px] font-medium">{t("tracker.dropFilesToAttach")}</p>
+              </div>
+            </div>
+          )}
           {/* Header */}
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-surface-border px-5 py-4">
             <div className="min-w-0 flex-1">
