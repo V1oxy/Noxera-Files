@@ -68,12 +68,26 @@ export function BoardSettingsModal({ open, board, onClose, onBoardChanged, onBoa
         ))}
       </div>
       <ModalBody>
+        {/* Every tab stays mounted (just hidden) instead of being swapped in
+            and out - each one fetches its own data on mount, so unmounting
+            it on every tab switch meant re-fetching from scratch every time,
+            flashing empty before the list popped back in. */}
         <div className="max-h-[55vh] overflow-y-auto">
-          {tab === "general" && <GeneralTab board={board} onBoardChanged={onBoardChanged} onBoardDeleted={onBoardDeleted} onClose={onClose} />}
-          {tab === "statuses" && <StatusesTab boardId={board.id} />}
-          {tab === "priorities" && <PrioritiesTab boardId={board.id} />}
-          {tab === "fields" && <FieldsTab boardId={board.id} />}
-          {tab === "labels" && <LabelsTab boardId={board.id} />}
+          <div className={tab === "general" ? "" : "hidden"}>
+            <GeneralTab board={board} onBoardChanged={onBoardChanged} onBoardDeleted={onBoardDeleted} onClose={onClose} />
+          </div>
+          <div className={tab === "statuses" ? "" : "hidden"}>
+            <StatusesTab boardId={board.id} />
+          </div>
+          <div className={tab === "priorities" ? "" : "hidden"}>
+            <PrioritiesTab boardId={board.id} />
+          </div>
+          <div className={tab === "fields" ? "" : "hidden"}>
+            <FieldsTab boardId={board.id} />
+          </div>
+          <div className={tab === "labels" ? "" : "hidden"}>
+            <LabelsTab boardId={board.id} />
+          </div>
         </div>
       </ModalBody>
     </Modal>
