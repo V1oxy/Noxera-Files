@@ -85,6 +85,9 @@ export interface AppSettings {
   pendingWhatsNewNotes: string | null;
   trackerEnabled: boolean;
   linksEnabled: boolean;
+  sidebarFilesCollapsed: boolean;
+  sidebarTrackerCollapsed: boolean;
+  sidebarLinksCollapsed: boolean;
 }
 
 export interface StorageInfo {
@@ -363,6 +366,20 @@ export interface CardDisplayConfig {
 }
 
 // ---- Links ----------------------------------------------------------------------
+
+/** A user-created top-level container for links, independent of `Project`. */
+export interface LinkProject {
+  id: string;
+  name: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+  linkCount: number;
+}
+
+export interface LinkProjectInput {
+  name: string;
+}
 
 export interface LinkGroup {
   id: string;

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
+import { LINKS_ALL_TAB } from "@/constants/links";
 import { ProjectModal } from "@/components/ProjectModal";
 import { Sidebar } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
@@ -15,6 +16,7 @@ import { LanguageProvider, useLanguage } from "@/hooks/useLanguage";
 import { ThemeProvider, useTheme } from "@/hooks/useTheme";
 import { useProjects } from "@/hooks/useProjects";
 import { ToastProvider } from "@/hooks/useToast";
+import { useLinkProjects } from "@/hooks/useLinks";
 import { useSerialTask } from "@/hooks/useSerialTask";
 import { useTrackerBoards, useTrackerUiState } from "@/hooks/useTracker";
 import { UpdaterProvider, useUpdater } from "@/hooks/useUpdater";
@@ -24,7 +26,7 @@ import { Onboarding } from "@/pages/Onboarding";
 import { type PendingFileOpen, ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
 import { TrackerView } from "@/pages/TrackerView";
-import { createProject, createTrackerBoard, getSettings, isInitialized, reorderProjects, reorderTrackerBoards } from "@/services/api";
+import { createProject, createTrackerBoard, getSettings, isInitialized, reorderProjects, reorderTrackerBoards, updateSettings } from "@/services/api";
 import type { GlobalFileHit } from "@/types";
 
 function MainShell() {
@@ -51,6 +53,17 @@ function MainShell() {
   // user turned it off (see Settings' onTrackerEnabledChanged).
   const [trackerEnabled, setTrackerEnabled] = useState(true);
   const [linksEnabled, setLinksEnabled] = useState(true);
+  const { projects: linkProjects, refresh: refreshLinkProjects } = useLinkProjects();
+  // Lifted here (rather than owned by LinksView) so the sidebar's link
+  // project list can highlight whichever tab is active and switch it,
+  // regardless of whether it was last changed from the sidebar or the
+  // in-page tab bar.
+  const [linksTab, setLinksTab] = useState(LINKS_ALL_TAB);
+  // Independent per-section collapse state for the sidebar's item trees
+  // (Files/Tracker/Links) - defaults to all expanded while settings are
+  // still loading, then synced to whatever was persisted (see the effect
+  // below and Sidebar's onToggleSection).
+  const [sidebarCollapsed, setSidebarCollapsed] = useState({ files: false, tracker: false, links: false });
 
   function openTask(taskId: string) {
     setPendingTaskId(taskId);
@@ -70,10 +83,28 @@ function MainShell() {
         setAccentColor(s.accentColor, false);
         setTrackerEnabled(s.trackerEnabled);
         setLinksEnabled(s.linksEnabled);
+        setSidebarCollapsed({
+          files: s.sidebarFilesCollapsed,
+          tracker: s.sidebarTrackerCollapsed,
+          links: s.sidebarLinksCollapsed,
+        });
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A UI convenience, not user data - update optimistically and persist in
+  // the background without blocking or surfacing errors for it.
+  function toggleSidebarSection(section: "files" | "tracker" | "links") {
+    setSidebarCollapsed((prev) => {
+      const next = { ...prev, [section]: !prev[section] };
+      const key = (
+        { files: "sidebarFilesCollapsed", tracker: "sidebarTrackerCollapsed", links: "sidebarLinksCollapsed" } as const
+      )[section];
+      void updateSettings({ [key]: next[section] }).catch(() => {});
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!selectedProjectId && projects.length > 0) {
@@ -153,14 +184,30 @@ function MainShell() {
         }}
         linksVisible={linksEnabled}
         linksActive={view === "links"}
-        onSelectLinks={() => setView("links")}
+        linkProjects={linkProjects}
+        linksTab={linksTab}
+        onSelectAllLinks={() => {
+          setLinksTab(LINKS_ALL_TAB);
+          setView("links");
+        }}
+        onSelectLinkProject={(projectId) => {
+          setLinksTab(projectId);
+          setView("links");
+        }}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebarSection={toggleSidebarSection}
       />
 
       <div className="relative isolate flex flex-1 flex-col overflow-hidden">
         {view === "settings" ? (
           <Settings onTrackerEnabledChanged={setTrackerEnabled} onLinksEnabledChanged={setLinksEnabled} />
         ) : view === "links" && linksEnabled ? (
-          <LinksView projects={projects} />
+          <LinksView
+            projects={linkProjects}
+            onProjectsChanged={() => refreshLinkProjects()}
+            activeTab={linksTab}
+            onActiveTabChange={setLinksTab}
+          />
         ) : view === "tracker" && trackerEnabled ? (
           <TrackerView
             boards={trackerBoards}

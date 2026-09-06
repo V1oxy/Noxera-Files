@@ -7,13 +7,20 @@ import {
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { FolderClosed, Kanban, Layers, Link2, ListChecks, Plus, Settings as SettingsIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ChevronDown, ChevronRight, FolderClosed, Kanban, Layers, Link2, ListChecks, Plus, Settings as SettingsIcon } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { SortableRow } from "@/components/SortableRow";
+import { LINKS_ALL_TAB } from "@/constants/links";
 import { useLanguage } from "@/hooks/useLanguage";
 import type { TrackerViewState } from "@/hooks/useTracker";
-import type { Project, TrackerBoard } from "@/types";
+import type { LinkProject, Project, TrackerBoard } from "@/types";
+
+export interface SidebarCollapsedState {
+  files: boolean;
+  tracker: boolean;
+  links: boolean;
+}
 
 interface SidebarProps {
   projects: Project[];
@@ -35,7 +42,64 @@ interface SidebarProps {
   onReorderTrackerBoards: (orderedIds: string[]) => void;
   linksVisible: boolean;
   linksActive: boolean;
-  onSelectLinks: () => void;
+  linkProjects: LinkProject[];
+  linksTab: string;
+  onSelectAllLinks: () => void;
+  onSelectLinkProject: (projectId: string) => void;
+  sidebarCollapsed: SidebarCollapsedState;
+  onToggleSidebarSection: (section: keyof SidebarCollapsedState) => void;
+}
+
+/** A section header with a collapse chevron plus its (smoothly
+ * collapsible) item list - shared by the Files, Tracker and Links sections
+ * so all three collapse/expand identically. The list stays mounted while
+ * collapsed (clipped via `max-height`, not unmounted) so an in-progress
+ * drag never loses a valid drop target mid-gesture, and simply cannot be
+ * hit while it has no visible area. */
+function SidebarSection({
+  label,
+  collapsed,
+  onToggle,
+  itemCount,
+  topSpacing,
+  children,
+}: {
+  label: string;
+  collapsed: boolean;
+  onToggle: () => void;
+  itemCount: number;
+  topSpacing: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className={topSpacing ? "mt-5" : ""}>
+      <button
+        onClick={onToggle}
+        className="mb-1 flex w-full items-center gap-1 rounded-apple-sm px-2 py-1 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+      >
+        {collapsed ? (
+          <ChevronRight size={11} className="shrink-0 text-label-tertiary" />
+        ) : (
+          <ChevronDown size={11} className="shrink-0 text-label-tertiary" />
+        )}
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-label-tertiary">
+          {label}
+        </span>
+        {collapsed && itemCount > 0 && (
+          <span className="shrink-0 rounded-full bg-black/[0.06] px-1.5 py-px text-[10px] font-medium tabular-nums text-label-tertiary dark:bg-white/[0.08]">
+            {itemCount}
+          </span>
+        )}
+      </button>
+      <div
+        className={`overflow-hidden transition-[max-height,opacity] duration-200 ease-out ${
+          collapsed ? "max-h-0 opacity-0" : "max-h-[3000px] opacity-100"
+        }`}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export function Sidebar({
@@ -58,7 +122,12 @@ export function Sidebar({
   onReorderTrackerBoards,
   linksVisible,
   linksActive,
-  onSelectLinks,
+  linkProjects,
+  linksTab,
+  onSelectAllLinks,
+  onSelectLinkProject,
+  sidebarCollapsed,
+  onToggleSidebarSection,
 }: SidebarProps) {
   const { t } = useLanguage();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -105,58 +174,64 @@ export function Sidebar({
       <div className="h-10 shrink-0" />
 
       <div className="no-drag flex-1 overflow-y-auto px-3 pb-3">
-        <p className="mb-1 px-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-label-tertiary">
-          {t("sidebar.projects")}
-        </p>
-
-        <nav className="flex flex-col gap-0.5">
-          <DndContext
-            sensors={sensors}
-            modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext items={order.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-              {order.map((project) => (
-                <SortableRow key={project.id} id={project.id}>
-                  <button
-                    onClick={() => onSelectProject(project.id)}
-                    className={`group flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
-                      selectedProjectId === project.id && projectListActive
-                        ? "bg-accent/[0.14] text-accent font-medium"
-                        : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
-                    }`}
-                  >
-                    <FolderClosed
-                      size={15}
-                      strokeWidth={1.75}
-                      className={selectedProjectId === project.id && projectListActive ? "text-accent" : "text-label-secondary"}
-                    />
-                    <span className="min-w-0 flex-1 truncate">{project.name}</span>
-                  </button>
-                </SortableRow>
-              ))}
-            </SortableContext>
-          </DndContext>
-
-          {projects.length === 0 && (
-            <p className="px-2 py-1.5 text-[12px] text-label-tertiary">{t("sidebar.noProjects")}</p>
-          )}
-        </nav>
-
-        <button
-          onClick={onNewProject}
-          className="mt-2 flex w-full items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] text-label-secondary transition-colors hover:bg-black/[0.04] hover:text-label-primary dark:hover:bg-white/[0.06]"
+        <SidebarSection
+          label={t("sidebar.projects")}
+          collapsed={sidebarCollapsed.files}
+          onToggle={() => onToggleSidebarSection("files")}
+          itemCount={projects.length}
+          topSpacing={false}
         >
-          <Plus size={15} strokeWidth={1.75} />
-          {t("sidebar.newProject")}
-        </button>
+          <nav className="flex flex-col gap-0.5">
+            <DndContext
+              sensors={sensors}
+              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext items={order.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+                {order.map((project) => (
+                  <SortableRow key={project.id} id={project.id}>
+                    <button
+                      onClick={() => onSelectProject(project.id)}
+                      className={`group flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
+                        selectedProjectId === project.id && projectListActive
+                          ? "bg-accent/[0.14] text-accent font-medium"
+                          : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <FolderClosed
+                        size={15}
+                        strokeWidth={1.75}
+                        className={selectedProjectId === project.id && projectListActive ? "text-accent" : "text-label-secondary"}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                    </button>
+                  </SortableRow>
+                ))}
+              </SortableContext>
+            </DndContext>
+
+            {projects.length === 0 && (
+              <p className="px-2 py-1.5 text-[12px] text-label-tertiary">{t("sidebar.noProjects")}</p>
+            )}
+          </nav>
+
+          <button
+            onClick={onNewProject}
+            className="mt-2 flex w-full items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] text-label-secondary transition-colors hover:bg-black/[0.04] hover:text-label-primary dark:hover:bg-white/[0.06]"
+          >
+            <Plus size={15} strokeWidth={1.75} />
+            {t("sidebar.newProject")}
+          </button>
+        </SidebarSection>
 
         {trackerVisible && (
-          <>
-            <div className="mb-1 mt-5 flex items-center px-2 pt-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-label-tertiary">{t("sidebar.tracker")}</p>
-            </div>
-
+          <SidebarSection
+            label={t("sidebar.tracker")}
+            collapsed={sidebarCollapsed.tracker}
+            onToggle={() => onToggleSidebarSection("tracker")}
+            itemCount={trackerBoards.length}
+            topSpacing
+          >
             <nav className="flex flex-col gap-0.5">
               <button
                 onClick={onSelectAllTasks}
@@ -204,29 +279,48 @@ export function Sidebar({
               <Plus size={15} strokeWidth={1.75} />
               {t("tracker.newBoard")}
             </button>
-          </>
+          </SidebarSection>
         )}
 
         {linksVisible && (
-          <>
-            <div className="mb-1 mt-5 flex items-center px-2 pt-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-label-tertiary">{t("sidebar.links")}</p>
-            </div>
-
+          <SidebarSection
+            label={t("sidebar.links")}
+            collapsed={sidebarCollapsed.links}
+            onToggle={() => onToggleSidebarSection("links")}
+            itemCount={linkProjects.length}
+            topSpacing
+          >
             <nav className="flex flex-col gap-0.5">
               <button
-                onClick={onSelectLinks}
+                onClick={onSelectAllLinks}
                 className={`flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
-                  linksActive
+                  linksActive && linksTab === LINKS_ALL_TAB
                     ? "bg-accent/[0.14] font-medium text-accent"
                     : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
                 }`}
               >
-                <Link2 size={15} strokeWidth={1.75} className={linksActive ? "text-accent" : "text-label-secondary"} />
-                <span className="min-w-0 flex-1 truncate">{t("sidebar.links")}</span>
+                <Link2 size={15} strokeWidth={1.75} className={linksActive && linksTab === LINKS_ALL_TAB ? "text-accent" : "text-label-secondary"} />
+                <span className="min-w-0 flex-1 truncate">{t("links.tabAll")}</span>
               </button>
+
+              {linkProjects.map((project) => {
+                const active = linksActive && linksTab === project.id;
+                return (
+                  <button
+                    key={project.id}
+                    onClick={() => onSelectLinkProject(project.id)}
+                    className={`flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
+                      active ? "bg-accent/[0.14] font-medium text-accent" : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <FolderClosed size={15} strokeWidth={1.75} className={active ? "text-accent" : "text-label-secondary"} />
+                    <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                    {project.linkCount > 0 && <span className="shrink-0 text-[11px] text-label-tertiary">{project.linkCount}</span>}
+                  </button>
+                );
+              })}
             </nav>
-          </>
+          </SidebarSection>
         )}
       </div>
 

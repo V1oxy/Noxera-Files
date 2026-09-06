@@ -1,8 +1,8 @@
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::database::{link_groups as groups_db, links as links_db, projects as projects_db};
-use crate::models::{Link, LinkFilter, LinkGroup, LinkGroupInput, LinkInput, LinkUpdateInput};
+use crate::database::{link_groups as groups_db, link_projects as link_projects_db, links as links_db};
+use crate::models::{Link, LinkFilter, LinkGroup, LinkGroupInput, LinkInput, LinkProject, LinkProjectInput, LinkUpdateInput};
 use crate::state::AppState;
 use crate::utils::id::new_id;
 use crate::utils::{now_iso, AppError, AppResult};
@@ -21,6 +21,67 @@ fn validate_url(url: &str) -> AppResult<()> {
     Ok(())
 }
 
+// ---- Link projects --------------------------------------------------------------
+
+#[tauri::command]
+pub fn get_link_projects(state: State<AppState>) -> AppResult<Vec<LinkProject>> {
+    with_ready(&state, |conn, _| Ok(link_projects_db::list_all(conn)?))
+}
+
+#[tauri::command]
+pub fn create_link_project(state: State<AppState>, input: LinkProjectInput) -> AppResult<LinkProject> {
+    let name = input.name.trim().to_string();
+    if name.is_empty() {
+        return Err(AppError::user("Project name cannot be empty."));
+    }
+    with_ready(&state, |conn, _| {
+        let id = new_id();
+        link_projects_db::create(conn, &id, &name, &now_iso())?;
+        link_projects_db::get(conn, &id)?.ok_or_else(|| AppError::user("Failed to create project."))
+    })
+}
+
+#[tauri::command]
+pub fn update_link_project(state: State<AppState>, project_id: String, input: LinkProjectInput) -> AppResult<LinkProject> {
+    let name = input.name.trim().to_string();
+    if name.is_empty() {
+        return Err(AppError::user("Project name cannot be empty."));
+    }
+    with_ready(&state, |conn, _| {
+        let updated = link_projects_db::update(conn, &project_id, &name, &now_iso())?;
+        if updated == 0 {
+            return Err(AppError::user("This project no longer exists."));
+        }
+        link_projects_db::get(conn, &project_id)?.ok_or_else(|| AppError::user("Failed to update project."))
+    })
+}
+
+#[tauri::command]
+pub fn reorder_link_projects(state: State<AppState>, ordered_ids: Vec<String>) -> AppResult<()> {
+    with_ready(&state, |conn, _| {
+        for (i, id) in ordered_ids.iter().enumerate() {
+            link_projects_db::set_position(conn, id, i as i64)?;
+        }
+        Ok(())
+    })
+}
+
+/// Unlike deleting a link group, this cascades to every group and link
+/// inside the project (`ON DELETE CASCADE`) - it deletes the whole
+/// collection, matching what deleting a project means everywhere else in
+/// the app.
+#[tauri::command]
+pub fn delete_link_project(state: State<AppState>, project_id: String) -> AppResult<()> {
+    with_ready(&state, |conn, storage| {
+        if link_projects_db::get(conn, &project_id)?.is_none() {
+            return Err(AppError::user("This project no longer exists."));
+        }
+        link_projects_db::delete(conn, &project_id)?;
+        crate::utils::logger::info(storage, &format!("Link project deleted: {project_id}"));
+        Ok(())
+    })
+}
+
 // ---- Links ------------------------------------------------------------------
 
 #[tauri::command]
@@ -37,7 +98,7 @@ pub fn create_link(state: State<AppState>, input: LinkInput) -> AppResult<Link> 
     let url = input.url.trim().to_string();
     validate_url(&url)?;
     with_ready(&state, |conn, _| {
-        if !projects_db::exists(conn, &input.project_id)? {
+        if !link_projects_db::exists(conn, &input.project_id)? {
             return Err(AppError::user("This project no longer exists."));
         }
         if let Some(group_id) = &input.group_id {
@@ -154,7 +215,7 @@ pub fn create_link_group(state: State<AppState>, project_id: String, input: Link
         return Err(AppError::user("Group name cannot be empty."));
     }
     with_ready(&state, |conn, _| {
-        if !projects_db::exists(conn, &project_id)? {
+        if !link_projects_db::exists(conn, &project_id)? {
             return Err(AppError::user("This project no longer exists."));
         }
         let id = new_id();

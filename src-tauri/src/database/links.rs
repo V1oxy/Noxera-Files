@@ -5,7 +5,7 @@ use crate::models::{Link, LinkFilter};
 const SELECT_BASE: &str = "SELECT l.id, l.project_id, p.name AS project_name, l.group_id, g.name AS group_name, \
     l.title, l.url, l.description, l.position, l.created_at, l.updated_at \
     FROM links l \
-    JOIN projects p ON p.id = l.project_id \
+    JOIN link_projects p ON p.id = l.project_id \
     LEFT JOIN link_groups g ON g.id = l.group_id";
 
 struct RowWithSearchBlob {

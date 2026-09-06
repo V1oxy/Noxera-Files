@@ -22,6 +22,8 @@ import type {
   LinkGroup,
   LinkGroupInput,
   LinkInput,
+  LinkProject,
+  LinkProjectInput,
   LinkUpdateInput,
   NewTrackerTaskFile,
   Project,
@@ -94,6 +96,9 @@ export const updateSettings = (update: {
   pendingWhatsNewNotes?: string;
   trackerEnabled?: boolean;
   linksEnabled?: boolean;
+  sidebarFilesCollapsed?: boolean;
+  sidebarTrackerCollapsed?: boolean;
+  sidebarLinksCollapsed?: boolean;
 }) => call<AppSettings>("update_settings", { update });
 export const getStorageInfo = () => call<StorageInfo>("get_storage_info");
 export const openDataFolder = (which: "storage" | "backups" | "logs") =>
@@ -326,6 +331,13 @@ export const getTrackerUiState = () => call<string | null>("get_tracker_ui_state
 export const setTrackerUiState = (value: string) => call<void>("set_tracker_ui_state", { value });
 
 // ---- Links ------------------------------------------------------------------
+
+export const getLinkProjects = () => call<LinkProject[]>("get_link_projects");
+export const createLinkProject = (input: LinkProjectInput) => call<LinkProject>("create_link_project", { input });
+export const updateLinkProject = (projectId: string, input: LinkProjectInput) =>
+  call<LinkProject>("update_link_project", { projectId, input });
+export const reorderLinkProjects = (orderedIds: string[]) => call<void>("reorder_link_projects", { orderedIds });
+export const deleteLinkProject = (projectId: string) => call<void>("delete_link_project", { projectId });
 
 export const getLinks = (filter: LinkFilter) => call<Link[]>("get_links", { filter });
 export const createLink = (input: LinkInput) => call<Link>("create_link", { input });

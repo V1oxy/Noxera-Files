@@ -1,5 +1,25 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
+/// A user-created top-level container for links - entirely independent of
+/// the file manager's `Project` (see the `link_projects` table comment in
+/// `database::schema`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkProject {
+    pub id: String,
+    pub name: String,
+    pub position: i64,
+    pub created_at: String,
+    pub updated_at: String,
+    pub link_count: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkProjectInput {
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkGroup {

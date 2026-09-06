@@ -197,13 +197,26 @@ CREATE TABLE IF NOT EXISTS tracker_task_local_files (
     added_at     TEXT NOT NULL
 );
 
--- Links: a small per-project bookmark manager. A link always belongs to a
--- project, optionally to a group within it - deleting a group never deletes
--- its links (ON DELETE SET NULL), it just ungroups them, matching the
--- product requirement that groups are purely organizational.
+-- Links: a small bookmark manager with its own "project" concept, entirely
+-- separate from the file manager's `projects` table above - a link project
+-- is just a user-created label to organize bookmarks and is never implied
+-- by, or tied to, an actual file-manager project. A link always belongs to
+-- one of these, optionally to a group within it - deleting a group never
+-- deletes its links (ON DELETE SET NULL), it just ungroups them, matching
+-- the product requirement that groups are purely organizational. Deleting a
+-- link project, unlike deleting a group, does cascade to its groups and
+-- links - it is the equivalent of deleting the whole collection.
+CREATE TABLE IF NOT EXISTS link_projects (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    position    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS link_groups (
     id          TEXT PRIMARY KEY,
-    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id  TEXT NOT NULL REFERENCES link_projects(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
     position    INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL,
@@ -212,7 +225,7 @@ CREATE TABLE IF NOT EXISTS link_groups (
 
 CREATE TABLE IF NOT EXISTS links (
     id          TEXT PRIMARY KEY,
-    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id  TEXT NOT NULL REFERENCES link_projects(id) ON DELETE CASCADE,
     group_id    TEXT REFERENCES link_groups(id) ON DELETE SET NULL,
     title       TEXT NOT NULL,
     url         TEXT NOT NULL,
@@ -253,6 +266,22 @@ CREATE INDEX IF NOT EXISTS idx_links_project_id ON links(project_id);
 CREATE INDEX IF NOT EXISTS idx_links_group_id ON links(group_id);
 "#;
 
+/// True if `table`'s current schema (as recorded by SQLite) contains the
+/// literal text `REFERENCES {referenced}` - used below to detect the one
+/// pre-release shape of `links`/`link_groups` that pointed straight at the
+/// file manager's `projects` table.
+fn table_references(conn: &rusqlite::Connection, table: &str, referenced: &str) -> rusqlite::Result<bool> {
+    use rusqlite::OptionalExtension;
+    let sql: Option<String> = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            rusqlite::params![table],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(sql.is_some_and(|s| s.contains(&format!("REFERENCES {referenced}"))))
+}
+
 /// Statements applied after `TABLES_SQL`, guarded by their own existence
 /// checks, to bring a database created by an older version of the app up to
 /// date without touching any data already in it. Must run before
@@ -291,6 +320,18 @@ pub fn migrate(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
 
     backfill_priorities(conn)?;
     seed_default_board(conn)?;
+
+    // Links shipped for one release with `project_id` pointing straight at
+    // the file manager's `projects` table before it got its own independent
+    // `link_projects` table (see TABLES_SQL above) - `CREATE TABLE IF NOT
+    // EXISTS` above left any such pre-existing `links`/`link_groups` table
+    // as-is, so recreate them here against the current schema. Links had no
+    // real user data yet at the point this changed, so a plain drop (rather
+    // than a data-preserving migration) is deliberate.
+    if table_references(conn, "links", "projects")? {
+        conn.execute_batch("DROP TABLE IF EXISTS links; DROP TABLE IF EXISTS link_groups;")?;
+        conn.execute_batch(TABLES_SQL)?;
+    }
 
     Ok(())
 }

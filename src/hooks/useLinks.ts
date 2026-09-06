@@ -1,7 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { getAllLinkGroups, getLinkGroups, getLinks } from "@/services/api";
-import type { Link, LinkFilter, LinkGroup } from "@/types";
+import { getAllLinkGroups, getLinkGroups, getLinkProjects, getLinks } from "@/services/api";
+import type { Link, LinkFilter, LinkGroup, LinkProject } from "@/types";
+
+export function useLinkProjects() {
+  const [projects, setProjects] = useState<LinkProject[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      setProjects(await getLinkProjects());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { projects, loading, refresh };
+}
 
 export function useLinks(filter: LinkFilter) {
   const [links, setLinks] = useState<Link[]>([]);

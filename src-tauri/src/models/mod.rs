@@ -8,7 +8,7 @@ pub mod version;
 
 pub use file::{FileDetail, FileEntry, GlobalFileHit, SortDirection, SortField};
 pub use folder::{Folder, FolderPathEntry};
-pub use link::{Link, LinkFilter, LinkGroup, LinkGroupInput, LinkInput, LinkUpdateInput};
+pub use link::{Link, LinkFilter, LinkGroup, LinkGroupInput, LinkInput, LinkProject, LinkProjectInput, LinkUpdateInput};
 pub use project::Project;
 pub use settings::{AppSettings, SettingsUpdate, StorageConfig};
 pub use tracker::{

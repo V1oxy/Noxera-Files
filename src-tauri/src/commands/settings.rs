@@ -22,6 +22,9 @@ const KEY_PENDING_WHATS_NEW_VERSION: &str = "pending_whats_new_version";
 const KEY_PENDING_WHATS_NEW_NOTES: &str = "pending_whats_new_notes";
 const KEY_TRACKER_ENABLED: &str = "tracker_enabled";
 const KEY_LINKS_ENABLED: &str = "links_enabled";
+const KEY_SIDEBAR_FILES_COLLAPSED: &str = "sidebar_files_collapsed";
+const KEY_SIDEBAR_TRACKER_COLLAPSED: &str = "sidebar_tracker_collapsed";
+const KEY_SIDEBAR_LINKS_COLLAPSED: &str = "sidebar_links_collapsed";
 
 const ACCENT_COLORS: [&str; 10] = [
     "green", "blue", "teal", "purple", "pink", "red", "orange", "amber", "indigo", "graphite",
@@ -118,6 +121,15 @@ pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
         let links_enabled = settings_db::get(conn, KEY_LINKS_ENABLED)?
             .map(|v| v == "true")
             .unwrap_or(true);
+        let sidebar_files_collapsed = settings_db::get(conn, KEY_SIDEBAR_FILES_COLLAPSED)?
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        let sidebar_tracker_collapsed = settings_db::get(conn, KEY_SIDEBAR_TRACKER_COLLAPSED)?
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        let sidebar_links_collapsed = settings_db::get(conn, KEY_SIDEBAR_LINKS_COLLAPSED)?
+            .map(|v| v == "true")
+            .unwrap_or(false);
         Ok(AppSettings {
             theme,
             language,
@@ -129,6 +141,9 @@ pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
             pending_whats_new_notes,
             tracker_enabled,
             links_enabled,
+            sidebar_files_collapsed,
+            sidebar_tracker_collapsed,
+            sidebar_links_collapsed,
         })
     })
 }
@@ -185,6 +200,15 @@ pub fn update_settings(
         if let Some(enabled) = update.links_enabled {
             settings_db::set(conn, KEY_LINKS_ENABLED, if enabled { "true" } else { "false" })?;
             crate::utils::logger::info(storage, &format!("Setting changed: links_enabled = {enabled}"));
+        }
+        if let Some(collapsed) = update.sidebar_files_collapsed {
+            settings_db::set(conn, KEY_SIDEBAR_FILES_COLLAPSED, if collapsed { "true" } else { "false" })?;
+        }
+        if let Some(collapsed) = update.sidebar_tracker_collapsed {
+            settings_db::set(conn, KEY_SIDEBAR_TRACKER_COLLAPSED, if collapsed { "true" } else { "false" })?;
+        }
+        if let Some(collapsed) = update.sidebar_links_collapsed {
+            settings_db::set(conn, KEY_SIDEBAR_LINKS_COLLAPSED, if collapsed { "true" } else { "false" })?;
         }
         Ok(())
     })?;

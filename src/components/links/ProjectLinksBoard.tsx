@@ -9,13 +9,13 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
+import { arrayMove, rectSortingStrategy, SortableContext } from "@dnd-kit/sortable";
+import { ChevronDown, ChevronRight, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { DeleteModal } from "@/components/DeleteModal";
 import { LinkCard, LinkCardOverlay } from "@/components/links/LinkCard";
-import { NewGroupModal } from "@/components/links/NewGroupModal";
+import { NameModal } from "@/components/links/NameModal";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/useToast";
 import {
@@ -76,6 +76,16 @@ export function ProjectLinksBoard({
   const [renameTarget, setRenameTarget] = useState<LinkGroup | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Link | null>(null);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<LinkGroup | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  function toggleGroupCollapsed(key: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!activeLink) setColumns(groupLinks(groups, links));
@@ -211,7 +221,7 @@ export function ProjectLinksBoard({
   return (
     <div>
       {showProjectHeader && (
-        <h2 className="mb-2 text-[13px] font-semibold text-label-primary">{projectName}</h2>
+        <h2 className="mb-2 truncate text-[13px] font-semibold text-label-primary">{projectName}</h2>
       )}
       {sections.length === 0 ? (
         <div className="rounded-apple-lg border border-dashed border-surface-border px-4 py-8 text-center">
@@ -243,6 +253,8 @@ export function ProjectLinksBoard({
                 onDeleteGroup={group ? () => setDeleteGroupTarget(group) : undefined}
                 onMoveUp={group && index > 0 ? () => handleMoveGroup(group.id, -1) : undefined}
                 onMoveDown={group && index < groups.length - 1 ? () => handleMoveGroup(group.id, 1) : undefined}
+                collapsed={collapsedGroups.has(key)}
+                onToggleCollapsed={() => toggleGroupCollapsed(key)}
               />
             ))}
           </div>
@@ -260,9 +272,21 @@ export function ProjectLinksBoard({
         {t("links.newGroup")}
       </button>
 
-      <NewGroupModal open={newGroupOpen} onCancel={() => setNewGroupOpen(false)} onConfirm={handleCreateGroup} />
-      <NewGroupModal
+      <NameModal
+        open={newGroupOpen}
+        createTitle={t("links.newGroup")}
+        renameTitle={t("links.renameGroup")}
+        label={t("links.groupName")}
+        placeholder={t("links.groupNamePlaceholder")}
+        onCancel={() => setNewGroupOpen(false)}
+        onConfirm={handleCreateGroup}
+      />
+      <NameModal
         open={renameTarget !== null}
+        createTitle={t("links.newGroup")}
+        renameTitle={t("links.renameGroup")}
+        label={t("links.groupName")}
+        placeholder={t("links.groupNamePlaceholder")}
         initialName={renameTarget?.name}
         onCancel={() => setRenameTarget(null)}
         onConfirm={handleRenameGroup}
@@ -298,6 +322,8 @@ function GroupSection({
   onDeleteGroup,
   onMoveUp,
   onMoveDown,
+  collapsed,
+  onToggleCollapsed,
 }: {
   id: string;
   title: string;
@@ -311,14 +337,24 @@ function GroupSection({
   onDeleteGroup?: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }) {
   const { t } = useLanguage();
   const { setNodeRef } = useDroppable({ id });
   const reorderable = onMoveUp !== undefined || onMoveDown !== undefined;
+  const canCollapse = links.length > 0;
 
   return (
     <div className="group/section">
       <div className="mb-1.5 flex h-6 items-center gap-1.5 px-1">
+        <button
+          onClick={onToggleCollapsed}
+          disabled={!canCollapse}
+          className="shrink-0 rounded-apple-sm p-0.5 text-label-tertiary transition-colors hover:bg-black/[0.06] hover:text-label-primary disabled:pointer-events-none disabled:opacity-0 dark:hover:bg-white/[0.1]"
+        >
+          {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+        </button>
         <h3 className="min-w-0 truncate text-[11.5px] font-semibold uppercase tracking-wide text-label-tertiary">{title}</h3>
         <span className="shrink-0 rounded-full bg-black/[0.06] px-1.5 py-px text-[10px] font-medium tabular-nums text-label-tertiary dark:bg-white/[0.08]">
           {links.length}
@@ -352,18 +388,20 @@ function GroupSection({
           </button>
         )}
       </div>
-      <div
-        ref={setNodeRef}
-        className={`grid min-h-[56px] grid-cols-1 gap-2 rounded-apple-lg border p-2 transition-colors duration-150 sm:grid-cols-2 lg:grid-cols-3 ${
-          isDropTarget ? "border-accent/50 bg-accent/[0.05]" : "border-transparent bg-black/[0.015] dark:bg-white/[0.02]"
-        }`}
-      >
-        <SortableContext items={links.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-          {links.map((link) => (
-            <LinkCard key={link.id} link={link} showProject={showProjectOnCard} onOpen={onOpenLink} onEdit={onEditLink} onDelete={onDeleteLink} />
-          ))}
-        </SortableContext>
-        {links.length === 0 && <p className="col-span-full px-2 py-3 text-center text-[11.5px] text-label-tertiary">{t("links.emptyGroup")}</p>}
+      <div className={`overflow-hidden transition-[max-height,opacity] duration-200 ease-out ${collapsed ? "max-h-0 opacity-0" : "max-h-[3000px] opacity-100"}`}>
+        <div
+          ref={setNodeRef}
+          className={`grid min-h-[56px] grid-cols-1 gap-2 rounded-apple-lg border p-2 transition-colors duration-150 sm:grid-cols-2 lg:grid-cols-3 ${
+            isDropTarget ? "border-accent/50 bg-accent/[0.05]" : "border-transparent bg-black/[0.015] dark:bg-white/[0.02]"
+          }`}
+        >
+          <SortableContext items={links.map((l) => l.id)} strategy={rectSortingStrategy}>
+            {links.map((link) => (
+              <LinkCard key={link.id} link={link} showProject={showProjectOnCard} onOpen={onOpenLink} onEdit={onEditLink} onDelete={onDeleteLink} />
+            ))}
+          </SortableContext>
+          {links.length === 0 && <p className="col-span-full px-2 py-3 text-center text-[11.5px] text-label-tertiary">{t("links.emptyGroup")}</p>}
+        </div>
       </div>
     </div>
   );

@@ -23,6 +23,12 @@ pub struct AppSettings {
     pub tracker_enabled: bool,
     /// Same idea as `tracker_enabled`, for the Links section.
     pub links_enabled: bool,
+    /// Whether each sidebar section's item tree is collapsed (header stays
+    /// visible, its list is hidden) - purely a UI convenience, independent
+    /// per section, persisted so it survives a restart.
+    pub sidebar_files_collapsed: bool,
+    pub sidebar_tracker_collapsed: bool,
+    pub sidebar_links_collapsed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -37,6 +43,9 @@ pub struct SettingsUpdate {
     pub pending_whats_new_notes: Option<String>,
     pub tracker_enabled: Option<bool>,
     pub links_enabled: Option<bool>,
+    pub sidebar_files_collapsed: Option<bool>,
+    pub sidebar_tracker_collapsed: Option<bool>,
+    pub sidebar_links_collapsed: Option<bool>,
 }
 
 /// Persisted outside the SQLite database (in the OS app-config directory)
