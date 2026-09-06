@@ -16,6 +16,10 @@ interface AllTasksViewProps {
   sortDir: SortDirection;
   onSortChange: (f: TaskSortField, d: SortDirection) => void;
   onOpenTask: (task: TrackerTask) => void;
+  /** Bumped by the parent whenever a task changes elsewhere (edited, moved,
+   * archived, deleted, duplicated) so this list re-fetches - it can't see
+   * those changes on its own since it holds a separate cross-board query. */
+  refreshSignal?: number;
 }
 
 const SORT_KEYS: Partial<Record<TaskSortField, string>> = {
@@ -27,11 +31,16 @@ const SORT_KEYS: Partial<Record<TaskSortField, string>> = {
   title: "tracker.sort.title",
 };
 
-export function AllTasksView({ filter, onFilterChange, sortField, sortDir, onSortChange, onOpenTask }: AllTasksViewProps) {
+export function AllTasksView({ filter, onFilterChange, sortField, sortDir, onSortChange, onOpenTask, refreshSignal }: AllTasksViewProps) {
   const { t } = useLanguage();
   const { boards } = useTrackerBoards();
   const { projects } = useProjects();
-  const { tasks, loading } = useAllTrackerTasks({ ...filter, sortField, sortDir });
+  const { tasks, loading, refresh } = useAllTrackerTasks({ ...filter, sortField, sortDir });
+
+  useEffect(() => {
+    if (refreshSignal) void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
   const [statusOptions, setStatusOptions] = useState<(TrackerStatus & { boardName?: string })[]>([]);
   const [priorityOptions, setPriorityOptions] = useState<(TrackerPriority & { boardName?: string })[]>([]);
 

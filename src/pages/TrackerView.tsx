@@ -50,6 +50,11 @@ export function TrackerView({
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskStatusId, setNewTaskStatusId] = useState<string | null>(null);
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
+  // AllTasksView owns its own task list (a cross-board query the board view
+  // has no use for), so it can't be refreshed via `refreshTasks` above -
+  // bumping this instead tells it to refetch whenever a task changes while
+  // it's the active view (edited, moved, deleted, duplicated...).
+  const [allTasksRefreshSignal, setAllTasksRefreshSignal] = useState(0);
 
   useEffect(() => {
     if (!uiState.view && boards.length > 0) {
@@ -75,6 +80,8 @@ export function TrackerView({
     if (board) {
       void refreshTasks();
       void refreshStatuses();
+    } else {
+      setAllTasksRefreshSignal((n) => n + 1);
     }
   }
 
@@ -164,6 +171,7 @@ export function TrackerView({
             sortDir={uiState.allTasksSortDir}
             onSortChange={(f, d) => updateUiState({ allTasksSortField: f, allTasksSortDir: d })}
             onOpenTask={(task) => setSelectedTaskId(task.id)}
+            refreshSignal={allTasksRefreshSignal}
           />
         </>
       )}
