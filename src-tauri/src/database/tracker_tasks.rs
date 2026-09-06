@@ -192,6 +192,8 @@ fn sort_key(task: &Task, field: TaskSortField) -> &str {
         TaskSortField::DueAt => task.due_at.as_deref().unwrap_or(""),
         TaskSortField::UpdatedAt => &task.updated_at,
         TaskSortField::CompletedAt => task.completed_at.as_deref().unwrap_or(""),
+        TaskSortField::Title => &task.title,
+        TaskSortField::Customer => task.customer.as_deref().unwrap_or(""),
         // Priority is sorted separately below (it's an enum, not a string).
         TaskSortField::Priority => "",
     }
@@ -224,6 +226,10 @@ pub fn list_all(conn: &Connection, filter: &TaskFilter) -> rusqlite::Result<Vec<
     let dir = filter.sort_dir.unwrap_or(SortDirection::Desc);
     if field == TaskSortField::Priority {
         tasks.sort_by_key(|t| priority_rank(t.priority));
+    } else if field == TaskSortField::Title || field == TaskSortField::Customer {
+        // Case-insensitive for the two free-text fields, so "apple" and
+        // "Banana" sort by their letters rather than by ASCII case.
+        tasks.sort_by(|a, b| sort_key(a, field).to_lowercase().cmp(&sort_key(b, field).to_lowercase()));
     } else {
         tasks.sort_by(|a, b| sort_key(a, field).cmp(sort_key(b, field)));
     }

@@ -288,6 +288,8 @@ pub enum TaskSortField {
     Priority,
     UpdatedAt,
     CompletedAt,
+    Title,
+    Customer,
 }
 
 /// Every filter is optional and they combine with AND (spec: "фильтры можно

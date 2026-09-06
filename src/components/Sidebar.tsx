@@ -32,6 +32,7 @@ interface SidebarProps {
   onSelectAllTasks: () => void;
   onNewTrackerBoard: () => void;
   onOpenTrackerSettings: () => void;
+  onReorderTrackerBoards: (orderedIds: string[]) => void;
 }
 
 export function Sidebar({
@@ -51,6 +52,7 @@ export function Sidebar({
   onSelectAllTasks,
   onNewTrackerBoard,
   onOpenTrackerSettings,
+  onReorderTrackerBoards,
 }: SidebarProps) {
   const { t } = useLanguage();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -72,6 +74,24 @@ export function Sidebar({
     const next = arrayMove(order, oldIndex, newIndex);
     setOrder(next);
     onReorderProjects(next.map((p) => p.id));
+  }
+
+  // Same pattern as the projects list above - a local mirror so dragging a
+  // board reorders instantly instead of waiting for the round-trip.
+  const [boardOrder, setBoardOrder] = useState(trackerBoards);
+  useEffect(() => {
+    setBoardOrder(trackerBoards);
+  }, [trackerBoards]);
+
+  function handleBoardDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = boardOrder.findIndex((b) => b.id === active.id);
+    const newIndex = boardOrder.findIndex((b) => b.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const next = arrayMove(boardOrder, oldIndex, newIndex);
+    setBoardOrder(next);
+    onReorderTrackerBoards(next.map((b) => b.id));
   }
 
   return (
@@ -151,22 +171,31 @@ export function Sidebar({
                 <span className="min-w-0 flex-1 truncate">{t("tracker.allTasks")}</span>
               </button>
 
-              {trackerBoards.map((board) => {
-                const active = trackerActive && trackerView?.kind === "board" && trackerView.boardId === board.id;
-                return (
-                  <button
-                    key={board.id}
-                    onClick={() => onSelectTrackerBoard(board.id)}
-                    className={`flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
-                      active ? "bg-accent/[0.14] font-medium text-accent" : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
-                    }`}
-                  >
-                    <Kanban size={15} strokeWidth={1.75} className={active ? "text-accent" : "text-label-secondary"} />
-                    <span className="min-w-0 flex-1 truncate">{board.name}</span>
-                    {board.taskCount > 0 && <span className="shrink-0 text-[11px] text-label-tertiary">{board.taskCount}</span>}
-                  </button>
-                );
-              })}
+              <DndContext
+                sensors={sensors}
+                modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+                onDragEnd={handleBoardDragEnd}
+              >
+                <SortableContext items={boardOrder.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+                  {boardOrder.map((board) => {
+                    const active = trackerActive && trackerView?.kind === "board" && trackerView.boardId === board.id;
+                    return (
+                      <SortableRow key={board.id} id={board.id}>
+                        <button
+                          onClick={() => onSelectTrackerBoard(board.id)}
+                          className={`flex w-full cursor-default items-center gap-2 rounded-apple-sm px-2 py-1.5 text-left text-[13px] transition-colors ${
+                            active ? "bg-accent/[0.14] font-medium text-accent" : "text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                          }`}
+                        >
+                          <Kanban size={15} strokeWidth={1.75} className={active ? "text-accent" : "text-label-secondary"} />
+                          <span className="min-w-0 flex-1 truncate">{board.name}</span>
+                          {board.taskCount > 0 && <span className="shrink-0 text-[11px] text-label-tertiary">{board.taskCount}</span>}
+                        </button>
+                      </SortableRow>
+                    );
+                  })}
+                </SortableContext>
+              </DndContext>
             </nav>
 
             <button

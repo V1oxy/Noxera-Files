@@ -25,6 +25,8 @@ const SORT_KEYS: Record<TaskSortField, string> = {
   priority: "tracker.sort.priority",
   updatedAt: "tracker.sort.updatedAt",
   completedAt: "tracker.sort.completedAt",
+  title: "tracker.sort.title",
+  customer: "tracker.sort.customer",
 };
 
 export function AllTasksView({ filter, onFilterChange, sortField, sortDir, onSortChange, onOpenTask }: AllTasksViewProps) {
@@ -142,12 +144,6 @@ export function AllTasksView({ filter, onFilterChange, sortField, sortDir, onSor
             placeholder={t("tracker.fieldCustomer")}
             className="h-7 w-32 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2 text-[11.5px] text-label-primary outline-none placeholder:text-label-tertiary dark:bg-white/[0.05]"
           />
-          <input
-            value={filter.assignee ?? ""}
-            onChange={(e) => patch({ assignee: e.target.value || undefined })}
-            placeholder={t("tracker.fieldAssignee")}
-            className="h-7 w-32 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2 text-[11.5px] text-label-primary outline-none placeholder:text-label-tertiary dark:bg-white/[0.05]"
-          />
           {activeFilterCount > 0 && (
             <button onClick={() => onFilterChange({})} className="flex items-center gap-1 text-[11.5px] text-accent hover:underline">
               <X size={11} />
@@ -176,7 +172,6 @@ export function AllTasksView({ filter, onFilterChange, sortField, sortDir, onSor
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {task.assignee && <span className="hidden text-[11px] text-label-tertiary sm:inline">{task.assignee}</span>}
                 {task.fileCount > 0 && (
                   <span className="flex items-center gap-0.5 text-[11px] text-label-tertiary">
                     <Paperclip size={11} />

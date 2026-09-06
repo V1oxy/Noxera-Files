@@ -142,7 +142,6 @@ export function TrackerSettingsPage({ boards, onBoardsChanged }: TrackerSettings
                   ["showProject", t("tracker.fieldProject")],
                   ["showPriority", t("tracker.fieldPriority")],
                   ["showDueDate", t("tracker.fieldDueAt")],
-                  ["showAssignee", t("tracker.fieldAssignee")],
                   ["showFileCount", t("tracker.tabFiles")],
                   ["showUpdateIndicator", t("tracker.fileUpdated")],
                 ] as [keyof CardDisplayConfig, string][]

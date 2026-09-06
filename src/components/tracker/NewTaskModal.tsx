@@ -32,7 +32,6 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
   const [statusId, setStatusId] = useState<string>("");
   const [title, setTitle] = useState("");
   const [customer, setCustomer] = useState("");
-  const [assignee, setAssignee] = useState("");
   const [priority, setPriority] = useState<Priority>("normal");
   const [receivedAt, setReceivedAt] = useState(todayDate());
   const [dueAt, setDueAt] = useState("");
@@ -48,7 +47,6 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
     setStatusId(defaultStatusId ?? "");
     setTitle("");
     setCustomer("");
-    setAssignee("");
     setPriority("normal");
     setReceivedAt(todayDate());
     setDueAt("");
@@ -86,7 +84,6 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
         description: description.trim() || undefined,
         projectId: file?.project.id,
         customer: customer.trim() || undefined,
-        assignee: assignee.trim() || undefined,
         priority,
         receivedAt,
         dueAt: dueAt || undefined,
@@ -165,15 +162,9 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
               </button>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClass}>{t("tracker.fieldCustomer")}</label>
-                <input value={customer} onChange={(e) => setCustomer(e.target.value)} disabled={busy} className={`mt-1 ${inputClass}`} />
-              </div>
-              <div>
-                <label className={labelClass}>{t("tracker.fieldAssignee")}</label>
-                <input value={assignee} onChange={(e) => setAssignee(e.target.value)} disabled={busy} className={`mt-1 ${inputClass}`} />
-              </div>
+            <div>
+              <label className={labelClass}>{t("tracker.fieldCustomer")}</label>
+              <input value={customer} onChange={(e) => setCustomer(e.target.value)} disabled={busy} className={`mt-1 ${inputClass}`} />
             </div>
 
             <div className="grid grid-cols-3 gap-3">

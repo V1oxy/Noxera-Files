@@ -1,11 +1,11 @@
 import {
   Archive,
   ArchiveRestore,
+  ChevronDown,
   Copy,
   ExternalLink,
   FileText,
   FolderClosed,
-  Link2,
   MessageSquare,
   Pin,
   PinOff,
@@ -20,10 +20,10 @@ import { Button } from "@/components/Button";
 import { DeleteModal } from "@/components/DeleteModal";
 import { DuplicateTaskModal } from "@/components/tracker/DuplicateTaskModal";
 import { FilePickerModal, type FilePickerResult } from "@/components/tracker/FilePickerModal";
-import { PriorityBadge, StatusPill, LabelChip, formatEventTime } from "@/components/tracker/shared";
+import { LabelChip, formatEventTime } from "@/components/tracker/shared";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/useToast";
-import { useTrackerFields, useTrackerLabels, useTrackerSettings, useTrackerStatuses, useTrackerTaskDetail } from "@/hooks/useTracker";
+import { useTrackerFields, useTrackerLabels, useTrackerStatuses, useTrackerTaskDetail } from "@/hooks/useTracker";
 import {
   ApiError,
   attachTrackerTaskFile,
@@ -38,8 +38,8 @@ import {
   setTrackerTaskPinned,
   updateTrackerTask,
 } from "@/services/api";
-import type { Priority, TrackerTaskFile, TrackerTaskUpdateInput } from "@/types";
-import { formatBytes, formatFullDateTime } from "@/utils/format";
+import type { Priority, TrackerTaskEvent, TrackerTaskFile, TrackerTaskUpdateInput } from "@/types";
+import { formatBytes } from "@/utils/format";
 
 interface TaskDetailPanelProps {
   taskId: string;
@@ -51,7 +51,37 @@ interface TaskDetailPanelProps {
 
 const inputClass =
   "w-full rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 h-8 text-[13px] text-label-primary outline-none focus:border-accent/50 focus:bg-surface-content dark:bg-white/[0.05]";
-const labelClass = "text-[11px] font-medium uppercase tracking-wide text-label-tertiary";
+const labelClass = "block text-[10.5px] font-medium uppercase tracking-wide text-label-tertiary";
+const fieldGroupClass = "space-y-1";
+
+function PillSelect({
+  value,
+  onChange,
+  options,
+  className = "",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  className?: string;
+}) {
+  return (
+    <div className={`relative inline-flex ${className}`}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="appearance-none rounded-full bg-black/[0.05] py-1 pl-2.5 pr-6 text-[11.5px] font-medium text-label-primary outline-none transition-colors hover:bg-black/[0.08] dark:bg-white/[0.08] dark:hover:bg-white/[0.12]"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown size={11} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-label-tertiary" />
+    </div>
+  );
+}
 
 export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onDeleted }: TaskDetailPanelProps) {
   const { t, locale, translateError } = useLanguage();
@@ -60,7 +90,6 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   const { statuses } = useTrackerStatuses(detail?.boardId ?? null);
   const { fields } = useTrackerFields(detail?.boardId ?? null);
   const { labels } = useTrackerLabels(detail?.boardId ?? null);
-  const { settings } = useTrackerSettings();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -166,19 +195,19 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
     onDeleted();
   }
 
-  function handleCopyLink() {
-    navigator.clipboard?.writeText(`noxera-task://${taskId}`).then(
-      () => showToast({ title: t("tracker.linkCopied") }),
-      () => {},
-    );
-  }
-
-  const currentStatus = statuses.find((s) => s.id === detail.statusId);
+  const statusOptions = statuses.map((s) => ({ value: s.id, label: s.name }));
+  const priorityOptions: { value: Priority; label: string }[] = [
+    { value: "low", label: t("tracker.priority.low") },
+    { value: "normal", label: t("tracker.priority.normal") },
+    { value: "high", label: t("tracker.priority.high") },
+    { value: "critical", label: t("tracker.priority.critical") },
+  ];
+  const dateColsClass = detail.completedAt ? "grid-cols-3" : "grid-cols-2";
 
   return (
     <>
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-        <div className="animate-scale-in flex h-[85vh] w-[720px] max-w-[95vw] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="animate-scale-in flex h-[82vh] w-[760px] max-w-[95vw] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple" onMouseDown={(e) => e.stopPropagation()}>
           {/* Header */}
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-surface-border px-5 py-4">
             <div className="min-w-0 flex-1">
@@ -188,25 +217,13 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                 onBlur={() => title.trim() && title !== detail.title && patch({ title: title.trim() })}
                 className="w-full bg-transparent text-[17px] font-semibold text-label-primary outline-none"
               />
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <select value={detail.statusId} onChange={(e) => handleStatusChange(e.target.value)} className="rounded-full border border-surface-border bg-transparent px-2 py-0.5 text-[11.5px] text-label-primary outline-none">
-                  {statuses.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <select value={detail.priority} onChange={(e) => patch({ priority: e.target.value as Priority })} className="rounded-full border border-surface-border bg-transparent px-2 py-0.5 text-[11.5px] text-label-primary outline-none">
-                  <option value="low">{t("tracker.priority.low")}</option>
-                  <option value="normal">{t("tracker.priority.normal")}</option>
-                  <option value="high">{t("tracker.priority.high")}</option>
-                  <option value="critical">{t("tracker.priority.critical")}</option>
-                </select>
-                {currentStatus?.isDone && <StatusPill name={currentStatus.name} color={currentStatus.color} />}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <PillSelect value={detail.statusId} onChange={handleStatusChange} options={statusOptions} />
+                <PillSelect value={detail.priority} onChange={(v) => patch({ priority: v as Priority })} options={priorityOptions} />
                 {detail.projectName && detail.projectId && (
                   <button
                     onClick={() => onOpenProject(detail.projectId!)}
-                    className="flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11.5px] text-label-primary hover:bg-accent hover:text-white dark:bg-white/[0.08]"
+                    className="flex items-center gap-1 rounded-full bg-black/[0.05] px-2.5 py-1 text-[11.5px] font-medium text-label-primary transition-colors hover:bg-accent hover:text-white dark:bg-white/[0.08]"
                   >
                     <FolderClosed size={11} />
                     {detail.projectName}
@@ -231,175 +248,188 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
 
           {/* Body */}
           <div className="flex flex-1 overflow-hidden">
-            <div className="flex-1 space-y-4 overflow-y-auto p-5">
-              <div>
-                <label className={labelClass}>{t("tracker.fieldDescription")}</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  onBlur={() => description !== (detail.description ?? "") && patch({ description: description.trim() || null })}
-                  rows={4}
-                  placeholder={t("tracker.descriptionPlaceholder")}
-                  className="mt-1 w-full resize-y rounded-apple-sm border border-surface-border bg-black/[0.03] p-2 text-[13px] leading-relaxed text-label-primary outline-none placeholder:text-label-tertiary focus:border-accent/50 focus:bg-surface-content dark:bg-white/[0.05]"
-                />
-              </div>
+            <div className="flex flex-1 flex-col overflow-y-auto p-5">
+              <div className="space-y-4">
+                <div className={fieldGroupClass}>
+                  <label className={labelClass}>{t("tracker.fieldDescription")}</label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    onBlur={() => description !== (detail.description ?? "") && patch({ description: description.trim() || null })}
+                    rows={4}
+                    placeholder={t("tracker.descriptionPlaceholder")}
+                    className="w-full resize-y rounded-apple-sm border border-surface-border bg-black/[0.03] p-2.5 text-[13px] leading-relaxed text-label-primary outline-none placeholder:text-label-tertiary focus:border-accent/50 focus:bg-surface-content dark:bg-white/[0.05]"
+                  />
+                </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className={labelClass}>{t("tracker.fieldReceivedAt")}</label>
-                  <input type="date" value={detail.receivedAt.slice(0, 10)} onChange={(e) => patch({ receivedAt: e.target.value })} className={`mt-1 ${inputClass}`} />
-                </div>
-                <div>
-                  <label className={labelClass}>{t("tracker.fieldDueAt")}</label>
-                  <input type="date" value={detail.dueAt?.slice(0, 10) ?? ""} onChange={(e) => patch({ dueAt: e.target.value || null })} className={`mt-1 ${inputClass}`} />
-                </div>
-                <div>
-                  <label className={labelClass}>{t("tracker.fieldCompletedAt")}</label>
-                  <div className="mt-1 flex gap-1">
-                    <input type="date" value={detail.completedAt?.slice(0, 10) ?? ""} onChange={(e) => patch({ completedAt: e.target.value ? new Date(e.target.value).toISOString() : null })} className={inputClass} />
+                <div className={`grid ${dateColsClass} gap-3`}>
+                  <div className={fieldGroupClass}>
+                    <label className={labelClass}>{t("tracker.fieldReceivedAt")}</label>
+                    <input type="date" value={detail.receivedAt.slice(0, 10)} onChange={(e) => patch({ receivedAt: e.target.value })} className={inputClass} />
                   </div>
+                  <div className={fieldGroupClass}>
+                    <label className={labelClass}>{t("tracker.fieldDueAt")}</label>
+                    <input type="date" value={detail.dueAt?.slice(0, 10) ?? ""} onChange={(e) => patch({ dueAt: e.target.value || null })} className={inputClass} />
+                  </div>
+                  {detail.completedAt && (
+                    <div className={fieldGroupClass}>
+                      <label className={labelClass}>{t("tracker.fieldCompletedAt")}</label>
+                      <input
+                        type="date"
+                        value={detail.completedAt.slice(0, 10)}
+                        onChange={(e) => patch({ completedAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                        className={inputClass}
+                      />
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>{t("tracker.fieldCustomer")}</label>
-                  <input defaultValue={detail.customer ?? ""} key={`customer-${detail.id}`} onBlur={(e) => e.target.value !== (detail.customer ?? "") && patch({ customer: e.target.value.trim() || null })} className={`mt-1 ${inputClass}`} />
-                </div>
-                <div>
-                  <label className={labelClass}>{t("tracker.fieldAssignee")}</label>
-                  <input defaultValue={detail.assignee ?? ""} key={`assignee-${detail.id}`} onBlur={(e) => e.target.value !== (detail.assignee ?? "") && patch({ assignee: e.target.value.trim() || null })} className={`mt-1 ${inputClass}`} />
-                </div>
-              </div>
-
-              {fields.length > 0 && (
-                <div>
-                  <label className={labelClass}>{t("tracker.customFields")}</label>
-                  <div className="mt-1.5 grid grid-cols-2 gap-3">
-                    {fields.map((field) => {
-                      const value = fieldValueMap.get(field.id) ?? "";
-                      if (field.fieldType === "select") {
-                        return (
-                          <div key={field.id}>
-                            <label className="text-[11px] text-label-secondary">{field.name}</label>
-                            <select defaultValue={value} key={`${field.id}-${detail.id}`} onChange={(e) => handleFieldValue(field.id, e.target.value)} className={`mt-1 ${inputClass}`}>
-                              <option value="" />
-                              {field.options.map((opt) => (
-                                <option key={opt} value={opt}>
-                                  {opt}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        );
-                      }
-                      if (field.fieldType === "boolean") {
-                        return (
-                          <label key={field.id} className="flex items-center gap-2 pt-4">
-                            <input type="checkbox" defaultChecked={value === "true"} key={`${field.id}-${detail.id}`} onChange={(e) => handleFieldValue(field.id, e.target.checked ? "true" : "false")} className="accent-accent" />
-                            <span className="text-[12.5px] text-label-primary">{field.name}</span>
-                          </label>
-                        );
-                      }
-                      const type = field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : field.fieldType === "datetime" ? "datetime-local" : field.fieldType === "url" ? "url" : "text";
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={fieldGroupClass}>
+                    <label className={labelClass}>{t("tracker.fieldCustomer")}</label>
+                    <input
+                      defaultValue={detail.customer ?? ""}
+                      key={`customer-${detail.id}`}
+                      onBlur={(e) => e.target.value !== (detail.customer ?? "") && patch({ customer: e.target.value.trim() || null })}
+                      className={inputClass}
+                    />
+                  </div>
+                  {fields.map((field) => {
+                    const value = fieldValueMap.get(field.id) ?? "";
+                    if (field.fieldType === "select") {
                       return (
-                        <div key={field.id}>
-                          <label className="text-[11px] text-label-secondary">{field.name}</label>
-                          <input type={type} defaultValue={value} key={`${field.id}-${detail.id}`} onBlur={(e) => handleFieldValue(field.id, e.target.value)} className={`mt-1 ${inputClass}`} />
+                        <div key={field.id} className={fieldGroupClass}>
+                          <label className={labelClass}>{field.name}</label>
+                          <select defaultValue={value} key={`${field.id}-${detail.id}`} onChange={(e) => handleFieldValue(field.id, e.target.value)} className={inputClass}>
+                            <option value="" />
+                            {field.options.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {labels.length > 0 && (
-                <div>
-                  <label className={labelClass}>{t("tracker.labels")}</label>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {labels.map((l) => {
-                      const active = detail.labelIds.includes(l.id);
+                    }
+                    if (field.fieldType === "boolean") {
                       return (
-                        <button
-                          key={l.id}
-                          onClick={() => handleLabelToggle(l.id)}
-                          className="rounded-full px-2 py-1 text-[11px] font-medium transition-opacity"
-                          style={{ backgroundColor: l.color, color: "white", opacity: active ? 1 : 0.35 }}
-                        >
-                          {l.name}
-                        </button>
+                        <label key={field.id} className="flex items-end gap-2 pb-1.5">
+                          <input type="checkbox" defaultChecked={value === "true"} key={`${field.id}-${detail.id}`} onChange={(e) => handleFieldValue(field.id, e.target.checked ? "true" : "false")} className="h-4 w-4 accent-accent" />
+                          <span className="text-[12.5px] text-label-primary">{field.name}</span>
+                        </label>
                       );
-                    })}
-                  </div>
+                    }
+                    const type = field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : field.fieldType === "datetime" ? "datetime-local" : field.fieldType === "url" ? "url" : "text";
+                    return (
+                      <div key={field.id} className={fieldGroupClass}>
+                        <label className={labelClass}>{field.name}</label>
+                        <input type={type} defaultValue={value} key={`${field.id}-${detail.id}`} onBlur={(e) => handleFieldValue(field.id, e.target.value)} className={inputClass} />
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
 
-              {/* Quick actions */}
-              <div className="flex flex-wrap gap-1.5 border-t border-surface-border pt-3.5">
-                <Button size="sm" variant="secondary" onClick={() => setDuplicateOpen(true)}>
-                  <Copy size={13} />
-                  {t("tracker.duplicate")}
-                </Button>
-                <Button size="sm" variant="secondary" onClick={handleToggleArchive}>
-                  {detail.archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
-                  {t(detail.archived ? "tracker.unarchive" : "tracker.archive")}
-                </Button>
-                <Button size="sm" variant="secondary" onClick={handleCopyLink}>
-                  <Link2 size={13} />
-                  {t("tracker.copyLink")}
-                </Button>
-                <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/10" onClick={() => setDeleteOpen(true)}>
-                  <Trash2 size={13} />
-                  {t("common.delete")}
-                </Button>
+                {labels.length > 0 && (
+                  <div className={fieldGroupClass}>
+                    <label className={labelClass}>{t("tracker.labels")}</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {labels.map((l) => {
+                        const active = detail.labelIds.includes(l.id);
+                        return (
+                          <button
+                            key={l.id}
+                            onClick={() => handleLabelToggle(l.id)}
+                            className="rounded-full px-2 py-1 text-[11px] font-medium transition-opacity"
+                            style={{ backgroundColor: l.color, color: "white", opacity: active ? 1 : 0.35 }}
+                          >
+                            {l.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1" />
+
+              {/* Actions */}
+              <div className="mt-5 space-y-2 border-t border-surface-border pt-4">
+                <div className="flex flex-wrap gap-1.5">
+                  <Button size="sm" variant="secondary" onClick={() => setDuplicateOpen(true)}>
+                    <Copy size={13} />
+                    {t("tracker.duplicate")}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={handleToggleArchive}>
+                    {detail.archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+                    {t(detail.archived ? "tracker.unarchive" : "tracker.archive")}
+                  </Button>
+                </div>
+                <button
+                  onClick={() => setDeleteOpen(true)}
+                  className="flex items-center gap-1.5 rounded-apple-sm px-1.5 py-1 text-[12px] text-label-tertiary transition-colors hover:text-danger"
+                >
+                  <Trash2 size={12} />
+                  {t("tracker.deleteTask")}
+                </button>
               </div>
             </div>
 
             {/* Sidebar: files + history */}
-            <div className="flex w-72 shrink-0 flex-col border-l border-surface-border">
-              <div className="flex shrink-0 border-b border-surface-border">
-                <button onClick={() => setTab("files")} className={`flex-1 py-2 text-[12px] font-medium ${tab === "files" ? "border-b-2 border-accent text-accent" : "text-label-secondary"}`}>
+            <div className="flex w-80 shrink-0 flex-col border-l border-surface-border bg-black/[0.012] dark:bg-white/[0.015]">
+              <div className="flex shrink-0 gap-4 border-b border-surface-border px-4 pt-3">
+                <button onClick={() => setTab("files")} className={`relative pb-2.5 text-[12px] font-medium transition-colors ${tab === "files" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
                   {t("tracker.tabFiles")} {detail.files.length > 0 && `(${detail.files.length})`}
+                  {tab === "files" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}
                 </button>
-                <button onClick={() => setTab("history")} className={`flex-1 py-2 text-[12px] font-medium ${tab === "history" ? "border-b-2 border-accent text-accent" : "text-label-secondary"}`}>
+                <button onClick={() => setTab("history")} className={`relative pb-2.5 text-[12px] font-medium transition-colors ${tab === "history" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
                   {t("tracker.tabHistory")}
+                  {tab === "history" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}
                 </button>
               </div>
 
               {tab === "files" ? (
                 <div className="flex-1 space-y-2 overflow-y-auto p-3">
                   {detail.files.map((f) => (
-                    <div key={f.id} className="rounded-apple border border-surface-border p-2">
-                      <div className="flex items-start gap-1.5">
-                        <FileText size={14} className="mt-0.5 shrink-0 text-label-secondary" />
+                    <div key={f.id} className="group rounded-apple border border-surface-border bg-surface-card p-2.5 shadow-card">
+                      <div className="flex items-start gap-2">
+                        <FileText size={15} className="mt-0.5 shrink-0 text-label-secondary" />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[12px] font-medium text-label-primary">{f.fileName}</p>
-                          {f.projectName && <p className="truncate text-[10.5px] text-label-tertiary">{f.projectName}</p>}
+                          <p className="truncate text-[12.5px] font-medium text-label-primary">{f.fileName}</p>
+                          {!f.fileExists ? (
+                            <p className="mt-1 text-[11px] text-danger">{t("tracker.fileGone")}</p>
+                          ) : !f.versionExists ? (
+                            <p className="mt-1 text-[11px] text-danger">{t("tracker.versionGone")}</p>
+                          ) : (
+                            <>
+                              <p className="mt-0.5 flex items-center gap-1 text-[11px] text-label-secondary">
+                                <span className="font-medium">v{f.versionNumber}</span>
+                                <span className="text-label-tertiary">·</span>
+                                {f.alwaysLatest ? (
+                                  <span className="flex items-center gap-0.5 text-accent">
+                                    <RefreshCw size={9} />
+                                    {t("tracker.versionCurrentBadge")}
+                                  </span>
+                                ) : (
+                                  <span className="text-label-tertiary">{formatBytes(f.fileSize ?? 0)}</span>
+                                )}
+                              </p>
+                              {f.projectName && <p className="mt-0.5 text-[10.5px] text-label-tertiary">{t("tracker.fileProjectLabel", { name: f.projectName })}</p>}
+                              {f.unseenUpdate && (
+                                <p className="mt-1 flex items-center gap-1.5 text-[10.5px] font-medium text-accent">
+                                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                                  {t("tracker.fileUpdatedToVersion", { version: f.versionNumber ?? "" })}
+                                </p>
+                              )}
+                            </>
+                          )}
                         </div>
-                        <button onClick={() => handleRemoveFile(f)} title={t("tracker.removeFile")} className="shrink-0 rounded-apple-sm p-0.5 text-label-tertiary hover:bg-danger/10 hover:text-danger">
+                        <button onClick={() => handleRemoveFile(f)} title={t("tracker.removeFile")} className="shrink-0 rounded-apple-sm p-0.5 text-label-tertiary opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100">
                           <X size={12} />
                         </button>
                       </div>
-                      {!f.fileExists ? (
-                        <p className="mt-1.5 text-[11px] text-danger">{t("tracker.fileGone")}</p>
-                      ) : !f.versionExists ? (
-                        <p className="mt-1.5 text-[11px] text-danger">{t("tracker.versionGone")}</p>
-                      ) : (
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-label-tertiary">
-                          <span>v{f.versionNumber}</span>
-                          {f.alwaysLatest && (
-                            <span className="flex items-center gap-0.5 rounded-full bg-accent/[0.12] px-1 py-0.5 text-accent">
-                              <RefreshCw size={9} />
-                              {t("tracker.alwaysLatestShort")}
-                            </span>
-                          )}
-                          {f.unseenUpdate && <span className="rounded-full bg-accent/[0.12] px-1 py-0.5 text-accent">{t("tracker.fileUpdated")}</span>}
-                          {f.versionDate && <span>{formatFullDateTime(f.versionDate, locale)}</span>}
-                          {f.fileSize != null && <span>{formatBytes(f.fileSize)}</span>}
-                        </div>
-                      )}
                       {f.fileExists && f.versionExists && (
-                        <button onClick={() => handleOpenFile(f)} className="mt-1.5 flex items-center gap-1 text-[11px] text-accent hover:underline">
+                        <button onClick={() => handleOpenFile(f)} className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-accent hover:underline">
                           <ExternalLink size={11} />
                           {t("menu.open")}
                         </button>
@@ -408,7 +438,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                   ))}
                   <button
                     onClick={() => setPickerOpen(true)}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-apple-sm border border-dashed border-surface-border py-2 text-[11.5px] text-label-secondary hover:border-accent/40 hover:text-accent"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-apple-sm border border-dashed border-surface-border py-2 text-[11.5px] text-label-secondary transition-colors hover:border-accent/40 hover:text-accent"
                   >
                     <Plus size={13} />
                     {t("tracker.addFile")}
@@ -416,18 +446,18 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                 </div>
               ) : (
                 <div className="flex flex-1 flex-col overflow-hidden">
-                  <div className="flex-1 space-y-2.5 overflow-y-auto p-3">
-                    {detail.events.map((ev) => (
-                      <HistoryEntry key={ev.id} event={ev} />
+                  <div className="flex-1 overflow-y-auto px-4 py-3">
+                    {detail.events.map((ev, i) => (
+                      <HistoryEntry key={ev.id} event={ev} isLast={i === detail.events.length - 1} />
                     ))}
                   </div>
-                  <div className="flex shrink-0 gap-1.5 border-t border-surface-border p-2">
+                  <div className="flex shrink-0 gap-1.5 border-t border-surface-border p-2.5">
                     <input
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
                       placeholder={t("tracker.commentPlaceholder")}
-                      className="min-w-0 flex-1 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2 h-8 text-[12px] text-label-primary outline-none placeholder:text-label-tertiary dark:bg-white/[0.05]"
+                      className="min-w-0 flex-1 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 h-8 text-[12px] text-label-primary outline-none placeholder:text-label-tertiary dark:bg-white/[0.05]"
                     />
                     <Button size="sm" variant="primary" onClick={handleAddComment}>
                       <MessageSquare size={13} />
@@ -455,65 +485,69 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   );
 }
 
-function HistoryEntry({ event }: { event: import("@/types").TrackerTaskEvent }) {
-  const { t, locale } = useLanguage();
+function eventText(event: TrackerTaskEvent, t: (key: string, vars?: Record<string, string | number>) => string): { title: string; detail?: string } {
   const payload = (event.payload ?? {}) as Record<string, unknown>;
-  const isComment = event.kind === "comment";
+  switch (event.kind) {
+    case "created":
+      return { title: t("tracker.event.created") };
+    case "status_changed":
+      return { title: t("tracker.event.statusChangedTitle"), detail: `${payload.fromStatus ?? ""} → ${payload.toStatus ?? ""}` };
+    case "priority_changed":
+      return { title: t("tracker.event.priorityChangedTitle"), detail: `${payload.from ?? ""} → ${payload.to ?? ""}` };
+    case "due_changed":
+      return { title: t("tracker.event.dueChanged") };
+    case "assignee_changed":
+      return { title: t("tracker.event.assigneeChangedTitle"), detail: String(payload.to ?? "—") };
+    case "customer_changed":
+      return { title: t("tracker.event.customerChangedTitle"), detail: String(payload.to ?? "—") };
+    case "project_changed":
+      return { title: t("tracker.event.projectChanged") };
+    case "completed_at_changed":
+      return { title: t("tracker.event.completedAtChanged") };
+    case "title_changed":
+      return { title: t("tracker.event.titleChangedTitle"), detail: String(payload.to ?? "") };
+    case "file_added":
+      return { title: t("tracker.event.fileAddedTitle"), detail: String(payload.fileName ?? "") };
+    case "file_removed":
+      return { title: t("tracker.event.fileRemovedTitle"), detail: String(payload.fileName ?? "") };
+    case "file_version_updated":
+      return {
+        title: String(payload.fileName ?? t("tracker.event.fileVersionUpdatedTitle")),
+        detail: t("tracker.event.versionArrow", { from: String(payload.fromVersion ?? "?"), to: String(payload.toVersion ?? "?") }),
+      };
+    case "archived":
+      return { title: t("tracker.event.archived") };
+    case "unarchived":
+      return { title: t("tracker.event.unarchived") };
+    case "pinned":
+      return { title: t("tracker.event.pinned") };
+    case "unpinned":
+      return { title: t("tracker.event.unpinned") };
+    case "duplicated":
+      return { title: t("tracker.event.duplicatedTitle"), detail: String(payload.sourceTitle ?? "") };
+    case "comment":
+      return { title: t("tracker.event.commentTitle"), detail: String(payload.text ?? "") };
+    default:
+      return { title: event.kind };
+  }
+}
 
-  const text = useMemo(() => {
-    switch (event.kind) {
-      case "created":
-        return t("tracker.event.created");
-      case "status_changed":
-        return t("tracker.event.statusChanged", { from: String(payload.fromStatus ?? ""), to: String(payload.toStatus ?? "") });
-      case "priority_changed":
-        return t("tracker.event.priorityChanged", { from: String(payload.from ?? ""), to: String(payload.to ?? "") });
-      case "due_changed":
-        return t("tracker.event.dueChanged");
-      case "assignee_changed":
-        return t("tracker.event.assigneeChanged", { to: String(payload.to ?? "—") });
-      case "customer_changed":
-        return t("tracker.event.customerChanged", { to: String(payload.to ?? "—") });
-      case "project_changed":
-        return t("tracker.event.projectChanged");
-      case "completed_at_changed":
-        return t("tracker.event.completedAtChanged");
-      case "title_changed":
-        return t("tracker.event.titleChanged", { to: String(payload.to ?? "") });
-      case "file_added":
-        return t("tracker.event.fileAdded", { name: String(payload.fileName ?? "") });
-      case "file_removed":
-        return t("tracker.event.fileRemoved", { name: String(payload.fileName ?? "") });
-      case "file_version_updated":
-        return t("tracker.event.fileVersionUpdated", {
-          name: String(payload.fileName ?? ""),
-          from: String(payload.fromVersion ?? "?"),
-          to: String(payload.toVersion ?? "?"),
-        });
-      case "archived":
-        return t("tracker.event.archived");
-      case "unarchived":
-        return t("tracker.event.unarchived");
-      case "pinned":
-        return t("tracker.event.pinned");
-      case "unpinned":
-        return t("tracker.event.unpinned");
-      case "duplicated":
-        return t("tracker.event.duplicated", { from: String(payload.sourceTitle ?? "") });
-      case "comment":
-        return String(payload.text ?? "");
-      default:
-        return event.kind;
-    }
-  }, [event, payload, t]);
+function HistoryEntry({ event, isLast }: { event: TrackerTaskEvent; isLast: boolean }) {
+  const { t, locale } = useLanguage();
+  const isComment = event.kind === "comment";
+  const { title, detail } = useMemo(() => eventText(event, t), [event, t]);
 
   return (
-    <div className={`rounded-apple-sm px-2 py-1.5 text-[11.5px] ${isComment ? "bg-accent/[0.06]" : ""}`}>
-      <p className={isComment ? "text-label-primary" : "text-label-secondary"}>
-        {isComment && <MessageSquare size={10} className="mr-1 inline text-accent" />}
-        {text}
-      </p>
-      <p className="mt-0.5 text-[10px] text-label-tertiary">{formatEventTime(event.createdAt, locale)}</p>
+    <div className="relative flex gap-2.5 pb-4 last:pb-0">
+      {!isLast && <span className="absolute left-[4.5px] top-[14px] bottom-0 w-px bg-surface-border" />}
+      <span className={`relative z-10 mt-1 h-[9px] w-[9px] shrink-0 rounded-full ring-2 ring-surface-modal ${isComment ? "bg-accent" : "bg-label-tertiary/60"}`} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] text-label-tertiary">{formatEventTime(event.createdAt, locale)}</p>
+        <p className={`mt-0.5 text-[12px] leading-snug ${isComment ? "font-medium text-label-primary" : "text-label-secondary"}`}>{title}</p>
+        {detail && (
+          <p className={`mt-0.5 text-[11.5px] leading-relaxed ${isComment ? "text-label-secondary" : "text-label-tertiary"}`}>{detail}</p>
+        )}
+      </div>
     </div>
   );
 }

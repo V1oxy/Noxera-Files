@@ -114,7 +114,7 @@ export interface UploadProgressEvent {
 
 export type Priority = "low" | "normal" | "high" | "critical";
 export type TrackerFieldType = "text" | "number" | "date" | "datetime" | "select" | "boolean" | "url";
-export type TaskSortField = "created" | "receivedAt" | "dueAt" | "priority" | "updatedAt" | "completedAt";
+export type TaskSortField = "created" | "receivedAt" | "dueAt" | "priority" | "updatedAt" | "completedAt" | "title" | "customer";
 export type CardSize = "compact" | "normal";
 
 export interface TrackerBoard {

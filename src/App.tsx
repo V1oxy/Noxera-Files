@@ -22,7 +22,7 @@ import { type PendingFileOpen, ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
 import { TrackerSettingsPage } from "@/pages/TrackerSettings";
 import { TrackerView } from "@/pages/TrackerView";
-import { createProject, getSettings, isInitialized, reorderProjects } from "@/services/api";
+import { createProject, getSettings, isInitialized, reorderProjects, reorderTrackerBoards } from "@/services/api";
 import type { GlobalFileHit } from "@/types";
 
 function MainShell() {
@@ -133,6 +133,9 @@ function MainShell() {
         }}
         onNewTrackerBoard={() => setView("trackerSettings")}
         onOpenTrackerSettings={() => setView("trackerSettings")}
+        onReorderTrackerBoards={(orderedIds) => {
+          void reorderTrackerBoards(orderedIds).then(() => refreshTrackerBoards());
+        }}
       />
 
       <div className="relative isolate flex flex-1 flex-col overflow-hidden">
