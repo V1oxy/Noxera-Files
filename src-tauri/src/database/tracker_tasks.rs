@@ -493,6 +493,38 @@ mod tests {
         teardown(f);
     }
 
+    /// Reproduces a user report that the Excel export "only exports
+    /// completed tasks": a not-done and a done task, both received on the
+    /// same date, inside the export's date range - both must come back when
+    /// no status is selected (empty `status_ids` means "every status"), and
+    /// the date range must be checked against `received_at` (creation/
+    /// intake date), not `completed_at` (which the not-done task doesn't
+    /// even have).
+    #[test]
+    fn list_for_export_includes_every_status_by_default_and_filters_on_received_at() {
+        let f = setup();
+        let now = "2026-01-05T00:00:00+00:00";
+        create(&f.conn, "open", &f.board_id, &f.status_a, "Still open", None, None, None, &f.priority_low, "2026-01-02", now).unwrap();
+        create(&f.conn, "done", &f.board_id, &f.status_b, "Wrapped up", None, None, None, &f.priority_low, "2026-01-03", now).unwrap();
+        set_completed_at(&f.conn, "done", Some("2026-01-04T00:00:00+00:00"), now).unwrap();
+        // Received outside the export's date range - must be excluded even
+        // though it's otherwise identical to "open".
+        create(&f.conn, "out-of-range", &f.board_id, &f.status_a, "Too early", None, None, None, &f.priority_low, "2025-12-01", now).unwrap();
+
+        let filter = TrackerExportFilter {
+            project_id: None,
+            status_ids: Vec::new(),
+            date_from: "2026-01-01".to_string(),
+            date_to: "2026-01-31".to_string(),
+        };
+        let exported = list_for_export(&f.conn, &filter).unwrap();
+        let mut result_ids = ids(&exported);
+        result_ids.sort_unstable();
+        assert_eq!(result_ids, vec!["done", "open"]);
+
+        teardown(f);
+    }
+
     #[test]
     fn list_all_paginates_with_limit_and_offset() {
         let f = setup();

@@ -9,6 +9,7 @@ use crate::database::{
     files as files_db, tracker_boards as boards_db, tracker_events, tracker_field_values as field_values_db,
     tracker_labels as labels_db, tracker_priorities as priorities_db, tracker_statuses as statuses_db,
     tracker_task_files as task_files_db, tracker_task_local_files as local_files_db, tracker_tasks as tasks_db,
+    versions as versions_db,
 };
 use crate::models::{
     DuplicateOptions, FieldValue, NewTaskFile, Task, TaskDetail, TaskEvent, TaskFilter, TaskInput,
@@ -568,10 +569,19 @@ struct FilePinChangedPayload<'a> {
 }
 
 /// Flips one attachment between "always latest" and "pinned to a fixed
-/// version" after the fact - the picker only sets this at attach time
-/// otherwise.
+/// version" after the fact - the picker only lets you choose a version at
+/// attach time otherwise. Pinning without an explicit `version_id` falls
+/// back to whichever version is currently resolved (the file's live
+/// current version, since this attachment was "always latest" up to now) -
+/// the frontend always sends one explicitly once the user has picked from
+/// the version list, this fallback only matters for old callers/tests.
 #[tauri::command]
-pub fn set_tracker_task_file_pin(state: State<AppState>, task_file_id: String, always_latest: bool) -> AppResult<TaskDetail> {
+pub fn set_tracker_task_file_pin(
+    state: State<AppState>,
+    task_file_id: String,
+    always_latest: bool,
+    version_id: Option<String>,
+) -> AppResult<TaskDetail> {
     with_ready(&state, |conn, _| {
         let link = task_files_db::get(conn, &task_file_id)?
             .ok_or_else(|| AppError::user("This attachment no longer exists."))?;
@@ -580,7 +590,14 @@ pub fn set_tracker_task_file_pin(state: State<AppState>, task_file_id: String, a
             let file = files_db::get(conn, &link.file_id)?.ok_or_else(|| AppError::user("This file no longer exists."))?;
             task_files_db::set_always_latest(conn, &task_file_id, true, file.current_version_id.as_deref())?;
         } else {
-            let pin_to = link.version_id.clone().ok_or_else(|| AppError::user("This file has no version to pin to."))?;
+            let pin_to = match version_id {
+                Some(v) => v,
+                None => link.version_id.clone().ok_or_else(|| AppError::user("This file has no version to pin to."))?,
+            };
+            let version = versions_db::get(conn, &pin_to)?.ok_or_else(|| AppError::user("This version no longer exists."))?;
+            if version.file_id != link.file_id {
+                return Err(AppError::user("That version doesn't belong to this file."));
+            }
             task_files_db::set_always_latest(conn, &task_file_id, false, None)?;
             task_files_db::set_pinned_version(conn, &task_file_id, &pin_to)?;
         }

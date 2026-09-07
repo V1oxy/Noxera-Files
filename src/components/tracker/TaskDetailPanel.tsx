@@ -23,6 +23,7 @@ import { Select } from "@/components/Select";
 import { CustomFieldInputs, fieldInputClass, fieldLabelClass } from "@/components/tracker/CustomFieldInputs";
 import { DuplicateTaskModal } from "@/components/tracker/DuplicateTaskModal";
 import { FilePickerModal, type FilePickerResult } from "@/components/tracker/FilePickerModal";
+import { PinFileVersionModal } from "@/components/tracker/PinFileVersionModal";
 import { LabelChip, formatEventTime } from "@/components/tracker/shared";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/useToast";
@@ -78,6 +79,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   const [pickerOpen, setPickerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [pinVersionTarget, setPinVersionTarget] = useState<TrackerTaskFile | null>(null);
   const [tab, setTab] = useState<"files" | "comments" | "history">("files");
   const [isDragActive, setIsDragActive] = useState(false);
 
@@ -234,14 +236,28 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
     }
   }
 
-  async function handleToggleFilePin(taskFile: TrackerTaskFile) {
+  // Switching back to "always latest" is a simple, easily-reversible toggle
+  // - no confirmation needed. Pinning *to* a fixed version goes through
+  // pinVersionTarget instead (see below): it's the direction that benefits
+  // from a confirmation and a choice of which version, since it silently
+  // defaulting to "whatever's current right now" is exactly what surprised
+  // people (spec: "дать выбор какую версию мы фиксируем").
+  async function handleSwitchToLatest(taskFile: TrackerTaskFile) {
     try {
-      await setTrackerTaskFilePin(taskFile.id, !taskFile.alwaysLatest);
+      await setTrackerTaskFilePin(taskFile.id, true);
       await refresh();
       onChanged();
     } catch (e) {
       showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
     }
+  }
+
+  async function handleConfirmPinVersion(versionId: string) {
+    if (!pinVersionTarget) return;
+    await setTrackerTaskFilePin(pinVersionTarget.id, false, versionId);
+    setPinVersionTarget(null);
+    await refresh();
+    onChanged();
   }
 
   async function handleAddLocalFiles() {
@@ -512,7 +528,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                                 <span className="text-label-tertiary">{formatBytes(f.fileSize ?? 0)}</span>
                               </p>
                               <button
-                                onClick={() => handleToggleFilePin(f)}
+                                onClick={() => (f.alwaysLatest ? setPinVersionTarget(f) : handleSwitchToLatest(f))}
                                 title={t(f.alwaysLatest ? "tracker.switchToPinnedVersion" : "tracker.switchToLatestVersion")}
                                 className={`mt-1 flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
                                   f.alwaysLatest
@@ -623,6 +639,13 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
       </div>
 
       <FilePickerModal open={pickerOpen} onCancel={() => setPickerOpen(false)} onConfirm={handleAddFile} />
+
+      <PinFileVersionModal
+        open={pinVersionTarget !== null}
+        taskFile={pinVersionTarget}
+        onCancel={() => setPinVersionTarget(null)}
+        onConfirm={handleConfirmPinVersion}
+      />
 
       <DeleteModal
         open={deleteOpen}

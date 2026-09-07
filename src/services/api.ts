@@ -339,8 +339,8 @@ export const attachTrackerTaskFile = (taskId: string, file: NewTrackerTaskFile) 
   call<TrackerTaskDetail>("attach_tracker_task_file", { taskId, file });
 export const detachTrackerTaskFile = (taskFileId: string) =>
   call<TrackerTaskDetail>("detach_tracker_task_file", { taskFileId });
-export const setTrackerTaskFilePin = (taskFileId: string, alwaysLatest: boolean) =>
-  call<TrackerTaskDetail>("set_tracker_task_file_pin", { taskFileId, alwaysLatest });
+export const setTrackerTaskFilePin = (taskFileId: string, alwaysLatest: boolean, versionId?: string) =>
+  call<TrackerTaskDetail>("set_tracker_task_file_pin", { taskFileId, alwaysLatest, versionId: versionId ?? null });
 export const addTrackerTaskLocalFile = (taskId: string, sourcePath: string) =>
   call<TrackerTaskDetail>("add_tracker_task_local_file", { taskId, sourcePath });
 export const removeTrackerTaskLocalFile = (localFileId: string) =>
