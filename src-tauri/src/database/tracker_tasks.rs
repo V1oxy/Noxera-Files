@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
-use crate::models::{SortDirection, Task, TaskDetail, TaskFilter, TaskSortField, TaskUpdateInput};
+use crate::models::{SortDirection, Task, TaskDetail, TaskFilter, TaskSortField, TaskUpdateInput, TrackerExportFilter};
 
 use super::{tracker_events, tracker_field_values, tracker_task_files, tracker_task_local_files};
 
@@ -235,6 +235,27 @@ pub fn list_all(conn: &Connection, filter: &TaskFilter) -> rusqlite::Result<Vec<
     // Pinned tasks still float to the top within the sorted list, mirroring
     // the board view's convention.
     tasks.sort_by_key(|t| !t.pinned);
+    Ok(tasks)
+}
+
+/// Backs the Excel export (see `commands::tracker_export`) - reuses
+/// `list_all`/`matches_filter` for everything `TaskFilter` already knows how
+/// to do (project scoping, the `received_at` date range, always including
+/// archived tasks since a report shouldn't silently drop historical ones),
+/// then applies the one thing `TaskFilter` doesn't support: matching against
+/// several statuses at once rather than just one.
+pub fn list_for_export(conn: &Connection, filter: &TrackerExportFilter) -> rusqlite::Result<Vec<Task>> {
+    let base_filter = TaskFilter {
+        project_id: filter.project_id.clone(),
+        received_after: Some(filter.date_from.clone()),
+        received_before: Some(format!("{}T23:59:59", filter.date_to)),
+        include_archived: Some(true),
+        ..Default::default()
+    };
+    let mut tasks = list_all(conn, &base_filter)?;
+    if !filter.status_ids.is_empty() {
+        tasks.retain(|t| filter.status_ids.contains(&t.status_id));
+    }
     Ok(tasks)
 }
 

@@ -361,3 +361,18 @@ pub struct DuplicateOptions {
     pub files: bool,
     pub due_at: bool,
 }
+
+/// Scopes an Excel export (see `commands::tracker_export`) - `status_ids`
+/// empty means "every status", matching the "Все статусы" default.
+/// `date_from`/`date_to` are plain `YYYY-MM-DD` dates (inclusive on both
+/// ends), filtered against the same `received_at` field the rest of the
+/// tracker already treats as a task's "created/received" date.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackerExportFilter {
+    pub project_id: Option<String>,
+    #[serde(default)]
+    pub status_ids: Vec<String>,
+    pub date_from: String,
+    pub date_to: String,
+}

@@ -32,6 +32,7 @@ import type {
   StorageInfo,
   TrackerBoard,
   TrackerBoardInput,
+  TrackerExportFilter,
   TrackerField,
   TrackerFieldInput,
   TrackerFieldValue,
@@ -324,6 +325,24 @@ export const openTrackerTaskLocalFile = (localFileId: string) =>
   call<void>("open_tracker_task_local_file", { localFileId });
 export const addTrackerTaskComment = (taskId: string, text: string) =>
   call<TrackerTaskEvent>("add_tracker_task_comment", { taskId, text });
+
+// ---- Tracker: Excel export ------------------------------------------------------
+
+export const countTrackerExport = (filter: TrackerExportFilter) =>
+  call<number>("count_tracker_export", { filter });
+
+/** Prompts for a save location, then writes the report there - mirrors
+ * `downloadVersion`'s save-dialog flow. Returns false if the user cancelled
+ * the dialog, true once the file has been written. */
+export async function exportTrackerTasksExcel(filter: TrackerExportFilter, defaultFilename: string): Promise<boolean> {
+  const dest = await saveDialog({
+    defaultPath: defaultFilename,
+    filters: [{ name: "Excel", extensions: ["xlsx"] }],
+  });
+  if (!dest) return false;
+  await call<void>("export_tracker_tasks_excel", { filter, destPath: dest });
+  return true;
+}
 
 // ---- Tracker: settings ---------------------------------------------------------
 

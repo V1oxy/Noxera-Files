@@ -356,6 +356,17 @@ export interface TrackerTaskFilter {
   sortDir?: SortDirection;
 }
 
+/** Scopes an Excel export - `statusIds` empty means "every status".
+ * `dateFrom`/`dateTo` are plain `YYYY-MM-DD` dates (inclusive), filtered
+ * against the same `receivedAt` field the tracker already treats as a
+ * task's "created/received" date. */
+export interface TrackerExportFilter {
+  projectId?: string;
+  statusIds: string[];
+  dateFrom: string;
+  dateTo: string;
+}
+
 export interface CardDisplayConfig {
   showProject: boolean;
   showPriority: boolean;

@@ -1,6 +1,6 @@
 [package]
 name = "noxera-files"
-version = "0.5.2"
+version = "0.5.3"
 description = "Noxera Files - local-first project & file version manager"
 authors = ["Noxera"]
 edition = "2021"
@@ -32,6 +32,7 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2.0"
 zip = { version = "8.6", default-features = false, features = ["deflate"] }
 walkdir = "2.5"
+rust_xlsxwriter = { version = "0.92.0", features = ["chrono"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

@@ -1,4 +1,4 @@
-import { Archive, LayoutGrid, Plus, Rows3 } from "lucide-react";
+import { Archive, FileSpreadsheet, LayoutGrid, Plus, Rows3 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { AllTasksView } from "@/components/tracker/AllTasksView";
 import { BoardKanban } from "@/components/tracker/BoardKanban";
 import { BoardSettingsModal } from "@/components/tracker/BoardSettingsModal";
+import { ExportExcelModal } from "@/components/tracker/ExportExcelModal";
 import { NewTaskModal, type NewTaskInitialFile } from "@/components/tracker/NewTaskModal";
 import { TaskDetailPanel } from "@/components/tracker/TaskDetailPanel";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -54,6 +55,7 @@ export function TrackerView({
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskStatusId, setNewTaskStatusId] = useState<string | null>(null);
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   // AllTasksView owns its own task list (a cross-board query the board view
   // has no use for), so it can't be refreshed via `refreshTasks` above -
   // bumping this instead tells it to refetch whenever a task changes while
@@ -149,6 +151,10 @@ export function TrackerView({
               >
                 {board.cardSize === "compact" ? <Rows3 size={14} /> : <LayoutGrid size={14} />}
               </button>
+              <Button variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
+                <FileSpreadsheet size={13} />
+                {t("tracker.export.button")}
+              </Button>
               <Button
                 variant="primary"
                 size="sm"
@@ -179,7 +185,11 @@ export function TrackerView({
         <>
           <div className="drag-region flex shrink-0 items-center justify-between px-6 pb-2 pt-10">
             <h1 className="text-[20px] font-semibold text-label-primary">{t("tracker.allTasks")}</h1>
-            <div className="no-drag">
+            <div className="no-drag flex shrink-0 items-center gap-1.5">
+              <Button variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
+                <FileSpreadsheet size={13} />
+                {t("tracker.export.button")}
+              </Button>
               <Button variant="primary" size="sm" onClick={() => { setNewTaskStatusId(null); setNewTaskOpen(true); }}>
                 <Plus size={13} />
                 {t("tracker.newTask")}
@@ -248,6 +258,15 @@ export function TrackerView({
           }}
         />
       )}
+
+      <ExportExcelModal
+        open={exportOpen}
+        onCancel={() => setExportOpen(false)}
+        onExported={() => {
+          setExportOpen(false);
+          showToast({ title: t("tracker.export.success"), variant: "success" });
+        }}
+      />
     </div>
   );
 }

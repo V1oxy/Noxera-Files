@@ -5,6 +5,7 @@ pub mod links;
 pub mod projects;
 pub mod settings;
 pub mod tracker_boards;
+pub mod tracker_export;
 pub mod tracker_settings;
 pub mod tracker_tasks;
 pub mod versions;

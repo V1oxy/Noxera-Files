@@ -131,6 +131,8 @@ pub fn run() {
             commands::tracker_tasks::add_tracker_task_comment,
             commands::tracker_settings::get_tracker_ui_state,
             commands::tracker_settings::set_tracker_ui_state,
+            commands::tracker_export::count_tracker_export,
+            commands::tracker_export::export_tracker_tasks_excel,
             commands::links::get_link_projects,
             commands::links::create_link_project,
             commands::links::update_link_project,

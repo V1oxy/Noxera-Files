@@ -14,6 +14,6 @@ pub use settings::{AppSettings, SettingsUpdate, StorageConfig};
 pub use tracker::{
     Board, BoardInput, DuplicateOptions, Field, FieldInput, FieldType, FieldValue, Label, LabelInput,
     NewTaskFile, Priority, PriorityInput, Status, StatusInput, Task, TaskDetail, TaskEvent, TaskFile,
-    TaskFilter, TaskInput, TaskLocalFile, TaskSortField, TaskUpdateInput,
+    TaskFilter, TaskInput, TaskLocalFile, TaskSortField, TaskUpdateInput, TrackerExportFilter,
 };
 pub use version::FileVersion;

@@ -2375,10 +2375,11 @@ dependencies = [
 
 [[package]]
 name = "noxera-files"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "chrono",
  "rusqlite",
+ "rust_xlsxwriter",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -3214,6 +3215,16 @@ dependencies = [
  "libsqlite3-sys",
  "smallvec",
  "sqlite-wasm-rs",
+]
+
+[[package]]
+name = "rust_xlsxwriter"
+version = "0.92.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac5cfcf481735a0ea276735b979d6a61873e286da8133d9aee6d5e47d8664a0d"
+dependencies = [
+ "chrono",
+ "zip 7.2.0",
 ]
 
 [[package]]
@@ -5839,6 +5850,20 @@ dependencies = [
  "crc32fast",
  "indexmap 2.14.1",
  "memchr",
+]
+
+[[package]]
+name = "zip"
+version = "7.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c42e33efc22a0650c311c2ef19115ce232583abbe80850bc8b66509ebef02de0"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap 2.14.1",
+ "memchr",
+ "typed-path",
+ "zopfli",
 ]
 
 [[package]]
