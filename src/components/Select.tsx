@@ -58,7 +58,18 @@ export function Select<T extends string>({
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number; width: number; openUp: boolean } | null>(null);
+  // `top`/`bottom` are mutually exclusive (only one is ever set) - anchoring
+  // an upward-opening menu by its *bottom* edge, rather than by `top` plus a
+  // `translateY(-100%)` transform, matters because the open/close animation
+  // below also animates `transform` (its own scale keyframe): a CSS
+  // animation's value for a property wins over an inline style for that
+  // same property for as long as it's running, so a translateY baked into
+  // the inline style would get silently dropped for the whole 150ms of the
+  // animation - the menu would visibly open downward first and only snap
+  // up once the animation finished. Positioning with `bottom` instead never
+  // touches `transform` at all, so there's nothing for the animation to
+  // clobber.
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; width: number } | null>(null);
 
   function openMenu() {
     if (disabled) return;
@@ -66,7 +77,11 @@ export function Select<T extends string>({
     if (!rect) return;
     const spaceBelow = window.innerHeight - rect.bottom;
     const openUp = spaceBelow < 220 && rect.top > spaceBelow;
-    setPos({ left: rect.left, top: openUp ? rect.top - 4 : rect.bottom + 4, width: rect.width, openUp });
+    setPos(
+      openUp
+        ? { left: rect.left, bottom: window.innerHeight - rect.top + 4, width: rect.width }
+        : { left: rect.left, top: rect.bottom + 4, width: rect.width },
+    );
     setOpen(true);
   }
 
@@ -106,7 +121,7 @@ export function Select<T extends string>({
           <>
             <div className="fixed inset-0 z-[95]" onMouseDown={() => setOpen(false)} onContextMenu={() => setOpen(false)} />
             <div
-              style={{ left: pos.left, top: pos.top, minWidth: pos.width, transform: pos.openUp ? "translateY(-100%)" : undefined }}
+              style={{ left: pos.left, top: pos.top, bottom: pos.bottom, minWidth: pos.width }}
               className="animate-scale-in fixed z-[96] max-h-64 min-w-[140px] overflow-y-auto rounded-apple border border-surface-border bg-surface-modal p-1 shadow-popover backdrop-blur-apple"
             >
               {options.length === 0 && <p className="px-2.5 py-1.5 text-[12px] text-label-tertiary">—</p>}
