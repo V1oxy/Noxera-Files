@@ -17,9 +17,7 @@ const DEFAULTS: DuplicateTaskOptions = {
   description: true,
   fieldValues: true,
   priority: true,
-  assignee: true,
   files: true,
-  dueAt: false,
 };
 
 export function DuplicateTaskModal({ open, taskId, onCancel, onDuplicated }: DuplicateTaskModalProps) {
@@ -53,7 +51,6 @@ export function DuplicateTaskModal({ open, taskId, onCancel, onDuplicated }: Dup
     { key: "description", label: t("tracker.fieldDescription") },
     { key: "fieldValues", label: t("tracker.customFields") },
     { key: "priority", label: t("tracker.fieldPriority") },
-    { key: "assignee", label: t("tracker.fieldAssignee") },
     { key: "files", label: t("tracker.tabFiles") },
   ];
 

@@ -383,10 +383,10 @@ pub fn duplicate_tracker_task(state: State<AppState>, task_id: String, options: 
             conn, &new_id_str, &source.board_id, &source.status_id, &new_title,
             if options.description { source.description.as_deref() } else { None },
             source.project_id.as_deref(), source.customer.as_deref(),
-            if options.assignee { source.assignee.as_deref() } else { None },
+            None,
             &priority_id,
             &now,
-            if options.due_at { source.due_at.as_deref() } else { None },
+            None,
             &now,
         )?;
 

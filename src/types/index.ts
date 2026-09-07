@@ -331,9 +331,7 @@ export interface DuplicateTaskOptions {
   description: boolean;
   fieldValues: boolean;
   priority: boolean;
-  assignee: boolean;
   files: boolean;
-  dueAt: boolean;
 }
 
 export interface TrackerTaskFilter {

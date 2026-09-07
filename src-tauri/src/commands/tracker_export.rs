@@ -111,15 +111,13 @@ fn write_opt_date(
     Ok(())
 }
 
-const HEADERS: [&str; 10] = [
+const HEADERS: [&str; 8] = [
     "Проект",
     "Название задачи",
     "Описание",
     "Статус",
     "Приоритет",
-    "Исполнитель",
     "Дата создания",
-    "Дедлайн",
     "Дата завершения",
     "Дата последнего изменения",
 ];
@@ -157,11 +155,9 @@ fn write_workbook(
         write_opt_string(worksheet, row, 2, task.description.as_deref())?;
         worksheet.write_string(row, 3, &task.status_name)?;
         worksheet.write_string(row, 4, &task.priority_name)?;
-        write_opt_string(worksheet, row, 5, task.assignee.as_deref())?;
-        write_opt_date(worksheet, row, 6, Some(task.received_at.as_str()), &date_format)?;
-        write_opt_date(worksheet, row, 7, task.due_at.as_deref(), &date_format)?;
-        write_opt_date(worksheet, row, 8, task.completed_at.as_deref(), &date_format)?;
-        write_opt_date(worksheet, row, 9, Some(task.updated_at.as_str()), &date_format)?;
+        write_opt_date(worksheet, row, 5, Some(task.received_at.as_str()), &date_format)?;
+        write_opt_date(worksheet, row, 6, task.completed_at.as_deref(), &date_format)?;
+        write_opt_date(worksheet, row, 7, Some(task.updated_at.as_str()), &date_format)?;
         for (i, name) in field_names.iter().enumerate() {
             let col = HEADERS.len() as u16 + i as u16;
             if let Some(value) = task_field_values[row_idx].get(name) {

@@ -357,9 +357,7 @@ pub struct DuplicateOptions {
     pub description: bool,
     pub field_values: bool,
     pub priority: bool,
-    pub assignee: bool,
     pub files: bool,
-    pub due_at: bool,
 }
 
 /// Scopes an Excel export (see `commands::tracker_export`) - `status_ids`

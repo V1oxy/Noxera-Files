@@ -34,7 +34,7 @@ function TaskCardBody({ task, compact, display }: { task: TrackerTask; compact: 
         </p>
       </div>
 
-      {display.showProject && task.projectName && (
+      {!compact && display.showProject && task.projectName && (
         <p className="mt-1 flex items-center gap-1 truncate text-[11px] text-label-secondary">
           <FolderClosed size={11} className="shrink-0" />
           <span className="truncate">{task.projectName}</span>
@@ -52,7 +52,7 @@ function TaskCardBody({ task, compact, display }: { task: TrackerTask; compact: 
         </div>
       )}
 
-      {display.showFileCount && task.fileCount > 0 && (
+      {!compact && display.showFileCount && task.fileCount > 0 && (
         <div className="mt-1.5 flex items-center justify-end">
           <FileCountBadge count={task.fileCount} />
         </div>
