@@ -29,13 +29,16 @@ import type {
 export function useTrackerBoards() {
   const [boards, setBoards] = useState<TrackerBoard[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     setLoading(true);
     try {
-      setBoards(await getTrackerBoards());
+      const result = await getTrackerBoards();
+      if (id === requestId.current) setBoards(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, []);
 
@@ -49,8 +52,10 @@ export function useTrackerBoards() {
 export function useTrackerStatuses(boardId: string | null) {
   const [statuses, setStatuses] = useState<TrackerStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     if (!boardId) {
       setStatuses([]);
       setLoading(false);
@@ -58,9 +63,10 @@ export function useTrackerStatuses(boardId: string | null) {
     }
     setLoading(true);
     try {
-      setStatuses(await getTrackerStatuses(boardId));
+      const result = await getTrackerStatuses(boardId);
+      if (id === requestId.current) setStatuses(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [boardId]);
 
@@ -74,8 +80,10 @@ export function useTrackerStatuses(boardId: string | null) {
 export function useTrackerFields(boardId: string | null) {
   const [fields, setFields] = useState<TrackerField[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     if (!boardId) {
       setFields([]);
       setLoading(false);
@@ -83,9 +91,10 @@ export function useTrackerFields(boardId: string | null) {
     }
     setLoading(true);
     try {
-      setFields(await getTrackerFields(boardId));
+      const result = await getTrackerFields(boardId);
+      if (id === requestId.current) setFields(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [boardId]);
 
@@ -99,8 +108,10 @@ export function useTrackerFields(boardId: string | null) {
 export function useTrackerLabels(boardId: string | null) {
   const [labels, setLabels] = useState<TrackerLabel[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     if (!boardId) {
       setLabels([]);
       setLoading(false);
@@ -108,9 +119,10 @@ export function useTrackerLabels(boardId: string | null) {
     }
     setLoading(true);
     try {
-      setLabels(await getTrackerLabels(boardId));
+      const result = await getTrackerLabels(boardId);
+      if (id === requestId.current) setLabels(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [boardId]);
 
@@ -124,8 +136,10 @@ export function useTrackerLabels(boardId: string | null) {
 export function useTrackerPriorities(boardId: string | null) {
   const [priorities, setPriorities] = useState<TrackerPriority[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     if (!boardId) {
       setPriorities([]);
       setLoading(false);
@@ -133,9 +147,10 @@ export function useTrackerPriorities(boardId: string | null) {
     }
     setLoading(true);
     try {
-      setPriorities(await getTrackerPriorities(boardId));
+      const result = await getTrackerPriorities(boardId);
+      if (id === requestId.current) setPriorities(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [boardId]);
 
@@ -149,8 +164,10 @@ export function useTrackerPriorities(boardId: string | null) {
 export function useTrackerTasks(boardId: string | null, includeArchived = false) {
   const [tasks, setTasks] = useState<TrackerTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     if (!boardId) {
       setTasks([]);
       setLoading(false);
@@ -158,9 +175,10 @@ export function useTrackerTasks(boardId: string | null, includeArchived = false)
     }
     setLoading(true);
     try {
-      setTasks(await getTrackerTasks(boardId, includeArchived));
+      const result = await getTrackerTasks(boardId, includeArchived);
+      if (id === requestId.current) setTasks(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [boardId, includeArchived]);
 
@@ -173,13 +191,16 @@ export function useTrackerTasks(boardId: string | null, includeArchived = false)
 
 export function useFileTrackerTasks(fileId: string | null) {
   const [tasks, setTasks] = useState<TrackerTask[]>([]);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     if (!fileId) {
       setTasks([]);
       return;
     }
-    setTasks(await getFileTrackerTasks(fileId));
+    const result = await getFileTrackerTasks(fileId);
+    if (id === requestId.current) setTasks(result);
   }, [fileId]);
 
   useEffect(() => {
@@ -193,13 +214,16 @@ export function useAllTrackerTasks(filter: TrackerTaskFilter) {
   const [tasks, setTasks] = useState<TrackerTask[]>([]);
   const [loading, setLoading] = useState(true);
   const filterKey = JSON.stringify(filter);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     setLoading(true);
     try {
-      setTasks(await getAllTrackerTasks(filter));
+      const result = await getAllTrackerTasks(filter);
+      if (id === requestId.current) setTasks(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterKey]);
@@ -215,8 +239,10 @@ export function useTrackerTaskDetail(taskId: string | null) {
   const [detail, setDetail] = useState<TrackerTaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     if (!taskId) {
       setDetail(null);
       setLoading(false);
@@ -225,11 +251,12 @@ export function useTrackerTaskDetail(taskId: string | null) {
     setLoading(true);
     setError(null);
     try {
-      setDetail(await getTrackerTask(taskId));
+      const result = await getTrackerTask(taskId);
+      if (id === requestId.current) setDetail(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to load this task.");
+      if (id === requestId.current) setError(e instanceof Error ? e.message : "Unable to load this task.");
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [taskId]);
 

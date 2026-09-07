@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getFiles } from "@/services/api";
 import type { FileEntry, SortDirection, SortField } from "@/types";
@@ -13,8 +13,10 @@ export function useFiles(
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     if (!projectId) {
       setFiles([]);
       setLoading(false);
@@ -23,11 +25,12 @@ export function useFiles(
     setLoading(true);
     setError(null);
     try {
-      setFiles(await getFiles(projectId, { folderId, search, sortField, sortDir }));
+      const result = await getFiles(projectId, { folderId, search, sortField, sortDir });
+      if (id === requestId.current) setFiles(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to load files.");
+      if (id === requestId.current) setError(e instanceof Error ? e.message : "Unable to load files.");
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [projectId, folderId, search, sortField, sortDir]);
 

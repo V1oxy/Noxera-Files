@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getAllLinkGroups, getLinkGroups, getLinkProjects, getLinks } from "@/services/api";
 import type { Link, LinkFilter, LinkGroup, LinkProject } from "@/types";
@@ -6,13 +6,16 @@ import type { Link, LinkFilter, LinkGroup, LinkProject } from "@/types";
 export function useLinkProjects() {
   const [projects, setProjects] = useState<LinkProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     setLoading(true);
     try {
-      setProjects(await getLinkProjects());
+      const result = await getLinkProjects();
+      if (id === requestId.current) setProjects(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, []);
 
@@ -27,13 +30,16 @@ export function useLinks(filter: LinkFilter) {
   const [links, setLinks] = useState<Link[]>([]);
   const [loading, setLoading] = useState(true);
   const filterKey = JSON.stringify(filter);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     setLoading(true);
     try {
-      setLinks(await getLinks(filter));
+      const result = await getLinks(filter);
+      if (id === requestId.current) setLinks(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterKey]);
@@ -48,8 +54,10 @@ export function useLinks(filter: LinkFilter) {
 export function useLinkGroups(projectId: string | null) {
   const [groups, setGroups] = useState<LinkGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     if (!projectId) {
       setGroups([]);
       setLoading(false);
@@ -57,9 +65,10 @@ export function useLinkGroups(projectId: string | null) {
     }
     setLoading(true);
     try {
-      setGroups(await getLinkGroups(projectId));
+      const result = await getLinkGroups(projectId);
+      if (id === requestId.current) setGroups(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [projectId]);
 
@@ -75,13 +84,16 @@ export function useLinkGroups(projectId: string | null) {
 export function useAllLinkGroups() {
   const [groups, setGroups] = useState<LinkGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++requestId.current;
     setLoading(true);
     try {
-      setGroups(await getAllLinkGroups());
+      const result = await getAllLinkGroups();
+      if (id === requestId.current) setGroups(result);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, []);
 
