@@ -3,6 +3,7 @@ import { ArrowDownWideNarrow, ArrowUpWideNarrow, Paperclip, X } from "lucide-rea
 import { useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/EmptyState";
+import { Select } from "@/components/Select";
 import { PriorityBadge, StatusPill, UpdateIndicator } from "@/components/tracker/shared";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useProjects } from "@/hooks/useProjects";
@@ -116,54 +117,45 @@ export function AllTasksView({ filter, onFilterChange, sortField, sortDir, onSor
             placeholder={t("tracker.searchPlaceholder")}
             className="h-8 min-w-[160px] flex-1 max-w-xs rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 text-[13px] text-label-primary outline-none placeholder:text-label-tertiary focus:border-accent/50 dark:bg-white/[0.05]"
           />
-          <select value={filter.boardId ?? ""} onChange={(e) => patch({ boardId: e.target.value || undefined, statusId: undefined })} className="h-8 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2 text-[12px] text-label-primary outline-none dark:bg-white/[0.05]">
-            <option value="">{t("tracker.filterAllBoards")}</option>
-            {boards.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-          <select value={filter.statusId ?? ""} onChange={(e) => patch({ statusId: e.target.value || undefined })} className="h-8 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2 text-[12px] text-label-primary outline-none dark:bg-white/[0.05]">
-            <option value="">{t("tracker.filterAllStatuses")}</option>
-            {statusOptions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.boardName ? `${s.boardName}: ${s.name}` : s.name}
-              </option>
-            ))}
-          </select>
-          <select value={filter.projectId ?? ""} onChange={(e) => patch({ projectId: e.target.value || undefined })} className="h-8 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2 text-[12px] text-label-primary outline-none dark:bg-white/[0.05]">
-            <option value="">{t("tracker.filterAllProjects")}</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <select value={filter.priorityId ?? ""} onChange={(e) => patch({ priorityId: e.target.value || undefined })} className="h-8 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2 text-[12px] text-label-primary outline-none dark:bg-white/[0.05]">
-            <option value="">{t("tracker.filterAllPriorities")}</option>
-            {priorityOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.boardName ? `${p.boardName}: ${p.name}` : p.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            fullWidth={false}
+            value={filter.boardId ?? ""}
+            onChange={(v) => patch({ boardId: v || undefined, statusId: undefined })}
+            options={[{ value: "", label: t("tracker.filterAllBoards") }, ...boards.map((b) => ({ value: b.id, label: b.name }))]}
+          />
+          <Select
+            fullWidth={false}
+            value={filter.statusId ?? ""}
+            onChange={(v) => patch({ statusId: v || undefined })}
+            options={[
+              { value: "", label: t("tracker.filterAllStatuses") },
+              ...statusOptions.map((s) => ({ value: s.id, label: s.boardName ? `${s.boardName}: ${s.name}` : s.name, color: s.color })),
+            ]}
+          />
+          <Select
+            fullWidth={false}
+            value={filter.projectId ?? ""}
+            onChange={(v) => patch({ projectId: v || undefined })}
+            options={[{ value: "", label: t("tracker.filterAllProjects") }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+          />
+          <Select
+            fullWidth={false}
+            value={filter.priorityId ?? ""}
+            onChange={(v) => patch({ priorityId: v || undefined })}
+            options={[
+              { value: "", label: t("tracker.filterAllPriorities") },
+              ...priorityOptions.map((p) => ({ value: p.id, label: p.boardName ? `${p.boardName}: ${p.name}` : p.name, color: p.color })),
+            ]}
+          />
 
           <div className="flex-1" />
 
-          <div className="relative">
-            <select
-              value={sortField}
-              onChange={(e) => onSortChange(e.target.value as TaskSortField, sortDir)}
-              className="h-8 rounded-apple-sm border border-surface-border bg-black/[0.03] pl-2 pr-6 text-[12px] text-label-primary outline-none dark:bg-white/[0.05]"
-            >
-              {(Object.entries(SORT_KEYS) as [TaskSortField, string][]).map(([f, key]) => (
-                <option key={f} value={f}>
-                  {t(key)}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            fullWidth={false}
+            value={sortField}
+            onChange={(v) => onSortChange(v as TaskSortField, sortDir)}
+            options={(Object.entries(SORT_KEYS) as [TaskSortField, string][]).map(([f, key]) => ({ value: f, label: t(key) }))}
+          />
           <button
             onClick={() => onSortChange(sortField, sortDir === "asc" ? "desc" : "asc")}
             className="flex h-8 w-8 items-center justify-center rounded-apple-sm border border-surface-border bg-black/[0.03] text-label-secondary hover:text-label-primary dark:bg-white/[0.05]"

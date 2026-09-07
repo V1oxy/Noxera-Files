@@ -163,6 +163,7 @@ fn versions_number_of(conn: &rusqlite::Connection, version_id: &str) -> AppResul
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct FileAddedPayload<'a> {
     file_name: &'a str,
     version_number: Option<i64>,
@@ -170,6 +171,7 @@ struct FileAddedPayload<'a> {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct FileRemovedPayload<'a> {
     file_name: &'a str,
 }
@@ -200,8 +202,22 @@ pub fn create_tracker_task(state: State<AppState>, input: TaskInput) -> AppResul
         if let Some(label_ids) = &input.label_ids {
             labels_db::set_for_task(conn, &id, label_ids)?;
         }
-        if let Some(values) = &input.field_values {
-            field_values_db::set_for_task(conn, &id, values)?;
+        // Any field the caller didn't explicitly set falls back to its own
+        // default value (spec section 6) - applied here so every creation
+        // path (the New Task form, quick-add, duplicate) benefits, not just
+        // whichever one remembers to pre-fill it client-side.
+        let provided = input.field_values.clone().unwrap_or_default();
+        let mut values = provided.clone();
+        for field in crate::database::tracker_fields::list_for_board(conn, &input.board_id)? {
+            if provided.iter().any(|fv| fv.field_id == field.id) {
+                continue;
+            }
+            if let Some(default) = field.default_value {
+                values.push(FieldValue { field_id: field.id, value: Some(default) });
+            }
+        }
+        if !values.is_empty() {
+            field_values_db::set_for_task(conn, &id, &values)?;
         }
 
         tracker_events::log(conn, &id, "created", &serde_json::Value::Null, None, &now)?;
@@ -218,6 +234,7 @@ pub fn create_tracker_task(state: State<AppState>, input: TaskInput) -> AppResul
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ChangePayload<T: Serialize> {
     from: T,
     to: T,
@@ -254,26 +271,84 @@ pub fn update_tracker_task(state: State<AppState>, task_id: String, patch: TaskU
         if old.completed_at != merged.completed_at {
             tracker_events::log(conn, &task_id, "completed_at_changed", &ChangePayload { from: &old.completed_at, to: &merged.completed_at }, None, &now)?;
         }
+        if old.description != merged.description {
+            tracker_events::log(conn, &task_id, "description_changed", &serde_json::Value::Null, None, &now)?;
+        }
+        if old.received_at != merged.received_at {
+            tracker_events::log(conn, &task_id, "received_at_changed", &ChangePayload { from: &old.received_at, to: &merged.received_at }, None, &now)?;
+        }
 
         tasks_db::get_detail(conn, &task_id, &now)?.ok_or_else(|| AppError::user("This task no longer exists."))
     })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FieldValueChangedPayload<'a> {
+    field_name: &'a str,
+    from: Option<&'a str>,
+    to: Option<&'a str>,
 }
 
 #[tauri::command]
 pub fn set_tracker_task_field_values(state: State<AppState>, task_id: String, values: Vec<FieldValue>) -> AppResult<TaskDetail> {
     with_ready(&state, |conn, _| {
         let now = now_iso();
+        let before = field_values_db::list_for_task(conn, &task_id)?;
         field_values_db::set_for_task(conn, &task_id, &values)?;
+
+        let mut changed_field_ids: Vec<String> = Vec::new();
+        for fv in &values {
+            let prior = before.iter().find(|b| b.field_id == fv.field_id).and_then(|b| b.value.as_deref());
+            if prior != fv.value.as_deref() {
+                changed_field_ids.push(fv.field_id.clone());
+            }
+        }
+        for b in &before {
+            if !values.iter().any(|fv| fv.field_id == b.field_id) && b.value.is_some() && !changed_field_ids.contains(&b.field_id) {
+                changed_field_ids.push(b.field_id.clone());
+            }
+        }
+        for field_id in changed_field_ids {
+            let Some(field) = crate::database::tracker_fields::get(conn, &field_id)? else { continue };
+            let from = before.iter().find(|b| b.field_id == field_id).and_then(|b| b.value.as_deref());
+            let to = values.iter().find(|fv| fv.field_id == field_id).and_then(|fv| fv.value.as_deref());
+            tracker_events::log(
+                conn, &task_id, "field_value_changed",
+                &FieldValueChangedPayload { field_name: &field.name, from, to },
+                None, &now,
+            )?;
+        }
+
         conn.execute("UPDATE tracker_tasks SET updated_at = ?2 WHERE id = ?1", rusqlite::params![task_id, now])?;
         tasks_db::get_detail(conn, &task_id, &now)?.ok_or_else(|| AppError::user("This task no longer exists."))
     })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LabelChangedPayload<'a> {
+    label_name: &'a str,
 }
 
 #[tauri::command]
 pub fn set_tracker_task_labels(state: State<AppState>, task_id: String, label_ids: Vec<String>) -> AppResult<TaskDetail> {
     with_ready(&state, |conn, _| {
         let now = now_iso();
+        let before = tasks_db::get(conn, &task_id)?.ok_or_else(|| AppError::user("This task no longer exists."))?.label_ids;
         labels_db::set_for_task(conn, &task_id, &label_ids)?;
+
+        for added in label_ids.iter().filter(|id| !before.contains(id)) {
+            if let Some(label) = labels_db::get(conn, added)? {
+                tracker_events::log(conn, &task_id, "label_added", &LabelChangedPayload { label_name: &label.name }, None, &now)?;
+            }
+        }
+        for removed in before.iter().filter(|id| !label_ids.contains(id)) {
+            if let Some(label) = labels_db::get(conn, removed)? {
+                tracker_events::log(conn, &task_id, "label_removed", &LabelChangedPayload { label_name: &label.name }, None, &now)?;
+            }
+        }
+
         conn.execute("UPDATE tracker_tasks SET updated_at = ?2 WHERE id = ?1", rusqlite::params![task_id, now])?;
         tasks_db::get_detail(conn, &task_id, &now)?.ok_or_else(|| AppError::user("This task no longer exists."))
     })
@@ -282,6 +357,7 @@ pub fn set_tracker_task_labels(state: State<AppState>, task_id: String, label_id
 // ---- Status / position (drag & drop) ---------------------------------------------
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct StatusChangedPayload<'a> {
     from_status: &'a str,
     to_status: &'a str,
@@ -316,6 +392,19 @@ pub fn move_tracker_task(state: State<AppState>, task_id: String, status_id: Str
             if new_status.is_done && task.completed_at.is_none() {
                 tasks_db::set_completed_at(conn, &task_id, Some(&now), &now)?;
                 tracker_events::log(conn, &task_id, "completed_at_changed", &ChangePayload { from: None::<String>, to: Some(now.clone()) }, None, &now)?;
+            }
+            // A status flagged "move to archive" (spec section 15) archives the
+            // task the moment it lands there, no separate archive status/entity
+            // needed. Moving back out of one that was flagged - the reverse of
+            // that transition - un-archives it again, without disturbing a task
+            // that was archived by hand via the regular Archive button while
+            // sitting in an ordinary status.
+            if new_status.move_to_archive && !task.archived {
+                tasks_db::set_archived(conn, &task_id, true, &now)?;
+                tracker_events::log(conn, &task_id, "archived", &serde_json::Value::Null, None, &now)?;
+            } else if !new_status.move_to_archive && task.archived && old_status.as_ref().is_some_and(|s| s.move_to_archive) {
+                tasks_db::set_archived(conn, &task_id, false, &now)?;
+                tracker_events::log(conn, &task_id, "unarchived", &serde_json::Value::Null, None, &now)?;
             }
         }
 
@@ -438,6 +527,7 @@ pub fn duplicate_tracker_task(state: State<AppState>, task_id: String, options: 
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DuplicatedPayload<'a> {
     source_title: &'a str,
 }
@@ -471,6 +561,7 @@ pub fn detach_tracker_task_file(state: State<AppState>, task_file_id: String) ->
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct FilePinChangedPayload<'a> {
     file_name: &'a str,
     always_latest: bool,
@@ -501,11 +592,13 @@ pub fn set_tracker_task_file_pin(state: State<AppState>, task_file_id: String, a
 // ---- Local files (attached "from the computer", never versioned) --------------
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct LocalFileAddedPayload<'a> {
     file_name: &'a str,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct LocalFileRemovedPayload<'a> {
     file_name: &'a str,
 }
@@ -561,6 +654,7 @@ pub fn open_tracker_task_local_file(app: AppHandle, state: State<AppState>, loca
 // ---- Comments -----------------------------------------------------------------
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct CommentPayload<'a> {
     text: &'a str,
 }
@@ -581,5 +675,37 @@ pub fn add_tracker_task_comment(state: State<AppState>, task_id: String, text: S
             .into_iter()
             .last()
             .ok_or_else(|| AppError::user("Failed to add comment."))
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommentDeletedPayload<'a> {
+    text: &'a str,
+}
+
+/// Removes one comment (a `tracker_task_events` row of kind "comment") and
+/// records that removal as its own history entry - comments live in the
+/// same append-only event log as automatic history (see the log's own doc
+/// comment in `database/schema.rs`), so "deleting" one means deleting that
+/// row outright, never editing history in place.
+#[tauri::command]
+pub fn delete_tracker_task_comment(state: State<AppState>, event_id: String) -> AppResult<TaskDetail> {
+    with_ready(&state, |conn, _| {
+        let event = tracker_events::get(conn, &event_id)?.ok_or_else(|| AppError::user("This comment no longer exists."))?;
+        if event.kind != "comment" {
+            return Err(AppError::user("This entry isn't a comment."));
+        }
+        let text = event
+            .payload
+            .as_ref()
+            .and_then(|p| p.get("text"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        tracker_events::delete(conn, &event_id)?;
+        let now = now_iso();
+        tracker_events::log(conn, &event.task_id, "comment_deleted", &CommentDeletedPayload { text: &text }, None, &now)?;
+        tasks_db::get_detail(conn, &event.task_id, &now)?.ok_or_else(|| AppError::user("This task no longer exists."))
     })
 }

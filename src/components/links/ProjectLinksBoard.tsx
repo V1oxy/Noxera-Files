@@ -51,6 +51,11 @@ interface ProjectLinksBoardProps {
   links: Link[];
   groups: LinkGroup[];
   showProjectOnCard: boolean;
+  /** While a search is active, groups with no matching link are hidden
+   * entirely rather than shown empty (spec section 19) - drag-and-drop
+   * reordering is disabled during a search anyway (nothing to reorder
+   * against), so hiding empty groups here never hides a valid drop target. */
+  isSearching: boolean;
   onOpenLink: (link: Link) => void;
   onEditLink: (link: Link) => void;
   onChanged: () => void;
@@ -63,6 +68,7 @@ export function ProjectLinksBoard({
   links,
   groups,
   showProjectOnCard,
+  isSearching,
   onOpenLink,
   onEditLink,
   onChanged,
@@ -214,10 +220,14 @@ export function ProjectLinksBoard({
     }
   }
 
-  const sections: { key: string; group: LinkGroup | null }[] = [
+  const allSections: { key: string; group: LinkGroup | null }[] = [
     ...groups.map((g) => ({ key: g.id, group: g })),
     ...(groups.length > 0 || columns[UNGROUPED]?.length > 0 ? [{ key: UNGROUPED, group: null }] : []),
   ];
+  // A group with nothing matching the search is hidden entirely rather than
+  // shown as an empty box (spec section 19) - outside a search, an empty
+  // group still renders (it's where you'd drop a link into it).
+  const sections = isSearching ? allSections.filter((s) => (columns[s.key]?.length ?? 0) > 0) : allSections;
 
   return (
     <div>
@@ -226,8 +236,10 @@ export function ProjectLinksBoard({
       )}
       {sections.length === 0 ? (
         <div className="rounded-apple-lg border border-dashed border-surface-border px-4 py-8 text-center">
-          <p className="text-[13px] font-medium text-label-primary">{t("links.emptyProjectTitle")}</p>
-          <p className="mx-auto mt-1 max-w-xs text-[12px] leading-relaxed text-label-secondary">{t("links.emptyProjectDescription")}</p>
+          <p className="text-[13px] font-medium text-label-primary">{isSearching ? t("links.searchEmptyTitle") : t("links.emptyProjectTitle")}</p>
+          <p className="mx-auto mt-1 max-w-xs text-[12px] leading-relaxed text-label-secondary">
+            {isSearching ? t("links.searchEmptyDescription") : t("links.emptyProjectDescription")}
+          </p>
         </div>
       ) : (
         <DndContext
@@ -252,8 +264,8 @@ export function ProjectLinksBoard({
                 onDeleteLink={setDeleteTarget}
                 onRenameGroup={group ? () => setRenameTarget(group) : undefined}
                 onDeleteGroup={group ? () => setDeleteGroupTarget(group) : undefined}
-                onMoveUp={group && index > 0 ? () => handleMoveGroup(group.id, -1) : undefined}
-                onMoveDown={group && index < groups.length - 1 ? () => handleMoveGroup(group.id, 1) : undefined}
+                onMoveUp={!isSearching && group && index > 0 ? () => handleMoveGroup(group.id, -1) : undefined}
+                onMoveDown={!isSearching && group && index < sections.length - 1 ? () => handleMoveGroup(group.id, 1) : undefined}
                 collapsed={collapsedGroups.has(key)}
                 onToggleCollapsed={() => toggleGroupCollapsed(key)}
               />

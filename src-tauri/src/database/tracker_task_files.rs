@@ -117,6 +117,7 @@ pub fn clear_unseen(conn: &Connection, task_id: &str) -> rusqlite::Result<usize>
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct FileVersionUpdatedPayload<'a> {
     file_name: &'a str,
     from_version: Option<i64>,

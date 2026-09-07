@@ -15,7 +15,7 @@ import { SortableRow } from "@/components/SortableRow";
 import { LINKS_ALL_TAB } from "@/constants/links";
 import { useLanguage } from "@/hooks/useLanguage";
 import type { TrackerViewState } from "@/hooks/useTracker";
-import type { LinkProject, Project, TrackerBoard } from "@/types";
+import type { LinkProject, Project, SidebarSectionKey, TrackerBoard } from "@/types";
 
 export interface SidebarCollapsedState {
   files: boolean;
@@ -49,6 +49,9 @@ interface SidebarProps {
   onSelectLinkProject: (projectId: string) => void;
   sidebarCollapsed: SidebarCollapsedState;
   onToggleSidebarSection: (section: keyof SidebarCollapsedState) => void;
+  /** Files/Tracker/Links render top-to-bottom in this order (spec section
+   * 17) - always a permutation of the three keys, persisted in settings. */
+  sectionOrder: SidebarSectionKey[];
 }
 
 /** A section header with a collapse chevron plus its (smoothly
@@ -119,6 +122,7 @@ export function Sidebar({
   onSelectLinkProject,
   sidebarCollapsed,
   onToggleSidebarSection,
+  sectionOrder,
 }: SidebarProps) {
   const { t } = useLanguage();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -160,17 +164,14 @@ export function Sidebar({
     onReorderTrackerBoards(next.map((b) => b.id));
   }
 
-  return (
-    <aside className="drag-region flex h-full w-60 shrink-0 flex-col border-r border-surface-border bg-surface-sidebar backdrop-blur-apple">
-      <div className="h-10 shrink-0" />
-
-      <div className="no-drag flex-1 overflow-y-auto px-3 pb-3">
+  const filesSection = (topSpacing: boolean) => (
         <SidebarSection
+          key="files"
           label={t("sidebar.projects")}
           collapsed={sidebarCollapsed.files}
           onToggle={() => onToggleSidebarSection("files")}
           itemCount={projects.length}
-          topSpacing={false}
+          topSpacing={topSpacing}
         >
           <nav className="flex flex-col gap-0.5">
             <DndContext
@@ -214,14 +215,17 @@ export function Sidebar({
             {t("sidebar.newProject")}
           </button>
         </SidebarSection>
+  );
 
-        {trackerVisible && (
+  const trackerSection = (topSpacing: boolean) =>
+    !trackerVisible ? null : (
           <SidebarSection
+            key="tracker"
             label={t("sidebar.tracker")}
             collapsed={sidebarCollapsed.tracker}
             onToggle={() => onToggleSidebarSection("tracker")}
             itemCount={trackerBoards.length}
-            topSpacing
+            topSpacing={topSpacing}
           >
             <nav className="flex flex-col gap-0.5">
               <button
@@ -271,15 +275,17 @@ export function Sidebar({
               {t("tracker.newBoard")}
             </button>
           </SidebarSection>
-        )}
+    );
 
-        {linksVisible && (
+  const linksSection = (topSpacing: boolean) =>
+    !linksVisible ? null : (
           <SidebarSection
+            key="links"
             label={t("sidebar.links")}
             collapsed={sidebarCollapsed.links}
             onToggle={() => onToggleSidebarSection("links")}
             itemCount={linkProjects.length}
-            topSpacing
+            topSpacing={topSpacing}
           >
             <nav className="flex flex-col gap-0.5">
               <button
@@ -312,8 +318,25 @@ export function Sidebar({
               })}
             </nav>
           </SidebarSection>
-        )}
-      </div>
+    );
+
+  const sectionRenderers: Record<SidebarSectionKey, (topSpacing: boolean) => ReactNode> = {
+    files: filesSection,
+    tracker: trackerSection,
+    links: linksSection,
+  };
+  let renderedAny = false;
+  const orderedSections = sectionOrder.map((key) => {
+    const node = sectionRenderers[key](renderedAny);
+    if (node !== null) renderedAny = true;
+    return node;
+  });
+
+  return (
+    <aside className="drag-region flex h-full w-60 shrink-0 flex-col border-r border-surface-border bg-surface-sidebar backdrop-blur-apple">
+      <div className="h-10 shrink-0" />
+
+      <div className="no-drag flex-1 overflow-y-auto px-3 pb-3">{orderedSections}</div>
 
       <div className="no-drag border-t border-surface-border px-3 py-3">
         <button

@@ -1,7 +1,6 @@
 import {
   Archive,
   ArchiveRestore,
-  ChevronDown,
   Copy,
   ExternalLink,
   FileText,
@@ -20,6 +19,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/Button";
 import { DeleteModal } from "@/components/DeleteModal";
+import { Select } from "@/components/Select";
+import { CustomFieldInputs, fieldInputClass, fieldLabelClass } from "@/components/tracker/CustomFieldInputs";
 import { DuplicateTaskModal } from "@/components/tracker/DuplicateTaskModal";
 import { FilePickerModal, type FilePickerResult } from "@/components/tracker/FilePickerModal";
 import { LabelChip, formatEventTime } from "@/components/tracker/shared";
@@ -32,6 +33,7 @@ import {
   addTrackerTaskLocalFile,
   attachTrackerTaskFile,
   deleteTrackerTask,
+  deleteTrackerTaskComment,
   detachTrackerTaskFile,
   openTrackerTaskLocalFile,
   openVersion,
@@ -57,39 +59,9 @@ interface TaskDetailPanelProps {
   onDeleted: () => void;
 }
 
-const inputClass =
-  "w-full rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 h-8 text-[13px] text-label-primary outline-none focus:border-accent/50 focus:bg-surface-content dark:bg-white/[0.05]";
-const labelClass = "block text-[10.5px] font-medium uppercase tracking-wide text-label-tertiary";
+const inputClass = fieldInputClass;
+const labelClass = fieldLabelClass;
 const fieldGroupClass = "space-y-1";
-
-function PillSelect({
-  value,
-  onChange,
-  options,
-  className = "",
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  className?: string;
-}) {
-  return (
-    <div className={`relative inline-flex ${className}`}>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="appearance-none rounded-full bg-black/[0.05] py-1 pl-2.5 pr-6 text-[11.5px] font-medium text-label-primary outline-none transition-colors hover:bg-black/[0.08] dark:bg-white/[0.08] dark:hover:bg-white/[0.12]"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown size={11} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-label-tertiary" />
-    </div>
-  );
-}
 
 export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onDeleted }: TaskDetailPanelProps) {
   const { t, translateError } = useLanguage();
@@ -164,11 +136,25 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
     return map;
   }, [detail?.fieldValues]);
 
+  // Custom fields need a *controlled* display value (so a keystroke is never
+  // silently dropped if blur doesn't fire before something else steals focus
+  // - see handleRequestClose's own note on that below) that's still only
+  // persisted to the backend on commit, not on every keystroke - this local
+  // draft is that display value, reset from the server copy whenever the
+  // task itself changes (not on every field-value refetch, which would
+  // otherwise stomp whatever the user is mid-typing in a sibling field).
+  const [fieldDraft, setFieldDraft] = useState<Map<string, string | null>>(new Map());
+  useEffect(() => {
+    setFieldDraft(new Map(fieldValueMap));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.id]);
+
   // Comments are stored alongside automatic events in one log (so the
   // backend never has to reconcile two separate timelines), but shown in
   // their own tab - History stays a pure technical audit trail.
   const commentEvents = useMemo(() => detail?.events.filter((ev) => ev.kind === "comment") ?? [], [detail?.events]);
   const historyEvents = useMemo(() => detail?.events.filter((ev) => ev.kind !== "comment") ?? [], [detail?.events]);
+  const [deleteCommentTarget, setDeleteCommentTarget] = useState<TrackerTaskEvent | null>(null);
 
   if (!detail) return null;
 
@@ -327,6 +313,17 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
     onDeleted();
   }
 
+  async function handleDeleteComment() {
+    if (!deleteCommentTarget) return;
+    try {
+      await deleteTrackerTaskComment(deleteCommentTarget.id);
+      setDeleteCommentTarget(null);
+      await refresh();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
   // Clicking the backdrop fires this on mousedown, before the still-focused
   // title/description field's own onBlur has a chance to save - closing
   // straight to onClose() would silently drop whatever was just typed, so
@@ -338,8 +335,8 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
     onClose();
   }
 
-  const statusOptions = statuses.map((s) => ({ value: s.id, label: s.name }));
-  const priorityOptions = priorities.map((p) => ({ value: p.id, label: p.name }));
+  const statusOptions = statuses.map((s) => ({ value: s.id, label: s.name, color: s.color }));
+  const priorityOptions = priorities.map((p) => ({ value: p.id, label: p.name, color: p.color }));
 
   return (
     <>
@@ -363,8 +360,8 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                 className="w-full bg-transparent text-[17px] font-semibold text-label-primary outline-none"
               />
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <PillSelect value={detail.statusId} onChange={handleStatusChange} options={statusOptions} />
-                <PillSelect value={detail.priorityId} onChange={(v) => patch({ priorityId: v })} options={priorityOptions} />
+                <Select variant="pill" value={detail.statusId} onChange={handleStatusChange} options={statusOptions} />
+                <Select variant="pill" value={detail.priorityId} onChange={(v) => patch({ priorityId: v })} options={priorityOptions} />
                 {detail.projectName && detail.projectId && (
                   <button
                     onClick={() => onOpenProject(detail.projectId!)}
@@ -425,43 +422,12 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                   )}
                 </div>
 
-                {fields.length > 0 && (
-                <div className="grid grid-cols-2 gap-3">
-                  {fields.map((field) => {
-                    const value = fieldValueMap.get(field.id) ?? "";
-                    if (field.fieldType === "select") {
-                      return (
-                        <div key={field.id} className={fieldGroupClass}>
-                          <label className={labelClass}>{field.name}</label>
-                          <select defaultValue={value} key={`${field.id}-${detail.id}`} onChange={(e) => handleFieldValue(field.id, e.target.value)} className={inputClass}>
-                            <option value="" />
-                            {field.options.map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      );
-                    }
-                    if (field.fieldType === "boolean") {
-                      return (
-                        <label key={field.id} className="flex items-end gap-2 pb-1.5">
-                          <input type="checkbox" defaultChecked={value === "true"} key={`${field.id}-${detail.id}`} onChange={(e) => handleFieldValue(field.id, e.target.checked ? "true" : "false")} className="h-4 w-4 accent-accent" />
-                          <span className="text-[12.5px] text-label-primary">{field.name}</span>
-                        </label>
-                      );
-                    }
-                    const type = field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : field.fieldType === "datetime" ? "datetime-local" : field.fieldType === "url" ? "url" : "text";
-                    return (
-                      <div key={field.id} className={fieldGroupClass}>
-                        <label className={labelClass}>{field.name}</label>
-                        <input type={type} defaultValue={value} key={`${field.id}-${detail.id}`} onBlur={(e) => handleFieldValue(field.id, e.target.value)} className={inputClass} />
-                      </div>
-                    );
-                  })}
-                </div>
-                )}
+                <CustomFieldInputs
+                  fields={fields}
+                  values={fieldDraft}
+                  onChange={(fieldId, value) => setFieldDraft((prev) => new Map(prev).set(fieldId, value))}
+                  onCommit={handleFieldValue}
+                />
 
                 {labels.length > 0 && (
                   <div className={fieldGroupClass}>
@@ -625,7 +591,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                       <p className="px-1 py-4 text-center text-[12px] text-label-tertiary">{t("tracker.noCommentsYet")}</p>
                     )}
                     {commentEvents.map((ev, i) => (
-                      <CommentEntry key={ev.id} event={ev} isLast={i === commentEvents.length - 1} />
+                      <CommentEntry key={ev.id} event={ev} isLast={i === commentEvents.length - 1} onDelete={() => setDeleteCommentTarget(ev)} />
                     ))}
                   </div>
                   <div className="flex shrink-0 gap-1.5 border-t border-surface-border p-2.5">
@@ -667,6 +633,14 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
       />
 
       <DuplicateTaskModal open={duplicateOpen} taskId={taskId} onCancel={() => setDuplicateOpen(false)} onDuplicated={() => { setDuplicateOpen(false); onChanged(); }} />
+
+      <DeleteModal
+        open={deleteCommentTarget !== null}
+        title={t("tracker.deleteCommentTitle")}
+        message={t("tracker.deleteCommentMessage")}
+        onCancel={() => setDeleteCommentTarget(null)}
+        onConfirm={handleDeleteComment}
+      />
     </>
   );
 }
@@ -716,18 +690,47 @@ function eventText(event: TrackerTaskEvent, t: (key: string, vars?: Record<strin
       return { title: t("tracker.event.unpinned") };
     case "duplicated":
       return { title: t("tracker.event.duplicatedTitle"), detail: String(payload.sourceTitle ?? "") };
+    case "description_changed":
+      return { title: t("tracker.event.descriptionChanged") };
+    case "received_at_changed":
+      return { title: t("tracker.event.receivedAtChangedTitle"), detail: t("tracker.event.dateArrow", { from: formatEventDate(payload.from), to: formatEventDate(payload.to) }) };
+    case "label_added":
+      return { title: t("tracker.event.labelAddedTitle"), detail: String(payload.labelName ?? "") };
+    case "label_removed":
+      return { title: t("tracker.event.labelRemovedTitle"), detail: String(payload.labelName ?? "") };
+    case "field_value_changed":
+      return {
+        title: t("tracker.event.fieldValueChangedTitle", { name: String(payload.fieldName ?? "") }),
+        detail: `${payload.from ?? t("tracker.event.emptyValue")} → ${payload.to ?? t("tracker.event.emptyValue")}`,
+      };
+    case "comment_deleted":
+      return { title: t("tracker.event.commentDeletedTitle"), detail: String(payload.text ?? "") };
     default:
       return { title: event.kind };
   }
 }
 
-function CommentEntry({ event, isLast }: { event: TrackerTaskEvent; isLast: boolean }) {
-  const { locale } = useLanguage();
+function formatEventDate(value: unknown): string {
+  const s = typeof value === "string" ? value : "";
+  return s ? s.slice(0, 10) : "—";
+}
+
+function CommentEntry({ event, isLast, onDelete }: { event: TrackerTaskEvent; isLast: boolean; onDelete: () => void }) {
+  const { t, locale } = useLanguage();
   const text = String((event.payload as Record<string, unknown> | null)?.text ?? "");
 
   return (
-    <div className={`rounded-apple border border-surface-border bg-surface-card p-2.5 shadow-card ${isLast ? "" : "mb-2"}`}>
-      <p className="text-[10px] text-label-tertiary">{formatEventTime(event.createdAt, locale)}</p>
+    <div className={`group rounded-apple border border-surface-border bg-surface-card p-2.5 shadow-card ${isLast ? "" : "mb-2"}`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[10px] text-label-tertiary">{formatEventTime(event.createdAt, locale)}</p>
+        <button
+          onClick={onDelete}
+          title={t("tracker.deleteComment")}
+          className="shrink-0 rounded-apple-sm p-0.5 text-label-tertiary opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
+        >
+          <Trash2 size={11} />
+        </button>
+      </div>
       <p className="mt-0.5 text-[12.5px] leading-relaxed text-label-primary">{text}</p>
     </div>
   );

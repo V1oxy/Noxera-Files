@@ -10,9 +10,10 @@ import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifi
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDownWideNarrow, ArrowUpWideNarrow, ChevronDown, FolderPlus, SearchX, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 
 import { Button } from "@/components/Button";
+import { ContextMenu } from "@/components/ContextMenu";
 import { DraggableRow } from "@/components/DraggableRow";
 import { EmptyState } from "@/components/EmptyState";
 import { FileRow } from "@/components/FileRow";
@@ -104,8 +105,21 @@ export function FileList({
 }: FileListProps) {
   const { t } = useLanguage();
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [emptySpaceMenu, setEmptySpaceMenu] = useState<{ x: number; y: number } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Right-click on empty background (never on a row - FileRow/FolderRow's
+  // own context menu calls preventDefault but not stopPropagation, so this
+  // still sees the event bubble past them; checking target===currentTarget
+  // is what keeps it from firing on top of theirs) - lets a folder be
+  // created without hunting for the toolbar button first.
+  function handleEmptySpaceContextMenu(e: MouseEvent<HTMLDivElement>) {
+    if (e.target !== e.currentTarget) return;
+    if (searchScope !== "project" || search !== "" || loading) return;
+    e.preventDefault();
+    setEmptySpaceMenu({ x: e.clientX, y: e.clientY });
+  }
   const isEmpty = folders.length === 0 && files.length === 0;
   const reorderable = search === "";
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -277,7 +291,7 @@ export function FileList({
         </Button>
       </div>
 
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 pb-6 pt-2">
+      <div ref={scrollRef} onScroll={handleScroll} onContextMenu={handleEmptySpaceContextMenu} className="flex-1 overflow-y-auto px-4 pb-6 pt-2">
         {searchScope === "global" ? (
           <>
             {globalSearchLoading && (
@@ -337,7 +351,7 @@ export function FileList({
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
           >
-            <div className="space-y-0.5">
+            <div className="space-y-0.5" onContextMenu={handleEmptySpaceContextMenu}>
               {folders.map((folder) => (
                 <DraggableRow key={folder.id} id={folder.id}>
                   <FolderRow
@@ -424,6 +438,15 @@ export function FileList({
           <Upload size={28} className="mb-2 text-accent" strokeWidth={1.5} />
           <p className="text-[13px] font-medium text-accent">{t("files.dropHere")}</p>
         </div>
+      )}
+
+      {emptySpaceMenu && (
+        <ContextMenu
+          x={emptySpaceMenu.x}
+          y={emptySpaceMenu.y}
+          onClose={() => setEmptySpaceMenu(null)}
+          items={[{ label: t("files.newFolder"), icon: FolderPlus, onClick: onNewFolderClick }]}
+        />
       )}
 
       {isDragActive && dropTarget && (

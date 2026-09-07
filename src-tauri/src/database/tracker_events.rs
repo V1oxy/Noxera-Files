@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 
 use crate::models::TaskEvent;
@@ -24,6 +24,19 @@ pub fn list_for_task(conn: &Connection, task_id: &str) -> rusqlite::Result<Vec<T
     )?;
     let rows = stmt.query_map(params![task_id], map_row)?;
     rows.collect()
+}
+
+pub fn get(conn: &Connection, id: &str) -> rusqlite::Result<Option<TaskEvent>> {
+    conn.query_row(
+        "SELECT id, task_id, kind, payload, author, created_at FROM tracker_task_events WHERE id = ?1",
+        params![id],
+        map_row,
+    )
+    .optional()
+}
+
+pub fn delete(conn: &Connection, id: &str) -> rusqlite::Result<usize> {
+    conn.execute("DELETE FROM tracker_task_events WHERE id = ?1", params![id])
 }
 
 /// Appends one history entry. `payload` is serialized to JSON - pass `&()` or

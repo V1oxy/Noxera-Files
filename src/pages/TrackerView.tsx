@@ -88,6 +88,15 @@ export function TrackerView({
     }
   }, [pendingNewTaskFile]);
 
+  // Every task mutation that can change a board's (non-archived) task count
+  // - create, delete, archive/unarchive, duplicate, move between boards
+  // isn't possible so status/priority edits don't need this - funnels
+  // through here, so the sidebar's per-board counts (which only ever
+  // refetch when `onBoardsChanged` is called) never go stale after one.
+  // Previously only the board view's own list/status refresh happened here,
+  // leaving the sidebar showing a task count from before the change - most
+  // visibly after deleting a board's last task, which left it showing 1
+  // until something unrelated happened to trigger a boards refetch.
   function refreshCurrentList() {
     if (board) {
       void refreshTasks();
@@ -95,6 +104,7 @@ export function TrackerView({
     } else {
       setAllTasksRefreshSignal((n) => n + 1);
     }
+    onBoardsChanged();
   }
 
   // Queued (not fired immediately) so two drags in quick succession can

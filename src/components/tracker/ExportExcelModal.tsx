@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/Button";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
+import { Select } from "@/components/Select";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useProjects } from "@/hooks/useProjects";
 import { useTrackerBoards } from "@/hooks/useTracker";
@@ -162,14 +163,13 @@ export function ExportExcelModal({ open, onCancel, onExported }: ExportExcelModa
         <div className="space-y-3">
           <div>
             <label className={labelClass}>{t("tracker.export.project")}</label>
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={busy} className={inputClass}>
-              <option value="">{t("tracker.export.allProjects")}</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <Select
+              className="mt-1"
+              value={projectId}
+              onChange={setProjectId}
+              disabled={busy}
+              options={[{ value: "", label: t("tracker.export.allProjects") }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+            />
           </div>
 
           <div>

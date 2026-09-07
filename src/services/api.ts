@@ -100,6 +100,7 @@ export const updateSettings = (update: {
   sidebarFilesCollapsed?: boolean;
   sidebarTrackerCollapsed?: boolean;
   sidebarLinksCollapsed?: boolean;
+  sidebarSectionOrder?: string[];
 }) => call<AppSettings>("update_settings", { update });
 export const getStorageInfo = () => call<StorageInfo>("get_storage_info");
 export const openDataFolder = (which: "storage" | "backups" | "logs") =>
@@ -263,6 +264,8 @@ export const createTrackerField = (boardId: string, input: TrackerFieldInput) =>
   call<TrackerField>("create_tracker_field", { boardId, input });
 export const updateTrackerField = (fieldId: string, input: TrackerFieldInput) =>
   call<TrackerField>("update_tracker_field", { fieldId, input });
+export const renameTrackerFieldOption = (fieldId: string, oldOption: string, newOption: string) =>
+  call<TrackerField>("rename_tracker_field_option", { fieldId, oldOption, newOption });
 export const reorderTrackerFields = (orderedIds: string[]) => call<void>("reorder_tracker_fields", { orderedIds });
 export const deleteTrackerField = (fieldId: string) => call<void>("delete_tracker_field", { fieldId });
 
@@ -346,6 +349,8 @@ export const openTrackerTaskLocalFile = (localFileId: string) =>
   call<void>("open_tracker_task_local_file", { localFileId });
 export const addTrackerTaskComment = (taskId: string, text: string) =>
   call<TrackerTaskEvent>("add_tracker_task_comment", { taskId, text });
+export const deleteTrackerTaskComment = (eventId: string) =>
+  call<TrackerTaskDetail>("delete_tracker_task_comment", { eventId });
 
 // ---- Tracker: Excel export ------------------------------------------------------
 

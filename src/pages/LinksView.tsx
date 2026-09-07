@@ -240,6 +240,7 @@ export function LinksView({ projects, onProjectsChanged, activeTab, onActiveTabC
                 links={links.filter((l) => l.projectId === p.id)}
                 groups={allGroups.filter((g) => g.projectId === p.id)}
                 showProjectOnCard={activeTab === ALL}
+                isSearching={isSearching}
                 onOpenLink={handleOpen}
                 onEditLink={handleEdit}
                 onChanged={refreshAll}

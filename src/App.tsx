@@ -27,7 +27,9 @@ import { type PendingFileOpen, ProjectView } from "@/pages/ProjectView";
 import { Settings } from "@/pages/Settings";
 import { TrackerView } from "@/pages/TrackerView";
 import { createProject, createTrackerBoard, getSettings, isInitialized, reorderProjects, reorderTrackerBoards, updateSettings } from "@/services/api";
-import type { GlobalFileHit } from "@/types";
+import type { GlobalFileHit, SidebarSectionKey } from "@/types";
+
+const DEFAULT_SIDEBAR_SECTION_ORDER: SidebarSectionKey[] = ["files", "tracker", "links"];
 
 function MainShell() {
   const { setTheme } = useTheme();
@@ -64,6 +66,7 @@ function MainShell() {
   // still loading, then synced to whatever was persisted (see the effect
   // below and Sidebar's onToggleSection).
   const [sidebarCollapsed, setSidebarCollapsed] = useState({ files: false, tracker: false, links: false });
+  const [sidebarSectionOrder, setSidebarSectionOrder] = useState<SidebarSectionKey[]>(DEFAULT_SIDEBAR_SECTION_ORDER);
 
   function openTask(taskId: string) {
     setPendingTaskId(taskId);
@@ -88,6 +91,7 @@ function MainShell() {
           tracker: s.sidebarTrackerCollapsed,
           links: s.sidebarLinksCollapsed,
         });
+        if (s.sidebarSectionOrder?.length === 3) setSidebarSectionOrder(s.sidebarSectionOrder);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -196,11 +200,17 @@ function MainShell() {
         }}
         sidebarCollapsed={sidebarCollapsed}
         onToggleSidebarSection={toggleSidebarSection}
+        sectionOrder={sidebarSectionOrder}
       />
 
       <div className="relative isolate flex flex-1 flex-col overflow-hidden">
         {view === "settings" ? (
-          <Settings onTrackerEnabledChanged={setTrackerEnabled} onLinksEnabledChanged={setLinksEnabled} />
+          <Settings
+            onTrackerEnabledChanged={setTrackerEnabled}
+            onLinksEnabledChanged={setLinksEnabled}
+            sidebarSectionOrder={sidebarSectionOrder}
+            onSidebarSectionOrderChanged={setSidebarSectionOrder}
+          />
         ) : view === "links" && linksEnabled ? (
           <LinksView
             projects={linkProjects}

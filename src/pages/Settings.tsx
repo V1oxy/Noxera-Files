@@ -1,14 +1,19 @@
 import { getVersion } from "@tauri-apps/api/app";
 import {
   Archive,
+  ArrowDown,
+  ArrowUp,
   Check,
   CheckCircle2,
   DownloadCloud,
+  FolderClosed,
   FolderInput,
   FolderOpen,
   Globe,
   HardDrive,
+  Kanban,
   Laptop,
+  Link2,
   Moon,
   RefreshCw,
   RotateCw,
@@ -35,7 +40,9 @@ import {
   pickStorageFolder,
   updateSettings,
 } from "@/services/api";
-import type { LanguageMode, ThemeMode } from "@/types";
+import type { LanguageMode, SidebarSectionKey, ThemeMode } from "@/types";
+
+const SECTION_ICONS: Record<SidebarSectionKey, typeof FolderClosed> = { files: FolderClosed, tracker: Kanban, links: Link2 };
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -73,9 +80,16 @@ function SettingsRow({
 interface SettingsProps {
   onTrackerEnabledChanged?: (enabled: boolean) => void;
   onLinksEnabledChanged?: (enabled: boolean) => void;
+  sidebarSectionOrder?: SidebarSectionKey[];
+  onSidebarSectionOrderChanged?: (order: SidebarSectionKey[]) => void;
 }
 
-export function Settings({ onTrackerEnabledChanged, onLinksEnabledChanged }: SettingsProps = {}) {
+export function Settings({
+  onTrackerEnabledChanged,
+  onLinksEnabledChanged,
+  sidebarSectionOrder = ["files", "tracker", "links"],
+  onSidebarSectionOrderChanged,
+}: SettingsProps = {}) {
   const { settings, storageInfo, refresh } = useSettings();
   const { theme, setTheme } = useTheme();
   const { accentColor, setAccentColor } = useAccentColor();
@@ -148,6 +162,23 @@ export function Settings({ onTrackerEnabledChanged, onLinksEnabledChanged }: Set
       const updated = await updateSettings({ linksEnabled: !settings.linksEnabled });
       await refresh();
       onLinksEnabledChanged?.(updated.linksEnabled);
+    } catch (e) {
+      showToast({
+        title: t("toast.settingUpdateError"),
+        description: e instanceof ApiError ? translateError(e.message) : undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  async function handleMoveSidebarSection(index: number, dir: -1 | 1) {
+    const target = index + dir;
+    if (target < 0 || target >= sidebarSectionOrder.length) return;
+    const next = [...sidebarSectionOrder];
+    [next[index], next[target]] = [next[target], next[index]];
+    onSidebarSectionOrderChanged?.(next);
+    try {
+      await updateSettings({ sidebarSectionOrder: next });
     } catch (e) {
       showToast({
         title: t("toast.settingUpdateError"),
@@ -284,6 +315,36 @@ export function Settings({ onTrackerEnabledChanged, onLinksEnabledChanged }: Set
                 {opt.label}
               </button>
             ))}
+          </div>
+        </SettingsSection>
+
+        <SettingsSection title={t("settings.sidebarOrder")}>
+          <div className="p-2">
+            {sidebarSectionOrder.map((key, i) => {
+              const Icon = SECTION_ICONS[key];
+              return (
+                <div key={key} className="flex items-center gap-2 rounded-apple-sm px-2 py-2">
+                  <Icon size={15} strokeWidth={1.75} className="shrink-0 text-label-secondary" />
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-label-primary">
+                    {t(key === "files" ? "sidebar.projects" : key === "tracker" ? "sidebar.tracker" : "sidebar.links")}
+                  </span>
+                  <button
+                    onClick={() => handleMoveSidebarSection(i, -1)}
+                    disabled={i === 0}
+                    className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30"
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => handleMoveSidebarSection(i, 1)}
+                    disabled={i === sidebarSectionOrder.length - 1}
+                    className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30"
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </SettingsSection>
 

@@ -65,6 +65,10 @@ pub struct Status {
     pub position: i64,
     pub is_default: bool,
     pub is_done: bool,
+    /// When true, a task moved into this status is automatically archived
+    /// (spec: "Статус с автоматическим перемещением в архив") - existing
+    /// archive mechanism, no separate "archive status" entity.
+    pub move_to_archive: bool,
     pub created_at: String,
     pub updated_at: String,
     pub task_count: i64,
@@ -78,6 +82,8 @@ pub struct Field {
     pub name: String,
     pub field_type: FieldType,
     pub options: Vec<String>,
+    /// Pre-filled automatically when a new task is created on this board.
+    pub default_value: Option<String>,
     pub position: i64,
     pub created_at: String,
     pub updated_at: String,
@@ -224,6 +230,8 @@ pub struct BoardInput {
 pub struct StatusInput {
     pub name: String,
     pub color: String,
+    #[serde(default)]
+    pub move_to_archive: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -232,6 +240,8 @@ pub struct FieldInput {
     pub name: String,
     pub field_type: FieldType,
     pub options: Vec<String>,
+    #[serde(default)]
+    pub default_value: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

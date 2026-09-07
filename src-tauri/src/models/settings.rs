@@ -29,6 +29,9 @@ pub struct AppSettings {
     pub sidebar_files_collapsed: bool,
     pub sidebar_tracker_collapsed: bool,
     pub sidebar_links_collapsed: bool,
+    /// Order the Files/Tracker/Links sections render in the sidebar - always
+    /// a permutation of ["files", "tracker", "links"].
+    pub sidebar_section_order: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -46,6 +49,7 @@ pub struct SettingsUpdate {
     pub sidebar_files_collapsed: Option<bool>,
     pub sidebar_tracker_collapsed: Option<bool>,
     pub sidebar_links_collapsed: Option<bool>,
+    pub sidebar_section_order: Option<Vec<String>>,
 }
 
 /// Persisted outside the SQLite database (in the OS app-config directory)

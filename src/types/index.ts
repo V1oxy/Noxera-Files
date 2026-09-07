@@ -88,7 +88,12 @@ export interface AppSettings {
   sidebarFilesCollapsed: boolean;
   sidebarTrackerCollapsed: boolean;
   sidebarLinksCollapsed: boolean;
+  /** Order the Files/Tracker/Links sections render in the sidebar - always
+   * a permutation of `SidebarSectionKey`. */
+  sidebarSectionOrder: SidebarSectionKey[];
 }
+
+export type SidebarSectionKey = "files" | "tracker" | "links";
 
 export interface StorageInfo {
   path: string;
@@ -139,6 +144,9 @@ export interface TrackerStatus {
   position: number;
   isDefault: boolean;
   isDone: boolean;
+  /** Tasks moved into this status are automatically archived (and, moving
+   * back out of it into a non-archiving status, un-archived again). */
+  moveToArchive: boolean;
   createdAt: string;
   updatedAt: string;
   taskCount: number;
@@ -150,6 +158,8 @@ export interface TrackerField {
   name: string;
   fieldType: TrackerFieldType;
   options: string[];
+  /** Pre-filled automatically when a new task is created on this board. */
+  defaultValue: string | null;
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -267,12 +277,14 @@ export interface TrackerBoardInput {
 export interface TrackerStatusInput {
   name: string;
   color: string;
+  moveToArchive: boolean;
 }
 
 export interface TrackerFieldInput {
   name: string;
   fieldType: TrackerFieldType;
   options: string[];
+  defaultValue?: string | null;
 }
 
 export interface TrackerLabelInput {

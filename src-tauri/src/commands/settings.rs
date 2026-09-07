@@ -25,6 +25,8 @@ const KEY_LINKS_ENABLED: &str = "links_enabled";
 const KEY_SIDEBAR_FILES_COLLAPSED: &str = "sidebar_files_collapsed";
 const KEY_SIDEBAR_TRACKER_COLLAPSED: &str = "sidebar_tracker_collapsed";
 const KEY_SIDEBAR_LINKS_COLLAPSED: &str = "sidebar_links_collapsed";
+const KEY_SIDEBAR_SECTION_ORDER: &str = "sidebar_section_order";
+const SIDEBAR_SECTIONS: [&str; 3] = ["files", "tracker", "links"];
 
 const ACCENT_COLORS: [&str; 10] = [
     "green", "blue", "teal", "purple", "pink", "red", "orange", "amber", "indigo", "graphite",
@@ -130,6 +132,10 @@ pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
         let sidebar_links_collapsed = settings_db::get(conn, KEY_SIDEBAR_LINKS_COLLAPSED)?
             .map(|v| v == "true")
             .unwrap_or(false);
+        let sidebar_section_order = settings_db::get(conn, KEY_SIDEBAR_SECTION_ORDER)?
+            .map(|v| v.split(',').map(str::to_string).collect::<Vec<_>>())
+            .filter(|order| order.len() == SIDEBAR_SECTIONS.len() && SIDEBAR_SECTIONS.iter().all(|s| order.iter().any(|o| o == s)))
+            .unwrap_or_else(|| SIDEBAR_SECTIONS.iter().map(|s| s.to_string()).collect());
         Ok(AppSettings {
             theme,
             language,
@@ -144,6 +150,7 @@ pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
             sidebar_files_collapsed,
             sidebar_tracker_collapsed,
             sidebar_links_collapsed,
+            sidebar_section_order,
         })
     })
 }
@@ -209,6 +216,13 @@ pub fn update_settings(
         }
         if let Some(collapsed) = update.sidebar_links_collapsed {
             settings_db::set(conn, KEY_SIDEBAR_LINKS_COLLAPSED, if collapsed { "true" } else { "false" })?;
+        }
+        if let Some(order) = &update.sidebar_section_order {
+            let valid = order.len() == SIDEBAR_SECTIONS.len() && SIDEBAR_SECTIONS.iter().all(|s| order.iter().any(|o| o == s));
+            if !valid {
+                return Err(AppError::user("Invalid sidebar section order."));
+            }
+            settings_db::set(conn, KEY_SIDEBAR_SECTION_ORDER, &order.join(","))?;
         }
         Ok(())
     })?;

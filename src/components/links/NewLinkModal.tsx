@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/Button";
 import { NameModal } from "@/components/links/NameModal";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
+import { Select } from "@/components/Select";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useLinkGroups } from "@/hooks/useLinks";
 import { ApiError, createLink, createLinkGroup, createLinkProject, updateLink } from "@/services/api";
@@ -47,6 +48,17 @@ export function NewLinkModal({ open, projects, defaultProjectId, link, onCancel,
     setBusy(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, link]);
+
+  // This modal never unmounts between opens (see Modal), so its groups list
+  // was only ever fetched once for whatever project happened to be selected
+  // at the time - a group created elsewhere (the project's own board, or a
+  // previous session) never showed up here without restarting the app.
+  // Re-fetching on every open (in addition to whenever `projectId` itself
+  // changes, which `useLinkGroups` already does on its own) keeps it fresh.
+  useEffect(() => {
+    if (open) void refreshGroups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   async function handleConfirm() {
     if (!title.trim()) {
@@ -139,50 +151,41 @@ export function NewLinkModal({ open, projects, defaultProjectId, link, onCancel,
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>{t("links.fieldProject")}</label>
-                <select
+                <Select
+                  className="mt-1"
                   value={projectId}
-                  onChange={(e) => {
-                    if (e.target.value === CREATE_NEW) {
+                  onChange={(v) => {
+                    if (v === CREATE_NEW) {
                       setNewProjectOpen(true);
                       return;
                     }
-                    setProjectId(e.target.value);
+                    setProjectId(v);
                     setGroupId("");
                   }}
                   disabled={busy || !!link}
-                  className={inputClass}
-                >
-                  {projects.length === 0 && <option value="">{t("links.chooseProject")}</option>}
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                  <option value={CREATE_NEW}>+ {t("links.newProject")}</option>
-                </select>
+                  placeholder={t("links.chooseProject")}
+                  options={[...projects.map((p) => ({ value: p.id, label: p.name })), { value: CREATE_NEW, label: `+ ${t("links.newProject")}` }]}
+                />
               </div>
               <div>
                 <label className={labelClass}>{t("links.fieldGroup")}</label>
-                <select
+                <Select
+                  className="mt-1"
                   value={groupId}
-                  onChange={(e) => {
-                    if (e.target.value === CREATE_NEW) {
+                  onChange={(v) => {
+                    if (v === CREATE_NEW) {
                       setNewGroupOpen(true);
                       return;
                     }
-                    setGroupId(e.target.value);
+                    setGroupId(v);
                   }}
                   disabled={busy || !projectId}
-                  className={inputClass}
-                >
-                  <option value="">{t("links.noGroup")}</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-                  <option value={CREATE_NEW}>+ {t("links.newGroup")}</option>
-                </select>
+                  options={[
+                    { value: "", label: t("links.noGroup") },
+                    ...groups.map((g) => ({ value: g.id, label: g.name })),
+                    { value: CREATE_NEW, label: `+ ${t("links.newGroup")}` },
+                  ]}
+                />
               </div>
             </div>
             {error && <p className="text-[12px] text-danger">{error}</p>}

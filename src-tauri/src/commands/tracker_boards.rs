@@ -145,7 +145,7 @@ pub fn update_tracker_status(state: State<AppState>, status_id: String, input: S
         return Err(AppError::user("Status name cannot be empty."));
     }
     with_ready(&state, |conn, _| {
-        let updated = statuses_db::update(conn, &status_id, &name, &input.color, &now_iso())?;
+        let updated = statuses_db::update(conn, &status_id, &name, &input.color, input.move_to_archive, &now_iso())?;
         if updated == 0 {
             return Err(AppError::user("This status no longer exists."));
         }
@@ -334,11 +334,21 @@ pub fn create_tracker_field(state: State<AppState>, board_id: String, input: Fie
             return Err(AppError::user("This board no longer exists."));
         }
         let id = new_id();
-        fields_db::create(conn, &id, &board_id, &name, input.field_type, &input.options, &now_iso())?;
+        fields_db::create(conn, &id, &board_id, &name, input.field_type, &input.options, input.default_value.as_deref(), &now_iso())?;
         fields_db::get(conn, &id)?.ok_or_else(|| AppError::user("Failed to create field."))
     })
 }
 
+/// Renaming or changing the type of a field is always safe (values are
+/// plain text either way), and reordering options never touches stored
+/// values (they're matched by name, not position) - the one case this needs
+/// to actively reconcile is an option disappearing from the list, whose
+/// stored values (and the field's own default, if it pointed at that
+/// option) would otherwise reference text that no longer exists anywhere in
+/// the field's definition (spec section 2: "предусмотреть корректную
+/// обработку уже сохранённых значений"). A *rename* (same option, new text)
+/// goes through `rename_tracker_field_option` instead, which is why this
+/// only clears - it never tries to guess a removal from a rename.
 #[tauri::command]
 pub fn update_tracker_field(state: State<AppState>, field_id: String, input: FieldInput) -> AppResult<Field> {
     let name = input.name.trim().to_string();
@@ -346,11 +356,46 @@ pub fn update_tracker_field(state: State<AppState>, field_id: String, input: Fie
         return Err(AppError::user("Field name cannot be empty."));
     }
     with_ready(&state, |conn, _| {
-        let updated = fields_db::update(conn, &field_id, &name, input.field_type, &input.options, &now_iso())?;
+        let existing = fields_db::get(conn, &field_id)?.ok_or_else(|| AppError::user("This field no longer exists."))?;
+        for removed in existing.options.iter().filter(|o| !input.options.contains(o)) {
+            fields_db::clear_option_values(conn, &field_id, removed)?;
+        }
+        let updated = fields_db::update(conn, &field_id, &name, input.field_type, &input.options, input.default_value.as_deref(), &now_iso())?;
         if updated == 0 {
             return Err(AppError::user("This field no longer exists."));
         }
         fields_db::get(conn, &field_id)?.ok_or_else(|| AppError::user("Failed to update field."))
+    })
+}
+
+/// Renames one option in place across the field's own option list, every
+/// task's stored value, and the field's default value if it pointed at the
+/// old text - the dedicated path for an intentional rename, so it's never
+/// misread as "remove the old option, add a new one" (which would silently
+/// blank out every task currently set to it).
+#[tauri::command]
+pub fn rename_tracker_field_option(state: State<AppState>, field_id: String, old_option: String, new_option: String) -> AppResult<Field> {
+    let new_option = new_option.trim().to_string();
+    if new_option.is_empty() {
+        return Err(AppError::user("Option name cannot be empty."));
+    }
+    with_ready(&state, |conn, _| {
+        let existing = fields_db::get(conn, &field_id)?.ok_or_else(|| AppError::user("This field no longer exists."))?;
+        if !existing.options.contains(&old_option) {
+            return Err(AppError::user("This option no longer exists."));
+        }
+        if existing.options.iter().any(|o| o == &new_option && o != &old_option) {
+            return Err(AppError::user("An option with that name already exists."));
+        }
+        let next_options: Vec<String> = existing
+            .options
+            .iter()
+            .map(|o| if o == &old_option { new_option.clone() } else { o.clone() })
+            .collect();
+        let now = now_iso();
+        fields_db::update(conn, &field_id, &existing.name, existing.field_type, &next_options, existing.default_value.as_deref(), &now)?;
+        fields_db::rename_option_value(conn, &field_id, &old_option, &new_option)?;
+        fields_db::get(conn, &field_id)?.ok_or_else(|| AppError::user("Failed to rename option."))
     })
 }
 

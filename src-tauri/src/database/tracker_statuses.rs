@@ -2,7 +2,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::models::Status;
 
-const SELECT_BASE: &str = "SELECT s.id, s.board_id, s.name, s.color, s.position, s.is_default, s.is_done, s.created_at, s.updated_at, \
+const SELECT_BASE: &str = "SELECT s.id, s.board_id, s.name, s.color, s.position, s.is_default, s.is_done, s.move_to_archive, s.created_at, s.updated_at, \
     (SELECT COUNT(*) FROM tracker_tasks t WHERE t.status_id = s.id AND t.archived = 0) AS task_count \
     FROM tracker_statuses s";
 
@@ -15,6 +15,7 @@ fn map_row(row: &Row) -> rusqlite::Result<Status> {
         position: row.get("position")?,
         is_default: row.get("is_default")?,
         is_done: row.get("is_done")?,
+        move_to_archive: row.get("move_to_archive")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
         task_count: row.get("task_count")?,
@@ -71,17 +72,24 @@ pub fn create(
         clear_default(conn, board_id)?;
     }
     conn.execute(
-        "INSERT INTO tracker_statuses (id, board_id, name, color, position, is_default, is_done, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?7)",
+        "INSERT INTO tracker_statuses (id, board_id, name, color, position, is_default, is_done, move_to_archive, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 0, ?7, ?7)",
         params![id, board_id, name, color, position, make_default, now],
     )?;
     Ok(())
 }
 
-pub fn update(conn: &Connection, id: &str, name: &str, color: &str, now: &str) -> rusqlite::Result<usize> {
+pub fn update(
+    conn: &Connection,
+    id: &str,
+    name: &str,
+    color: &str,
+    move_to_archive: bool,
+    now: &str,
+) -> rusqlite::Result<usize> {
     conn.execute(
-        "UPDATE tracker_statuses SET name = ?2, color = ?3, updated_at = ?4 WHERE id = ?1",
-        params![id, name, color, now],
+        "UPDATE tracker_statuses SET name = ?2, color = ?3, move_to_archive = ?4, updated_at = ?5 WHERE id = ?1",
+        params![id, name, color, move_to_archive, now],
     )
 }
 

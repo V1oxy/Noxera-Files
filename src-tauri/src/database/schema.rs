@@ -69,26 +69,28 @@ CREATE TABLE IF NOT EXISTS tracker_boards (
 );
 
 CREATE TABLE IF NOT EXISTS tracker_statuses (
-    id          TEXT PRIMARY KEY,
-    board_id    TEXT NOT NULL REFERENCES tracker_boards(id) ON DELETE CASCADE,
-    name        TEXT NOT NULL,
-    color       TEXT NOT NULL DEFAULT '#8E8E93',
-    position    INTEGER NOT NULL DEFAULT 0,
-    is_default  INTEGER NOT NULL DEFAULT 0,
-    is_done     INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
+    id               TEXT PRIMARY KEY,
+    board_id         TEXT NOT NULL REFERENCES tracker_boards(id) ON DELETE CASCADE,
+    name             TEXT NOT NULL,
+    color            TEXT NOT NULL DEFAULT '#8E8E93',
+    position         INTEGER NOT NULL DEFAULT 0,
+    is_default       INTEGER NOT NULL DEFAULT 0,
+    is_done          INTEGER NOT NULL DEFAULT 0,
+    move_to_archive  INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS tracker_fields (
-    id          TEXT PRIMARY KEY,
-    board_id    TEXT NOT NULL REFERENCES tracker_boards(id) ON DELETE CASCADE,
-    name        TEXT NOT NULL,
-    field_type  TEXT NOT NULL,
-    options     TEXT,
-    position    INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
+    id             TEXT PRIMARY KEY,
+    board_id       TEXT NOT NULL REFERENCES tracker_boards(id) ON DELETE CASCADE,
+    name           TEXT NOT NULL,
+    field_type     TEXT NOT NULL,
+    options        TEXT,
+    default_value  TEXT,
+    position       INTEGER NOT NULL DEFAULT 0,
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS tracker_labels (
@@ -319,6 +321,23 @@ pub fn migrate(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
             conn,
             "SELECT id FROM files ORDER BY folder_id, updated_at DESC",
             "files",
+        )?;
+    }
+
+    // A custom field can now carry a default value, pre-filled when a new
+    // task is created (spec: "Если для поля задано значение по умолчанию -
+    // использовать его") - existing databases predate the column.
+    if !column_exists(conn, "tracker_fields", "default_value")? {
+        conn.execute_batch("ALTER TABLE tracker_fields ADD COLUMN default_value TEXT;")?;
+    }
+
+    // A status can now be flagged to auto-archive any task moved into it
+    // (spec: "Статус с автоматическим перемещением в архив") - existing
+    // databases predate the column, so backfill it as "off" for every
+    // existing status rather than losing/resetting anything else about them.
+    if !column_exists(conn, "tracker_statuses", "move_to_archive")? {
+        conn.execute_batch(
+            "ALTER TABLE tracker_statuses ADD COLUMN move_to_archive INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
 

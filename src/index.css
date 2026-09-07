@@ -144,3 +144,18 @@ button:focus-visible,
 .drag-region {
   -webkit-app-region: drag;
 }
+
+/* Safety net for any native <select> left in the app (most dropdowns use
+   the custom <Select> component - see src/components/Select.tsx - which
+   sidesteps this entirely): WebView2/Chromium's native option-list popup
+   otherwise renders using the OS's own light/dark setting rather than this
+   app's `data-theme`, which is unreadable whenever the two disagree
+   (e.g. app set to Dark while Windows itself is Light). Forcing explicit
+   colors on `option` keeps the popup legible regardless. */
+select {
+  color-scheme: inherit;
+}
+option {
+  background-color: var(--surface-modal);
+  color: var(--label-primary);
+}

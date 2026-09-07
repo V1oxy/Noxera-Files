@@ -1,9 +1,12 @@
-import { ArrowDown, ArrowUp, Plus, Star, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Archive, ArrowDown, ArrowUp, ChevronRight, Plus, Star, Trash2, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
 import { DeleteModal } from "@/components/DeleteModal";
 import { Modal, ModalBody, ModalHeader } from "@/components/Modal";
+import { Select } from "@/components/Select";
+import { fieldInputClass, fieldLabelClass } from "@/components/tracker/CustomFieldInputs";
+import { ColorSwatchButton, TRACKER_COLORS as COLORS } from "@/components/tracker/shared";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/useToast";
 import { useTrackerFields, useTrackerLabels, useTrackerPriorities, useTrackerStatuses } from "@/hooks/useTracker";
@@ -18,6 +21,7 @@ import {
   deleteTrackerLabel,
   deleteTrackerPriority,
   deleteTrackerStatus,
+  renameTrackerFieldOption,
   reorderTrackerFields,
   reorderTrackerLabels,
   reorderTrackerPriorities,
@@ -44,8 +48,9 @@ interface BoardSettingsModalProps {
 
 type Tab = "general" | "statuses" | "priorities" | "fields" | "labels";
 
-const swatchClass = "h-6 w-6 shrink-0 rounded-full border border-black/10";
-const COLORS = ["#8E8E93", "#0A84FF", "#30D158", "#FF9F0A", "#FF453A", "#BF5AF2", "#64D2FF", "#FFD60A"];
+/** Swatch buttons in the "create new" row (picking a color before anything
+ * exists yet to attach ColorSwatchButton's edit popover to). */
+const newSwatchClass = "h-6 w-6 shrink-0 rounded-full border border-black/10";
 
 export function BoardSettingsModal({ open, board, onClose, onBoardChanged, onBoardDeleted }: BoardSettingsModalProps) {
   const { t } = useLanguage();
@@ -191,7 +196,7 @@ function StatusesTab({ boardId }: { boardId: string }) {
 
   async function handleAdd() {
     if (!name.trim()) return;
-    await createTrackerStatus(boardId, { name: name.trim(), color });
+    await createTrackerStatus(boardId, { name: name.trim(), color, moveToArchive: false });
     setName("");
     await refresh();
   }
@@ -202,6 +207,16 @@ function StatusesTab({ boardId }: { boardId: string }) {
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
     await reorderTrackerStatuses(next.map((s) => s.id));
+    await refresh();
+  }
+
+  async function handleColorChange(status: TrackerStatus, color: string) {
+    await updateTrackerStatus(status.id, { name: status.name, color, moveToArchive: status.moveToArchive });
+    await refresh();
+  }
+
+  async function handleToggleMoveToArchive(status: TrackerStatus, moveToArchive: boolean) {
+    await updateTrackerStatus(status.id, { name: status.name, color: status.color, moveToArchive });
     await refresh();
   }
 
@@ -233,41 +248,59 @@ function StatusesTab({ boardId }: { boardId: string }) {
   return (
     <div className="space-y-2">
       {statuses.map((status, i) => (
-        <div key={status.id} className="flex items-center gap-2 rounded-apple-sm border border-surface-border px-2.5 py-2">
-          <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: status.color }} />
-          <input
-            defaultValue={status.name}
-            onBlur={(e) => e.target.value.trim() && e.target.value !== status.name && updateTrackerStatus(status.id, { name: e.target.value.trim(), color: status.color }).then(refresh)}
-            className="min-w-0 flex-1 bg-transparent text-[12.5px] text-label-primary outline-none"
-          />
-          <span className="shrink-0 text-[10.5px] text-label-tertiary">{status.taskCount}</span>
-          <button
-            title={t("tracker.setDefaultStatus")}
-            onClick={() => setTrackerStatusDefault(status.id).then(refresh)}
-            className={`shrink-0 rounded-apple-sm p-1 ${status.isDefault ? "text-accent" : "text-label-tertiary hover:text-label-primary"}`}
-          >
-            <Star size={13} fill={status.isDefault ? "currentColor" : "none"} />
-          </button>
-          <label className="flex shrink-0 items-center gap-1 text-[10.5px] text-label-tertiary">
-            <input type="checkbox" checked={status.isDone} onChange={(e) => setTrackerStatusIsDone(status.id, e.target.checked).then(refresh)} className="accent-accent" />
-            {t("tracker.isDoneStatus")}
-          </label>
-          <button onClick={() => handleReorder(i, -1)} disabled={i === 0} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
-            <ArrowUp size={13} />
-          </button>
-          <button onClick={() => handleReorder(i, 1)} disabled={i === statuses.length - 1} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
-            <ArrowDown size={13} />
-          </button>
-          <button onClick={() => handleDelete(status)} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:bg-danger/10 hover:text-danger">
-            <Trash2 size={13} />
-          </button>
+        <div key={status.id} className="space-y-1.5 rounded-apple-sm border border-surface-border px-2.5 py-2">
+          <div className="flex items-center gap-2">
+            <ColorSwatchButton color={status.color} onChange={(c) => handleColorChange(status, c)} />
+            <input
+              defaultValue={status.name}
+              onBlur={(e) =>
+                e.target.value.trim() &&
+                e.target.value !== status.name &&
+                updateTrackerStatus(status.id, { name: e.target.value.trim(), color: status.color, moveToArchive: status.moveToArchive }).then(refresh)
+              }
+              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-label-primary outline-none"
+            />
+            <span className="shrink-0 text-[10.5px] text-label-tertiary">{status.taskCount}</span>
+            <button
+              title={t("tracker.setDefaultStatus")}
+              onClick={() => setTrackerStatusDefault(status.id).then(refresh)}
+              className={`shrink-0 rounded-apple-sm p-1 ${status.isDefault ? "text-accent" : "text-label-tertiary hover:text-label-primary"}`}
+            >
+              <Star size={13} fill={status.isDefault ? "currentColor" : "none"} />
+            </button>
+            <button onClick={() => handleReorder(i, -1)} disabled={i === 0} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
+              <ArrowUp size={13} />
+            </button>
+            <button onClick={() => handleReorder(i, 1)} disabled={i === statuses.length - 1} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
+              <ArrowDown size={13} />
+            </button>
+            <button onClick={() => handleDelete(status)} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:bg-danger/10 hover:text-danger">
+              <Trash2 size={13} />
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 pl-[22px]">
+            <label className="flex shrink-0 items-center gap-1 text-[10.5px] text-label-tertiary">
+              <input type="checkbox" checked={status.isDone} onChange={(e) => setTrackerStatusIsDone(status.id, e.target.checked).then(refresh)} className="accent-accent" />
+              {t("tracker.isDoneStatus")}
+            </label>
+            <label className="flex shrink-0 items-center gap-1 text-[10.5px] text-label-tertiary" title={t("tracker.moveToArchiveHint")}>
+              <input
+                type="checkbox"
+                checked={status.moveToArchive}
+                onChange={(e) => handleToggleMoveToArchive(status, e.target.checked)}
+                className="accent-accent"
+              />
+              <Archive size={11} />
+              {t("tracker.moveToArchive")}
+            </label>
+          </div>
         </div>
       ))}
 
       <div className="flex items-center gap-2 rounded-apple-sm border border-dashed border-surface-border px-2.5 py-2">
         <div className="flex gap-1">
           {COLORS.map((c) => (
-            <button key={c} onClick={() => setColor(c)} className={`${swatchClass} ${color === c ? "ring-2 ring-accent ring-offset-1" : ""}`} style={{ backgroundColor: c }} />
+            <button key={c} onClick={() => setColor(c)} className={`${newSwatchClass} ${color === c ? "ring-2 ring-accent ring-offset-1" : ""}`} style={{ backgroundColor: c }} />
           ))}
         </div>
         <input
@@ -285,13 +318,12 @@ function StatusesTab({ boardId }: { boardId: string }) {
       {reassignTarget && (
         <div className="rounded-apple border border-accent/40 bg-accent/[0.06] p-3">
           <p className="text-[12.5px] text-label-primary">{t("tracker.reassignPrompt", { count: reassignTarget.taskCount, name: reassignTarget.name })}</p>
-          <select value={reassignTo} onChange={(e) => setReassignTo(e.target.value)} className="mt-2 w-full rounded-apple-sm border border-surface-border bg-surface-content px-2 h-8 text-[12.5px] outline-none">
-            {statuses.filter((s) => s.id !== reassignTarget.id).map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            className="mt-2 w-full"
+            value={reassignTo}
+            onChange={setReassignTo}
+            options={statuses.filter((s) => s.id !== reassignTarget.id).map((s) => ({ value: s.id, label: s.name, color: s.color }))}
+          />
           <div className="mt-2 flex justify-end gap-1.5">
             <Button size="sm" variant="secondary" onClick={() => setReassignTarget(null)}>
               {t("common.cancel")}
@@ -331,6 +363,11 @@ function PrioritiesTab({ boardId }: { boardId: string }) {
     await refresh();
   }
 
+  async function handleColorChange(priority: TrackerPriority, color: string) {
+    await updateTrackerPriority(priority.id, { name: priority.name, color });
+    await refresh();
+  }
+
   async function handleDelete(priority: TrackerPriority) {
     if (priority.taskCount > 0) {
       setReassignTarget(priority);
@@ -360,7 +397,7 @@ function PrioritiesTab({ boardId }: { boardId: string }) {
     <div className="space-y-2">
       {priorities.map((priority, i) => (
         <div key={priority.id} className="flex items-center gap-2 rounded-apple-sm border border-surface-border px-2.5 py-2">
-          <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: priority.color }} />
+          <ColorSwatchButton color={priority.color} onChange={(c) => handleColorChange(priority, c)} />
           <input
             defaultValue={priority.name}
             onBlur={(e) => e.target.value.trim() && e.target.value !== priority.name && updateTrackerPriority(priority.id, { name: e.target.value.trim(), color: priority.color }).then(refresh)}
@@ -389,7 +426,7 @@ function PrioritiesTab({ boardId }: { boardId: string }) {
       <div className="flex items-center gap-2 rounded-apple-sm border border-dashed border-surface-border px-2.5 py-2">
         <div className="flex gap-1">
           {COLORS.map((c) => (
-            <button key={c} onClick={() => setColor(c)} className={`${swatchClass} ${color === c ? "ring-2 ring-accent ring-offset-1" : ""}`} style={{ backgroundColor: c }} />
+            <button key={c} onClick={() => setColor(c)} className={`${newSwatchClass} ${color === c ? "ring-2 ring-accent ring-offset-1" : ""}`} style={{ backgroundColor: c }} />
           ))}
         </div>
         <input
@@ -407,13 +444,12 @@ function PrioritiesTab({ boardId }: { boardId: string }) {
       {reassignTarget && (
         <div className="rounded-apple border border-accent/40 bg-accent/[0.06] p-3">
           <p className="text-[12.5px] text-label-primary">{t("tracker.reassignPriorityPrompt", { count: reassignTarget.taskCount, name: reassignTarget.name })}</p>
-          <select value={reassignTo} onChange={(e) => setReassignTo(e.target.value)} className="mt-2 w-full rounded-apple-sm border border-surface-border bg-surface-content px-2 h-8 text-[12.5px] outline-none">
-            {priorities.filter((p) => p.id !== reassignTarget.id).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            className="mt-2 w-full"
+            value={reassignTo}
+            onChange={setReassignTo}
+            options={priorities.filter((p) => p.id !== reassignTarget.id).map((p) => ({ value: p.id, label: p.name, color: p.color }))}
+          />
           <div className="mt-2 flex justify-end gap-1.5">
             <Button size="sm" variant="secondary" onClick={() => setReassignTarget(null)}>
               {t("common.cancel")}
@@ -436,6 +472,7 @@ function FieldsTab({ boardId }: { boardId: string }) {
   const [name, setName] = useState("");
   const [fieldType, setFieldType] = useState<TrackerFieldType>("text");
   const [options, setOptions] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   async function handleAdd() {
     if (!name.trim()) return;
@@ -466,23 +503,17 @@ function FieldsTab({ boardId }: { boardId: string }) {
   return (
     <div className="space-y-2">
       {fields.map((field, i) => (
-        <div key={field.id} className="flex items-center gap-2 rounded-apple-sm border border-surface-border px-2.5 py-2">
-          <input
-            defaultValue={field.name}
-            onBlur={(e) => e.target.value.trim() && e.target.value !== field.name && updateTrackerField(field.id, { name: e.target.value.trim(), fieldType: field.fieldType, options: field.options }).then(refresh)}
-            className="min-w-0 flex-1 bg-transparent text-[12.5px] text-label-primary outline-none"
-          />
-          <span className="shrink-0 rounded-full bg-black/[0.06] px-2 py-0.5 text-[10.5px] text-label-tertiary dark:bg-white/[0.08]">{t(`tracker.fieldType.${field.fieldType}`)}</span>
-          <button onClick={() => handleReorder(i, -1)} disabled={i === 0} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
-            <ArrowUp size={13} />
-          </button>
-          <button onClick={() => handleReorder(i, 1)} disabled={i === fields.length - 1} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
-            <ArrowDown size={13} />
-          </button>
-          <button onClick={() => handleDelete(field)} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:bg-danger/10 hover:text-danger">
-            <Trash2 size={13} />
-          </button>
-        </div>
+        <FieldRow
+          key={field.id}
+          field={field}
+          isFirst={i === 0}
+          isLast={i === fields.length - 1}
+          expanded={expandedId === field.id}
+          onToggleExpand={() => setExpandedId((id) => (id === field.id ? null : field.id))}
+          onReorder={(dir) => handleReorder(i, dir)}
+          onDelete={() => handleDelete(field)}
+          onRefresh={refresh}
+        />
       ))}
 
       <div className="space-y-1.5 rounded-apple-sm border border-dashed border-surface-border p-2.5">
@@ -493,13 +524,13 @@ function FieldsTab({ boardId }: { boardId: string }) {
             placeholder={t("tracker.newFieldPlaceholder")}
             className="min-w-0 flex-1 bg-transparent text-[12.5px] text-label-primary outline-none placeholder:text-label-tertiary"
           />
-          <select value={fieldType} onChange={(e) => setFieldType(e.target.value as TrackerFieldType)} className="shrink-0 rounded-apple-sm border border-surface-border bg-surface-content px-2 h-7 text-[11.5px] outline-none">
-            {FIELD_TYPES.map((ft) => (
-              <option key={ft} value={ft}>
-                {t(`tracker.fieldType.${ft}`)}
-              </option>
-            ))}
-          </select>
+          <Select
+            fullWidth={false}
+            className="h-7 shrink-0"
+            value={fieldType}
+            onChange={(v) => setFieldType(v as TrackerFieldType)}
+            options={FIELD_TYPES.map((ft) => ({ value: ft, label: t(`tracker.fieldType.${ft}`) }))}
+          />
           <button onClick={handleAdd} className="shrink-0 rounded-apple-sm bg-accent p-1 text-white">
             <Plus size={13} />
           </button>
@@ -513,6 +544,245 @@ function FieldsTab({ boardId }: { boardId: string }) {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+const fieldTypeInputType = (ft: TrackerFieldType) =>
+  ft === "number" ? "number" : ft === "date" ? "date" : ft === "datetime" ? "datetime-local" : ft === "url" ? "url" : "text";
+
+/** One custom field's row - collapsed it's just name/type/reorder/delete
+ * (as before); expanded it exposes full editing (spec section 2): rename,
+ * change type, set a default value, and for a "select" field add, remove,
+ * rename, and reorder its options - with removed/renamed options cascaded
+ * into every task's already-stored value on the backend (see
+ * `rename_tracker_field_option` / `update_tracker_field`). */
+function FieldRow({
+  field,
+  isFirst,
+  isLast,
+  expanded,
+  onToggleExpand,
+  onReorder,
+  onDelete,
+  onRefresh,
+}: {
+  field: TrackerField;
+  isFirst: boolean;
+  isLast: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onReorder: (dir: -1 | 1) => void;
+  onDelete: () => void;
+  onRefresh: () => Promise<void> | void;
+}) {
+  const { t, translateError } = useLanguage();
+  const { showToast } = useToast();
+  const [name, setName] = useState(field.name);
+  const [fieldType, setFieldType] = useState(field.fieldType);
+  const [optionsList, setOptionsList] = useState<string[]>(field.options);
+  const [defaultValue, setDefaultValue] = useState(field.defaultValue ?? "");
+  const [newOption, setNewOption] = useState("");
+  const [renamingOption, setRenamingOption] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  useEffect(() => {
+    setName(field.name);
+    setFieldType(field.fieldType);
+    setOptionsList(field.options);
+    setDefaultValue(field.defaultValue ?? "");
+  }, [field.id, field.name, field.fieldType, field.options, field.defaultValue]);
+
+  async function persist(patch: { name?: string; fieldType?: TrackerFieldType; options?: string[]; defaultValue?: string | null }) {
+    try {
+      await updateTrackerField(field.id, {
+        name: patch.name ?? name,
+        fieldType: patch.fieldType ?? fieldType,
+        options: patch.options ?? optionsList,
+        defaultValue: patch.defaultValue !== undefined ? patch.defaultValue : defaultValue || null,
+      });
+      await onRefresh();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  async function handleAddOption() {
+    const v = newOption.trim();
+    if (!v || optionsList.includes(v)) return;
+    const next = [...optionsList, v];
+    setOptionsList(next);
+    setNewOption("");
+    await persist({ options: next });
+  }
+
+  async function handleRemoveOption(opt: string) {
+    const next = optionsList.filter((o) => o !== opt);
+    setOptionsList(next);
+    await persist({ options: next });
+  }
+
+  async function handleReorderOption(idx: number, dir: -1 | 1) {
+    const target = idx + dir;
+    if (target < 0 || target >= optionsList.length) return;
+    const next = [...optionsList];
+    [next[idx], next[target]] = [next[target], next[idx]];
+    setOptionsList(next);
+    await persist({ options: next });
+  }
+
+  async function handleRenameOptionConfirm(oldOpt: string) {
+    const v = renameValue.trim();
+    if (!v || v === oldOpt) {
+      setRenamingOption(null);
+      return;
+    }
+    if (optionsList.some((o) => o !== oldOpt && o === v)) {
+      showToast({ title: t("tracker.optionAlreadyExists"), variant: "error" });
+      return;
+    }
+    try {
+      await renameTrackerFieldOption(field.id, oldOpt, v);
+      setRenamingOption(null);
+      await onRefresh();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-apple-sm border border-surface-border">
+      <div className="flex items-center gap-2 px-2.5 py-2">
+        <button onClick={onToggleExpand} title={t("tracker.editField")} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary">
+          <ChevronRight size={13} className={`transition-transform ${expanded ? "rotate-90" : ""}`} />
+        </button>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => name.trim() && name !== field.name && persist({ name: name.trim() })}
+          className="min-w-0 flex-1 bg-transparent text-[12.5px] text-label-primary outline-none"
+        />
+        <span className="shrink-0 rounded-full bg-black/[0.06] px-2 py-0.5 text-[10.5px] text-label-tertiary dark:bg-white/[0.08]">{t(`tracker.fieldType.${field.fieldType}`)}</span>
+        <button onClick={() => onReorder(-1)} disabled={isFirst} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
+          <ArrowUp size={13} />
+        </button>
+        <button onClick={() => onReorder(1)} disabled={isLast} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
+          <ArrowDown size={13} />
+        </button>
+        <button onClick={onDelete} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:bg-danger/10 hover:text-danger">
+          <Trash2 size={13} />
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="space-y-2.5 border-t border-surface-border bg-black/[0.012] px-2.5 py-2.5 dark:bg-white/[0.015]">
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <label className={fieldLabelClass}>{t("tracker.fieldTypeLabel")}</label>
+              <Select
+                className="mt-1"
+                value={fieldType}
+                onChange={(v) => {
+                  const next = v as TrackerFieldType;
+                  setFieldType(next);
+                  void persist({ fieldType: next });
+                }}
+                options={FIELD_TYPES.map((ft) => ({ value: ft, label: t(`tracker.fieldType.${ft}`) }))}
+              />
+            </div>
+            <div>
+              <label className={fieldLabelClass}>{t("tracker.defaultValueLabel")}</label>
+              {fieldType === "select" ? (
+                <Select
+                  className="mt-1"
+                  value={defaultValue}
+                  placeholder="—"
+                  onChange={(v) => {
+                    setDefaultValue(v);
+                    void persist({ defaultValue: v || null });
+                  }}
+                  options={[{ value: "", label: "—" }, ...optionsList.map((o) => ({ value: o, label: o }))]}
+                />
+              ) : fieldType === "boolean" ? (
+                <label className="mt-1 flex h-8 items-center gap-1.5 text-[12px] text-label-primary">
+                  <input
+                    type="checkbox"
+                    checked={defaultValue === "true"}
+                    onChange={(e) => {
+                      const v = e.target.checked ? "true" : "false";
+                      setDefaultValue(v);
+                      void persist({ defaultValue: v });
+                    }}
+                    className="h-4 w-4 accent-accent"
+                  />
+                  {t("tracker.defaultValueChecked")}
+                </label>
+              ) : (
+                <input
+                  type={fieldTypeInputType(fieldType)}
+                  value={defaultValue}
+                  onChange={(e) => setDefaultValue(e.target.value)}
+                  onBlur={() => persist({ defaultValue: defaultValue || null })}
+                  className={`mt-1 ${fieldInputClass}`}
+                />
+              )}
+            </div>
+          </div>
+
+          {fieldType === "select" && (
+            <div className="space-y-1.5">
+              <label className={fieldLabelClass}>{t("tracker.optionsLabel")}</label>
+              {optionsList.length === 0 && <p className="text-[11.5px] text-label-tertiary">{t("tracker.noOptionsYet")}</p>}
+              {optionsList.map((opt, oi) => (
+                <div key={opt} className="flex items-center gap-1.5">
+                  {renamingOption === opt ? (
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => handleRenameOptionConfirm(opt)}
+                      onKeyDown={(e) => e.key === "Enter" && handleRenameOptionConfirm(opt)}
+                      className="h-7 min-w-0 flex-1 rounded-apple-sm border border-accent/50 bg-surface-content px-2 text-[12px] text-label-primary outline-none"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setRenamingOption(opt);
+                        setRenameValue(opt);
+                      }}
+                      title={t("tracker.renameOption")}
+                      className="h-7 min-w-0 flex-1 truncate rounded-apple-sm px-2 text-left text-[12px] text-label-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                    >
+                      {opt}
+                    </button>
+                  )}
+                  <button onClick={() => handleReorderOption(oi, -1)} disabled={oi === 0} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
+                    <ArrowUp size={12} />
+                  </button>
+                  <button onClick={() => handleReorderOption(oi, 1)} disabled={oi === optionsList.length - 1} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:text-label-primary disabled:opacity-30">
+                    <ArrowDown size={12} />
+                  </button>
+                  <button onClick={() => handleRemoveOption(opt)} title={t("tracker.removeOption")} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:bg-danger/10 hover:text-danger">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={newOption}
+                  onChange={(e) => setNewOption(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddOption()}
+                  placeholder={t("tracker.newOptionPlaceholder")}
+                  className="h-7 min-w-0 flex-1 rounded-apple-sm border border-dashed border-surface-border bg-transparent px-2 text-[12px] text-label-primary outline-none placeholder:text-label-tertiary"
+                />
+                <button onClick={handleAddOption} className="shrink-0 rounded-apple-sm bg-accent p-1 text-white">
+                  <Plus size={12} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -544,11 +814,16 @@ function LabelsTab({ boardId }: { boardId: string }) {
     await refresh();
   }
 
+  async function handleColorChange(label: TrackerLabel, color: string) {
+    await updateTrackerLabel(label.id, { name: label.name, color });
+    await refresh();
+  }
+
   return (
     <div className="space-y-2">
       {labels.map((label, i) => (
         <div key={label.id} className="flex items-center gap-2 rounded-apple-sm border border-surface-border px-2.5 py-2">
-          <span className={swatchClass} style={{ backgroundColor: label.color }} />
+          <ColorSwatchButton color={label.color} onChange={(c) => handleColorChange(label, c)} />
           <input
             defaultValue={label.name}
             onBlur={(e) => e.target.value.trim() && e.target.value !== label.name && updateTrackerLabel(label.id, { name: e.target.value.trim(), color: label.color }).then(refresh)}
@@ -568,7 +843,7 @@ function LabelsTab({ boardId }: { boardId: string }) {
       <div className="flex items-center gap-2 rounded-apple-sm border border-dashed border-surface-border px-2.5 py-2">
         <div className="flex gap-1">
           {COLORS.map((c) => (
-            <button key={c} onClick={() => setColor(c)} className={`${swatchClass} ${color === c ? "ring-2 ring-accent ring-offset-1" : ""}`} style={{ backgroundColor: c }} />
+            <button key={c} onClick={() => setColor(c)} className={`${newSwatchClass} ${color === c ? "ring-2 ring-accent ring-offset-1" : ""}`} style={{ backgroundColor: c }} />
           ))}
         </div>
         <input
