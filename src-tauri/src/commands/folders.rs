@@ -68,19 +68,6 @@ pub fn rename_folder(state: State<AppState>, folder_id: String, new_name: String
     })
 }
 
-/// Persists a new manual order for one folder's siblings (all children of
-/// the same parent): `ordered_ids[i]` gets position `i`.
-#[tauri::command]
-pub fn reorder_folders(state: State<AppState>, ordered_ids: Vec<String>) -> AppResult<()> {
-    with_ready(&state, |conn, storage| {
-        for (i, id) in ordered_ids.iter().enumerate() {
-            db::set_position(conn, id, i as i64)?;
-        }
-        crate::utils::logger::info(storage, &format!("Folders reordered ({} items)", ordered_ids.len()));
-        Ok(())
-    })
-}
-
 /// Moves a folder under a different parent (None = the project's root) via
 /// drag-and-drop, rejecting a move into itself or into one of its own
 /// descendants (which would otherwise silently corrupt the tree into a

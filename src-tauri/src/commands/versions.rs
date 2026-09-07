@@ -104,11 +104,6 @@ fn write_version(
 }
 
 #[tauri::command]
-pub fn get_versions(state: State<AppState>, file_id: String) -> AppResult<Vec<FileVersion>> {
-    with_ready(&state, |conn, _| Ok(versions_db::list_for_file(conn, &file_id)?))
-}
-
-#[tauri::command]
 pub fn upload_file(
     app: AppHandle,
     state: State<AppState>,

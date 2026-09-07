@@ -57,10 +57,6 @@ pub fn update(conn: &Connection, id: &str, name: &str, now: &str) -> rusqlite::R
     )
 }
 
-pub fn set_position(conn: &Connection, id: &str, position: i64) -> rusqlite::Result<usize> {
-    conn.execute("UPDATE link_projects SET position = ?2 WHERE id = ?1", params![id, position])
-}
-
 /// Cascades (`ON DELETE CASCADE`) to every group and link inside it - unlike
 /// deleting a single group, deleting the whole project is meant to take its
 /// contents with it.

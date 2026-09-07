@@ -229,17 +229,6 @@ pub fn list_for_export(conn: &Connection, filter: &TrackerExportFilter) -> rusql
     Ok(tasks)
 }
 
-pub fn list_for_project(conn: &Connection, project_id: &str, include_archived: bool) -> rusqlite::Result<Vec<Task>> {
-    let sql = if include_archived {
-        format!("{SELECT_BASE} WHERE t.project_id = ?1 ORDER BY t.created_at DESC")
-    } else {
-        format!("{SELECT_BASE} WHERE t.project_id = ?1 AND t.archived = 0 ORDER BY t.created_at DESC")
-    };
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(params![project_id], map_row)?;
-    rows.map(|r| r.map(|rw| rw.task)).collect()
-}
-
 pub fn list_for_file(conn: &Connection, file_id: &str) -> rusqlite::Result<Vec<Task>> {
     let sql = format!(
         "{SELECT_BASE} WHERE t.id IN (SELECT task_id FROM tracker_task_files WHERE file_id = ?1) \

@@ -40,14 +40,6 @@ pub fn get_all_tracker_tasks(state: State<AppState>, filter: TaskFilter) -> AppR
 }
 
 #[tauri::command]
-pub fn get_project_tracker_tasks(state: State<AppState>, project_id: String) -> AppResult<Vec<Task>> {
-    with_ready(&state, |conn, _| {
-        task_files_db::sync_always_latest_all(conn, &now_iso())?;
-        Ok(tasks_db::list_for_project(conn, &project_id, false)?)
-    })
-}
-
-#[tauri::command]
 pub fn get_file_tracker_tasks(state: State<AppState>, file_id: String) -> AppResult<Vec<Task>> {
     with_ready(&state, |conn, _| {
         task_files_db::sync_always_latest_all(conn, &now_iso())?;

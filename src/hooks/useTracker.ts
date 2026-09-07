@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getAllTrackerTasks,
   getFileTrackerTasks,
-  getProjectTrackerTasks,
   getTrackerBoards,
   getTrackerFields,
   getTrackerLabels,
@@ -170,31 +169,6 @@ export function useTrackerTasks(boardId: string | null, includeArchived = false)
   }, [refresh]);
 
   return { tasks, loading, refresh, setTasks };
-}
-
-export function useProjectTrackerTasks(projectId: string | null) {
-  const [tasks, setTasks] = useState<TrackerTask[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const refresh = useCallback(async () => {
-    if (!projectId) {
-      setTasks([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      setTasks(await getProjectTrackerTasks(projectId));
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  return { tasks, loading, refresh };
 }
 
 export function useFileTrackerTasks(fileId: string | null) {

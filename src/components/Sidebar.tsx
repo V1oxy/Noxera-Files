@@ -7,7 +7,7 @@ import {
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { FolderClosed, Kanban, Layers, Link2, ListChecks, Plus, Settings as SettingsIcon } from "lucide-react";
+import { FolderClosed, Kanban, Link2, ListChecks, Plus, Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { CollapseChevron, Collapsible } from "@/components/Collapsible";
@@ -337,14 +337,5 @@ export function Sidebar({
         </button>
       </div>
     </aside>
-  );
-}
-
-export function SidebarBrand() {
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 text-[13px] font-semibold text-label-primary">
-      <Layers size={16} className="text-accent" />
-      Noxera Files
-    </div>
   );
 }

@@ -14,13 +14,6 @@ pub fn get_projects(state: State<AppState>) -> AppResult<Vec<Project>> {
 }
 
 #[tauri::command]
-pub fn get_project(state: State<AppState>, project_id: String) -> AppResult<Project> {
-    with_ready(&state, |conn, _| {
-        db::get(conn, &project_id)?.ok_or_else(|| AppError::user("This project no longer exists."))
-    })
-}
-
-#[tauri::command]
 pub fn create_project(
     state: State<AppState>,
     name: String,

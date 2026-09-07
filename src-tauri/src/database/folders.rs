@@ -64,10 +64,6 @@ pub fn next_position(conn: &Connection, project_id: &str, parent_folder_id: Opti
     }
 }
 
-pub fn set_position(conn: &Connection, id: &str, position: i64) -> rusqlite::Result<usize> {
-    conn.execute("UPDATE folders SET position = ?2 WHERE id = ?1", params![id, position])
-}
-
 /// Moves a folder under a different parent (None = the project's root),
 /// placing it at the end of that parent's list.
 pub fn set_parent(

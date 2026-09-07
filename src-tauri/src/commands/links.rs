@@ -56,16 +56,6 @@ pub fn update_link_project(state: State<AppState>, project_id: String, input: Li
     })
 }
 
-#[tauri::command]
-pub fn reorder_link_projects(state: State<AppState>, ordered_ids: Vec<String>) -> AppResult<()> {
-    with_ready(&state, |conn, _| {
-        for (i, id) in ordered_ids.iter().enumerate() {
-            link_projects_db::set_position(conn, id, i as i64)?;
-        }
-        Ok(())
-    })
-}
-
 /// Unlike deleting a link group, this cascades to every group and link
 /// inside the project (`ON DELETE CASCADE`) - it deletes the whole
 /// collection, matching what deleting a project means everywhere else in

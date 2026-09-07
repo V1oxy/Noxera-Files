@@ -109,7 +109,6 @@ export const createBackup = () => call<BackupResult>("create_backup");
 // ---- Projects -----------------------------------------------------------------
 
 export const getProjects = () => call<Project[]>("get_projects");
-export const getProject = (projectId: string) => call<Project>("get_project", { projectId });
 export const createProject = (name: string, description?: string) =>
   call<Project>("create_project", { name, description: description || null });
 export const updateProject = (projectId: string, name: string, description?: string) =>
@@ -153,14 +152,11 @@ export const createFolder = (projectId: string, parentFolderId: string | null, n
   call<Folder>("create_folder", { projectId, parentFolderId, name });
 export const renameFolder = (folderId: string, newName: string) =>
   call<Folder>("rename_folder", { folderId, newName });
-export const reorderFolders = (orderedIds: string[]) => call<void>("reorder_folders", { orderedIds });
 export const moveFolder = (folderId: string, parentFolderId: string | null) =>
   call<Folder>("move_folder", { folderId, parentFolderId });
 export const deleteFolder = (folderId: string) => call<void>("delete_folder", { folderId });
 
 // ---- Versions ---------------------------------------------------------------
-
-export const getVersions = (fileId: string) => call<FileVersion[]>("get_versions", { fileId });
 
 export async function pickFilesToUpload(multiple = true): Promise<string[]> {
   const selected = await openDialog({ directory: false, multiple });
@@ -291,8 +287,6 @@ export const getTrackerTasks = (boardId: string, includeArchived?: boolean) =>
   call<TrackerTask[]>("get_tracker_tasks", { boardId, includeArchived: includeArchived ?? null });
 export const getAllTrackerTasks = (filter: TrackerTaskFilter) =>
   call<TrackerTask[]>("get_all_tracker_tasks", { filter });
-export const getProjectTrackerTasks = (projectId: string) =>
-  call<TrackerTask[]>("get_project_tracker_tasks", { projectId });
 export const getFileTrackerTasks = (fileId: string) => call<TrackerTask[]>("get_file_tracker_tasks", { fileId });
 export const getTrackerTask = (taskId: string) => call<TrackerTaskDetail>("get_tracker_task", { taskId });
 export const createTrackerTask = (input: TrackerTaskInput) => call<TrackerTaskDetail>("create_tracker_task", { input });
@@ -355,7 +349,6 @@ export const getLinkProjects = () => call<LinkProject[]>("get_link_projects");
 export const createLinkProject = (input: LinkProjectInput) => call<LinkProject>("create_link_project", { input });
 export const updateLinkProject = (projectId: string, input: LinkProjectInput) =>
   call<LinkProject>("update_link_project", { projectId, input });
-export const reorderLinkProjects = (orderedIds: string[]) => call<void>("reorder_link_projects", { orderedIds });
 export const deleteLinkProject = (projectId: string) => call<void>("delete_link_project", { projectId });
 
 export const getLinks = (filter: LinkFilter) => call<Link[]>("get_links", { filter });
