@@ -84,6 +84,20 @@ jobs:
           path: src-tauri/target/release/noxera-files.exe
           if-no-files-found: warn
 
+      # A tagged build only attaches the installer (via tauri-action above) -
+      # the portable .exe above only goes to run artifacts, which need a
+      # GitHub login and expire, so a release page visitor never sees a
+      # no-install option at all. Attach the same raw exe as a release asset
+      # too, renamed so it doesn't collide with (or get mistaken for) the
+      # installer's own filename.
+      - name: Attach portable executable to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Copy-Item "src-tauri/target/release/noxera-files.exe" "Noxera-Files-${{ github.ref_name }}-portable-x64.exe"
+          gh release upload "${{ github.ref_name }}" "Noxera-Files-${{ github.ref_name }}-portable-x64.exe" --repo "${{ github.repository }}" --clobber
+
       - name: Upload installer
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
