@@ -122,13 +122,11 @@ CREATE TABLE IF NOT EXISTS tracker_tasks (
     description   TEXT,
     project_id    TEXT REFERENCES projects(id) ON DELETE SET NULL,
     customer      TEXT,
-    assignee      TEXT,
     priority      TEXT NOT NULL DEFAULT 'normal',
     pinned        INTEGER NOT NULL DEFAULT 0,
     archived      INTEGER NOT NULL DEFAULT 0,
     position      INTEGER NOT NULL DEFAULT 0,
     received_at   TEXT NOT NULL,
-    due_at        TEXT,
     completed_at  TEXT,
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL
@@ -318,6 +316,16 @@ pub fn migrate(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    // "Assignee" and "deadline" never had any way to be set from the UI, so
+    // the columns only ever held NULL - drop them from any database created
+    // before this cleanup rather than leaving dead columns behind.
+    if column_exists(conn, "tracker_tasks", "assignee")? {
+        conn.execute_batch("ALTER TABLE tracker_tasks DROP COLUMN assignee;")?;
+    }
+    if column_exists(conn, "tracker_tasks", "due_at")? {
+        conn.execute_batch("ALTER TABLE tracker_tasks DROP COLUMN due_at;")?;
+    }
+
     backfill_priorities(conn)?;
     seed_default_board(conn)?;
 
@@ -466,4 +474,41 @@ fn column_exists(conn: &rusqlite::Connection, table: &str, column: &str) -> rusq
         }
     }
     Ok(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A database from before this cleanup would still have `assignee`/
+    /// `due_at` on `tracker_tasks` - simulate that by adding the columns
+    /// back onto a freshly-created (already column-less) database, then
+    /// re-running `migrate` as if the app had just been reopened, and check
+    /// they're gone.
+    #[test]
+    fn migrate_drops_legacy_assignee_and_due_at_columns() {
+        let dir = std::env::temp_dir().join(format!("noxera-schema-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("test.db");
+
+        crate::database::open(&db_path).expect("fresh open should succeed");
+
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "ALTER TABLE tracker_tasks ADD COLUMN assignee TEXT; \
+                 ALTER TABLE tracker_tasks ADD COLUMN due_at TEXT;",
+            )
+            .unwrap();
+            assert!(column_exists(&conn, "tracker_tasks", "assignee").unwrap());
+            assert!(column_exists(&conn, "tracker_tasks", "due_at").unwrap());
+        }
+
+        let conn = crate::database::open(&db_path).expect("reopen should re-run migrate");
+        assert!(!column_exists(&conn, "tracker_tasks", "assignee").unwrap());
+        assert!(!column_exists(&conn, "tracker_tasks", "due_at").unwrap());
+
+        drop(conn);
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

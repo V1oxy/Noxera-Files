@@ -117,7 +117,7 @@ export interface UploadProgressEvent {
 // ---- Tracker ------------------------------------------------------------------
 
 export type TrackerFieldType = "text" | "number" | "date" | "datetime" | "select" | "boolean" | "url";
-export type TaskSortField = "created" | "receivedAt" | "dueAt" | "priority" | "updatedAt" | "completedAt" | "title" | "customer";
+export type TaskSortField = "created" | "receivedAt" | "priority" | "updatedAt" | "completedAt" | "title" | "customer";
 export type CardSize = "compact" | "normal";
 
 export interface TrackerBoard {
@@ -236,7 +236,6 @@ export interface TrackerTask {
   projectId: string | null;
   projectName: string | null;
   customer: string | null;
-  assignee: string | null;
   priorityId: string;
   priorityName: string;
   priorityColor: string;
@@ -245,7 +244,6 @@ export interface TrackerTask {
   archived: boolean;
   position: number;
   receivedAt: string;
-  dueAt: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -300,10 +298,8 @@ export interface TrackerTaskInput {
   description?: string | null;
   projectId?: string | null;
   customer?: string | null;
-  assignee?: string | null;
   priorityId?: string;
   receivedAt?: string | null;
-  dueAt?: string | null;
   labelIds?: string[];
   fieldValues?: TrackerFieldValue[];
   files?: NewTrackerTaskFile[];
@@ -319,10 +315,8 @@ export interface TrackerTaskUpdateInput {
   description?: string | null;
   projectId?: string | null;
   customer?: string | null;
-  assignee?: string | null;
   priorityId?: string;
   receivedAt?: string;
-  dueAt?: string | null;
   completedAt?: string | null;
   pinned?: boolean;
 }
@@ -340,14 +334,10 @@ export interface TrackerTaskFilter {
   boardId?: string;
   statusId?: string;
   customer?: string;
-  assignee?: string;
   priorityId?: string;
   labelId?: string;
   hasFiles?: boolean;
-  overdueOnly?: boolean;
   includeArchived?: boolean;
-  dueBefore?: string;
-  dueAfter?: string;
   receivedBefore?: string;
   receivedAfter?: string;
   sortField?: TaskSortField;
@@ -368,8 +358,6 @@ export interface TrackerExportFilter {
 export interface CardDisplayConfig {
   showProject: boolean;
   showPriority: boolean;
-  showDueDate: boolean;
-  showAssignee: boolean;
   showFileCount: boolean;
   showUpdateIndicator: boolean;
 }

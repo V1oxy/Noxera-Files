@@ -15,8 +15,6 @@ interface TaskCardProps {
 const DEFAULT_DISPLAY: CardDisplayConfig = {
   showProject: true,
   showPriority: true,
-  showDueDate: true,
-  showAssignee: true,
   showFileCount: true,
   showUpdateIndicator: true,
 };

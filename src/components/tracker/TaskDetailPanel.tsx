@@ -680,10 +680,6 @@ function eventText(event: TrackerTaskEvent, t: (key: string, vars?: Record<strin
       return { title: t("tracker.event.statusChangedTitle"), detail: `${payload.fromStatus ?? ""} → ${payload.toStatus ?? ""}` };
     case "priority_changed":
       return { title: t("tracker.event.priorityChangedTitle"), detail: `${payload.from ?? ""} → ${payload.to ?? ""}` };
-    case "due_changed":
-      return { title: t("tracker.event.dueChanged") };
-    case "assignee_changed":
-      return { title: t("tracker.event.assigneeChangedTitle"), detail: String(payload.to ?? "—") };
     case "customer_changed":
       return { title: t("tracker.event.customerChangedTitle"), detail: String(payload.to ?? "—") };
     case "project_changed":

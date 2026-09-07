@@ -180,8 +180,8 @@ pub fn create_tracker_task(state: State<AppState>, input: TaskInput) -> AppResul
 
         tasks_db::create(
             conn, &id, &input.board_id, &status_id, &title, input.description.as_deref(),
-            input.project_id.as_deref(), input.customer.as_deref(), input.assignee.as_deref(), &priority_id,
-            &received_at, input.due_at.as_deref(), &now,
+            input.project_id.as_deref(), input.customer.as_deref(), &priority_id,
+            &received_at, &now,
         )?;
 
         if let Some(label_ids) = &input.label_ids {
@@ -229,12 +229,6 @@ pub fn update_tracker_task(state: State<AppState>, task_id: String, patch: TaskU
             let from_name = priorities_db::get(conn, &old.priority_id)?.map(|p| p.name);
             let to_name = priorities_db::get(conn, &merged.priority_id)?.map(|p| p.name);
             tracker_events::log(conn, &task_id, "priority_changed", &ChangePayload { from: from_name, to: to_name }, None, &now)?;
-        }
-        if old.due_at != merged.due_at {
-            tracker_events::log(conn, &task_id, "due_changed", &ChangePayload { from: &old.due_at, to: &merged.due_at }, None, &now)?;
-        }
-        if old.assignee != merged.assignee {
-            tracker_events::log(conn, &task_id, "assignee_changed", &ChangePayload { from: &old.assignee, to: &merged.assignee }, None, &now)?;
         }
         if old.customer != merged.customer {
             tracker_events::log(conn, &task_id, "customer_changed", &ChangePayload { from: &old.customer, to: &merged.customer }, None, &now)?;
@@ -383,10 +377,8 @@ pub fn duplicate_tracker_task(state: State<AppState>, task_id: String, options: 
             conn, &new_id_str, &source.board_id, &source.status_id, &new_title,
             if options.description { source.description.as_deref() } else { None },
             source.project_id.as_deref(), source.customer.as_deref(),
-            None,
             &priority_id,
             &now,
-            None,
             &now,
         )?;
 

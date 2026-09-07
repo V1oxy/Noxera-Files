@@ -6,8 +6,8 @@ use super::{tracker_events, tracker_field_values, tracker_task_files, tracker_ta
 
 const SELECT_BASE: &str = "SELECT t.id, t.board_id, b.name AS board_name, t.status_id, s.name AS status_name, \
     s.color AS status_color, s.is_done AS status_is_done, t.title, t.description, t.project_id, p.name AS project_name, \
-    t.customer, t.assignee, t.priority AS priority_id, pr.name AS priority_name, pr.color AS priority_color, \
-    pr.position AS priority_position, t.pinned, t.archived, t.position, t.received_at, t.due_at, t.completed_at, \
+    t.customer, t.priority AS priority_id, pr.name AS priority_name, pr.color AS priority_color, \
+    pr.position AS priority_position, t.pinned, t.archived, t.position, t.received_at, t.completed_at, \
     t.created_at, t.updated_at, \
     (SELECT COUNT(*) FROM tracker_task_files tf WHERE tf.task_id = t.id) AS file_count, \
     (SELECT COUNT(*) FROM tracker_task_files tf WHERE tf.task_id = t.id AND tf.unseen_update = 1) AS unseen_count, \
@@ -50,7 +50,6 @@ fn map_row(row: &Row) -> rusqlite::Result<RowWithSearchBlob> {
         project_id: row.get("project_id")?,
         project_name: row.get("project_name")?,
         customer: row.get("customer")?,
-        assignee: row.get("assignee")?,
         priority_id: row.get("priority_id")?,
         priority_name: row.get("priority_name")?,
         priority_color: row.get("priority_color")?,
@@ -59,7 +58,6 @@ fn map_row(row: &Row) -> rusqlite::Result<RowWithSearchBlob> {
         archived: row.get("archived")?,
         position: row.get("position")?,
         received_at: row.get("received_at")?,
-        due_at: row.get("due_at")?,
         completed_at: row.get("completed_at")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
@@ -69,12 +67,11 @@ fn map_row(row: &Row) -> rusqlite::Result<RowWithSearchBlob> {
     };
 
     let blob = format!(
-        "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
+        "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
         task.title,
         task.description.as_deref().unwrap_or(""),
         task.project_name.as_deref().unwrap_or(""),
         task.customer.as_deref().unwrap_or(""),
-        task.assignee.as_deref().unwrap_or(""),
         file_names_blob.as_deref().unwrap_or(""),
         field_values_blob.as_deref().unwrap_or(""),
     );
@@ -132,12 +129,6 @@ fn matches_filter(task: &Task, blob: &str, filter: &TaskFilter) -> bool {
             return false;
         }
     }
-    if let Some(assignee) = filter.assignee.as_deref().filter(|s| !s.trim().is_empty()) {
-        let needle = assignee.trim().to_lowercase();
-        if !task.assignee.as_deref().unwrap_or("").to_lowercase().contains(&needle) {
-            return false;
-        }
-    }
     if let Some(priority_id) = &filter.priority_id {
         if task.priority_id != *priority_id {
             return false;
@@ -150,26 +141,6 @@ fn matches_filter(task: &Task, blob: &str, filter: &TaskFilter) -> bool {
     }
     if let Some(has_files) = filter.has_files {
         if has_files != (task.file_count > 0) {
-            return false;
-        }
-    }
-    if filter.overdue_only == Some(true) {
-        let now = crate::utils::now_iso();
-        let is_overdue = match &task.due_at {
-            Some(due) => task.completed_at.is_none() && due.as_str() < now.as_str(),
-            None => false,
-        };
-        if !is_overdue {
-            return false;
-        }
-    }
-    if let Some(before) = &filter.due_before {
-        if task.due_at.as_deref().map(|d| d > before.as_str()).unwrap_or(true) {
-            return false;
-        }
-    }
-    if let Some(after) = &filter.due_after {
-        if task.due_at.as_deref().map(|d| d < after.as_str()).unwrap_or(true) {
             return false;
         }
     }
@@ -193,7 +164,6 @@ fn sort_key(task: &Task, field: TaskSortField) -> &str {
     match field {
         TaskSortField::Created => &task.created_at,
         TaskSortField::ReceivedAt => &task.received_at,
-        TaskSortField::DueAt => task.due_at.as_deref().unwrap_or(""),
         TaskSortField::UpdatedAt => &task.updated_at,
         TaskSortField::CompletedAt => task.completed_at.as_deref().unwrap_or(""),
         TaskSortField::Title => &task.title,
@@ -315,21 +285,19 @@ pub fn create(
     description: Option<&str>,
     project_id: Option<&str>,
     customer: Option<&str>,
-    assignee: Option<&str>,
     priority_id: &str,
     received_at: &str,
-    due_at: Option<&str>,
     now: &str,
 ) -> rusqlite::Result<()> {
     let position = next_position(conn, status_id)?;
     conn.execute(
         "INSERT INTO tracker_tasks \
-         (id, board_id, status_id, title, description, project_id, customer, assignee, priority, \
-          pinned, archived, position, received_at, due_at, completed_at, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0, ?10, ?11, ?12, NULL, ?13, ?13)",
+         (id, board_id, status_id, title, description, project_id, customer, priority, \
+          pinned, archived, position, received_at, completed_at, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, 0, ?9, ?10, NULL, ?11, ?11)",
         params![
-            id, board_id, status_id, title, description, project_id, customer, assignee,
-            priority_id, position, received_at, due_at, now,
+            id, board_id, status_id, title, description, project_id, customer,
+            priority_id, position, received_at, now,
         ],
     )?;
     Ok(())
@@ -340,17 +308,15 @@ pub struct RawTaskColumns {
     pub description: Option<String>,
     pub project_id: Option<String>,
     pub customer: Option<String>,
-    pub assignee: Option<String>,
     pub priority_id: String,
     pub received_at: String,
-    pub due_at: Option<String>,
     pub completed_at: Option<String>,
     pub pinned: bool,
 }
 
 fn get_raw(conn: &Connection, id: &str) -> rusqlite::Result<Option<RawTaskColumns>> {
     conn.query_row(
-        "SELECT title, description, project_id, customer, assignee, priority, received_at, due_at, completed_at, pinned \
+        "SELECT title, description, project_id, customer, priority, received_at, completed_at, pinned \
          FROM tracker_tasks WHERE id = ?1",
         params![id],
         |row| {
@@ -359,12 +325,10 @@ fn get_raw(conn: &Connection, id: &str) -> rusqlite::Result<Option<RawTaskColumn
                 description: row.get(1)?,
                 project_id: row.get(2)?,
                 customer: row.get(3)?,
-                assignee: row.get(4)?,
-                priority_id: row.get(5)?,
-                received_at: row.get(6)?,
-                due_at: row.get(7)?,
-                completed_at: row.get(8)?,
-                pinned: row.get(9)?,
+                priority_id: row.get(4)?,
+                received_at: row.get(5)?,
+                completed_at: row.get(6)?,
+                pinned: row.get(7)?,
             })
         },
     )
@@ -390,19 +354,17 @@ pub fn apply_update(
         description: patch.description.clone().unwrap_or_else(|| existing.description.clone()),
         project_id: patch.project_id.clone().unwrap_or_else(|| existing.project_id.clone()),
         customer: patch.customer.clone().unwrap_or_else(|| existing.customer.clone()),
-        assignee: patch.assignee.clone().unwrap_or_else(|| existing.assignee.clone()),
         priority_id: patch.priority_id.clone().unwrap_or_else(|| existing.priority_id.clone()),
         received_at: patch.received_at.clone().unwrap_or_else(|| existing.received_at.clone()),
-        due_at: patch.due_at.clone().unwrap_or_else(|| existing.due_at.clone()),
         completed_at: patch.completed_at.clone().unwrap_or_else(|| existing.completed_at.clone()),
         pinned: patch.pinned.unwrap_or(existing.pinned),
     };
     conn.execute(
-        "UPDATE tracker_tasks SET title = ?2, description = ?3, project_id = ?4, customer = ?5, assignee = ?6, \
-         priority = ?7, received_at = ?8, due_at = ?9, completed_at = ?10, pinned = ?11, updated_at = ?12 WHERE id = ?1",
+        "UPDATE tracker_tasks SET title = ?2, description = ?3, project_id = ?4, customer = ?5, \
+         priority = ?6, received_at = ?7, completed_at = ?8, pinned = ?9, updated_at = ?10 WHERE id = ?1",
         params![
-            id, merged.title, merged.description, merged.project_id, merged.customer, merged.assignee,
-            merged.priority_id, merged.received_at, merged.due_at, merged.completed_at, merged.pinned, now,
+            id, merged.title, merged.description, merged.project_id, merged.customer,
+            merged.priority_id, merged.received_at, merged.completed_at, merged.pinned, now,
         ],
     )?;
     Ok(Some((existing, merged)))

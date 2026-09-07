@@ -81,9 +81,9 @@ pub fn export_tracker_tasks_excel(
 
 /// Best-effort ISO date parsing that accepts both a full RFC3339 timestamp
 /// (`created_at`-style fields) and a plain `YYYY-MM-DD` date (the shape
-/// `received_at`/`due_at` are actually stored in, since they come straight
-/// from an `<input type="date">`) - returns `None` rather than erroring so a
-/// single malformed value never breaks the whole export.
+/// `received_at` is actually stored in, since it comes straight from an
+/// `<input type="date">`) - returns `None` rather than erroring so a single
+/// malformed value never breaks the whole export.
 fn parse_date(value: &str) -> Option<chrono::NaiveDate> {
     if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(value) {
         return Some(dt.naive_utc().date());
@@ -198,7 +198,6 @@ mod tests {
             project_id: None,
             project_name: None,
             customer: None,
-            assignee: None,
             priority_id: "priority-1".to_string(),
             priority_name: "Normal".to_string(),
             priority_color: "#0A84FF".to_string(),
@@ -207,7 +206,6 @@ mod tests {
             archived: false,
             position: 0,
             received_at: "2026-09-01".to_string(),
-            due_at: None,
             completed_at: None,
             created_at: "2026-09-01T10:00:00+00:00".to_string(),
             updated_at: "2026-09-02T11:30:00+00:00".to_string(),
@@ -225,9 +223,7 @@ mod tests {
         let full = Task {
             project_id: Some("p1".to_string()),
             project_name: Some("Project One".to_string()),
-            assignee: Some("Alice".to_string()),
             description: Some("A normal description.".to_string()),
-            due_at: Some("2026-09-10".to_string()),
             completed_at: Some("2026-09-08T09:00:00+00:00".to_string()),
             ..task("task-full")
         };
