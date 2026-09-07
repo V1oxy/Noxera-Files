@@ -22,6 +22,11 @@ interface BoardKanbanProps {
   tasks: TrackerTask[];
   cardSize: CardSize;
   display?: CardDisplayConfig;
+  /** Keyed by statusId - whether that column has more tasks past what's
+   * currently loaded (see `useTrackerTasks`). */
+  columnHasMore: Record<string, boolean>;
+  columnLoadingMore: Record<string, boolean>;
+  onLoadMoreForStatus: (statusId: string) => void;
   onOpenTask: (task: TrackerTask) => void;
   onMove: (taskId: string, statusId: string, orderedIds: string[]) => void;
   onQuickAdd: (statusId: string, title: string) => void;
@@ -87,6 +92,9 @@ function Column({
   tasks,
   cardSize,
   display,
+  hasMore,
+  loadingMore,
+  onLoadMore,
   onOpenTask,
   isDropTarget,
   quickAddOpen,
@@ -98,6 +106,9 @@ function Column({
   tasks: TrackerTask[];
   cardSize: CardSize;
   display?: CardDisplayConfig;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
   onOpenTask: (task: TrackerTask) => void;
   isDropTarget: boolean;
   quickAddOpen: boolean;
@@ -106,6 +117,17 @@ function Column({
   onQuickAddCancel: () => void;
 }) {
   const { setNodeRef } = useDroppable({ id: status.id });
+
+  // Fetches this column's next page a little before its loaded cards
+  // actually run out - each column scrolls independently, so this has to
+  // watch this one element's own scroll position rather than the page's.
+  function handleScroll(el: HTMLDivElement) {
+    if (!hasMore || loadingMore) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 400) {
+      onLoadMore();
+    }
+  }
+
   return (
     <div className="flex w-[272px] shrink-0 flex-col">
       <div className="mb-2 flex h-6 shrink-0 items-center gap-2 px-1">
@@ -124,6 +146,7 @@ function Column({
       </div>
       <div
         ref={setNodeRef}
+        onScroll={(e) => handleScroll(e.currentTarget)}
         className={`flex min-h-[140px] flex-1 flex-col gap-2 overflow-y-auto rounded-apple-lg border p-1.5 transition-colors duration-150 ${
           isDropTarget
             ? "border-accent/50 bg-accent/[0.05]"
@@ -135,6 +158,7 @@ function Column({
             <TaskCard key={task.id} task={task} compact={cardSize === "compact"} display={display} onOpen={onOpenTask} />
           ))}
         </SortableContext>
+        {loadingMore && <p className="py-1.5 text-center text-[10.5px] text-label-tertiary">…</p>}
         {quickAddOpen && <QuickAddRow onSubmit={onQuickAddSubmit} onCancel={onQuickAddCancel} />}
       </div>
     </div>
@@ -146,6 +170,9 @@ export function BoardKanban({
   tasks,
   cardSize,
   display,
+  columnHasMore,
+  columnLoadingMore,
+  onLoadMoreForStatus,
   onOpenTask,
   onMove,
   onQuickAdd,
@@ -265,6 +292,9 @@ export function BoardKanban({
               tasks={columns[status.id] ?? []}
               cardSize={cardSize}
               display={display}
+              hasMore={columnHasMore[status.id] ?? false}
+              loadingMore={columnLoadingMore[status.id] ?? false}
+              onLoadMore={() => onLoadMoreForStatus(status.id)}
               onOpenTask={onOpenTask}
               isDropTarget={overContainerId === status.id && activeTask !== null}
               quickAddOpen={quickAddStatusId === status.id}

@@ -63,6 +63,15 @@ fn sort_clause(field: SortField, dir: SortDirection) -> &'static str {
 /// across the *entire* project regardless of folder (so you don't have to
 /// know which folder a file is in to find it); otherwise the list is scoped
 /// to `folder_id` (`None` = the project's root).
+///
+/// `limit`/`offset` bound how many rows come back either way, so a huge
+/// project never serializes (and the frontend never renders) more than one
+/// page at a time - but note the *search* branch still has to fetch and
+/// Unicode-lowercase every file in the project before it can paginate the
+/// matches (see the comment there): the bound applies to what's returned,
+/// not to that branch's scan cost. Plain browsing (no search term) is fully
+/// bounded end to end via `LIMIT`/`OFFSET` in SQL.
+#[allow(clippy::too_many_arguments)]
 pub fn list_for_project(
     conn: &Connection,
     project_id: &str,
@@ -70,12 +79,16 @@ pub fn list_for_project(
     search: Option<&str>,
     field: SortField,
     dir: SortDirection,
+    limit: i64,
+    offset: i64,
 ) -> rusqlite::Result<Vec<FileEntry>> {
     let order = sort_clause(field, dir);
     if let Some(term) = search.filter(|s| !s.trim().is_empty()) {
         // SQLite's LIKE/NOCASE only case-folds ASCII, so a SQL-side filter
         // would miss e.g. "спам" matching "СПАМ". Fetch every file in the
-        // project and filter here with Rust's Unicode-aware to_lowercase().
+        // project (scoped to just this one project, not the whole app) and
+        // filter here with Rust's Unicode-aware to_lowercase(), then apply
+        // the page window to the matches.
         let needle = term.trim().to_lowercase();
         let sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 {order}");
         let mut stmt = conn.prepare(&sql)?;
@@ -86,24 +99,32 @@ pub fn list_for_project(
                 files
                     .into_iter()
                     .filter(|f| f.name.to_lowercase().contains(&needle))
+                    .skip(offset.max(0) as usize)
+                    .take(limit.max(0) as usize)
                     .collect()
             });
     }
     match folder_id {
         Some(folder) => {
-            let sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.folder_id = ?2 {order}");
+            let sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.folder_id = ?2 {order} LIMIT ?3 OFFSET ?4");
             let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt.query_map(params![project_id, folder], map_row)?;
+            let rows = stmt.query_map(params![project_id, folder, limit, offset], map_row)?;
             rows.collect()
         }
         None => {
-            let sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.folder_id IS NULL {order}");
+            let sql = format!("{SELECT_BASE} WHERE f.project_id = ?1 AND f.folder_id IS NULL {order} LIMIT ?2 OFFSET ?3");
             let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt.query_map(params![project_id], map_row)?;
+            let rows = stmt.query_map(params![project_id, limit, offset], map_row)?;
             rows.collect()
         }
     }
 }
+
+/// Caps how many global search hits get serialized/rendered - the scan
+/// behind it still has to touch every file to stay Unicode-correct (see the
+/// doc comment below), but nothing needs to look at more than the first
+/// couple hundred matches of an ad-hoc search anyway.
+const GLOBAL_SEARCH_LIMIT: usize = 200;
 
 /// Matches by name across every project's files at once, newest-modified
 /// first. Same Unicode-aware, fetch-then-filter approach as the per-project
@@ -127,6 +148,7 @@ pub fn search_all_projects(conn: &Connection, search: &str) -> rusqlite::Result<
     Ok(files
         .into_iter()
         .filter(|f| f.name.to_lowercase().contains(&needle))
+        .take(GLOBAL_SEARCH_LIMIT)
         .filter_map(|f| {
             let project_name = project_names.get(&f.project_id)?.clone();
             Some((f, project_name))
@@ -239,4 +261,104 @@ pub fn decrement_next_version_number(conn: &Connection, file_id: &str) -> rusqli
 
 pub fn delete(conn: &Connection, id: &str) -> rusqlite::Result<usize> {
     conn.execute("DELETE FROM files WHERE id = ?1", params![id])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::projects;
+
+    fn setup() -> (Connection, std::path::PathBuf, String) {
+        let dir = std::env::temp_dir().join(format!("noxera-files-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let conn = crate::database::open(&dir.join("test.db")).unwrap();
+        let now = "2026-01-01T00:00:00+00:00";
+        let project_id = "project-1".to_string();
+        projects::create(&conn, &project_id, "Project", None, now).unwrap();
+        (conn, dir, project_id)
+    }
+
+    fn teardown(conn: Connection, dir: std::path::PathBuf) {
+        drop(conn);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn list_for_project_paginates_without_a_search_term() {
+        let (conn, dir, project_id) = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        for i in 0..5 {
+            create(&conn, &format!("f{i}"), &project_id, None, &format!("file-{i}.txt"), now).unwrap();
+        }
+
+        let page1 = list_for_project(&conn, &project_id, None, None, SortField::Name, SortDirection::Asc, 2, 0).unwrap();
+        assert_eq!(page1.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), vec!["file-0.txt", "file-1.txt"]);
+        let page2 = list_for_project(&conn, &project_id, None, None, SortField::Name, SortDirection::Asc, 2, 2).unwrap();
+        assert_eq!(page2.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), vec!["file-2.txt", "file-3.txt"]);
+        let page3 = list_for_project(&conn, &project_id, None, None, SortField::Name, SortDirection::Asc, 2, 4).unwrap();
+        assert_eq!(page3.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), vec!["file-4.txt"]);
+
+        teardown(conn, dir);
+    }
+
+    #[test]
+    fn list_for_project_search_is_unicode_aware_and_still_paginates() {
+        let (conn, dir, project_id) = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        create(&conn, "f1", &project_id, None, "СПАМ.txt", now).unwrap();
+        create(&conn, "f2", &project_id, None, "unrelated.txt", now).unwrap();
+        create(&conn, "f3", &project_id, None, "спам-2.txt", now).unwrap();
+
+        // Cyrillic case-folding: "спам" (lowercase) must match "СПАМ.txt".
+        let hits = list_for_project(&conn, &project_id, None, Some("спам"), SortField::Name, SortDirection::Asc, 10, 0).unwrap();
+        assert_eq!(hits.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), vec!["СПАМ.txt", "спам-2.txt"]);
+
+        let first_page = list_for_project(&conn, &project_id, None, Some("спам"), SortField::Name, SortDirection::Asc, 1, 0).unwrap();
+        assert_eq!(first_page.len(), 1);
+
+        teardown(conn, dir);
+    }
+
+    /// Not a correctness test - seeds 200,000 files into one project, then
+    /// times a paginated browse page and a paginated search page to confirm
+    /// cost stays flat (proportional to the page size, not to 200,000).
+    ///
+    /// Run explicitly: `cargo test --release two_hundred_thousand_files -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn two_hundred_thousand_files_stay_fast_to_page() {
+        let (conn, dir, project_id) = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        const N: usize = 200_000;
+
+        let seed_start = std::time::Instant::now();
+        {
+            let tx = conn.unchecked_transaction().unwrap();
+            {
+                let mut stmt = tx
+                    .prepare(
+                        "INSERT INTO files (id, project_id, folder_id, name, current_version_id, next_version_number, position, created_at, updated_at) \
+                         VALUES (?1, ?2, NULL, ?3, NULL, 1, ?4, ?5, ?5)",
+                    )
+                    .unwrap();
+                for i in 0..N {
+                    stmt.execute(params![format!("f{i}"), project_id, format!("file-{i}.txt"), i as i64, now]).unwrap();
+                }
+            }
+            tx.commit().unwrap();
+        }
+        eprintln!("seed {N} files (raw batched insert): {:?}", seed_start.elapsed());
+
+        let browse_start = std::time::Instant::now();
+        let page = list_for_project(&conn, &project_id, None, None, SortField::Name, SortDirection::Asc, 150, 0).unwrap();
+        eprintln!("list_for_project, one page of 150, over {N} rows: {:?}", browse_start.elapsed());
+        assert_eq!(page.len(), 150);
+
+        let search_start = std::time::Instant::now();
+        let hits = list_for_project(&conn, &project_id, None, Some("199999"), SortField::Name, SortDirection::Asc, 150, 0).unwrap();
+        eprintln!("list_for_project, search + page, over {N} rows: {:?}", search_start.elapsed());
+        assert_eq!(hits.len(), 1);
+
+        teardown(conn, dir);
+    }
 }

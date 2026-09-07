@@ -107,7 +107,14 @@ export function ProjectView({
   const [searchScope, setSearchScope] = useState<SearchScope>("project");
   const [sortField, setSortField] = useState<SortField>("lastModified");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
-  const { files, loading: filesLoading, refresh: refreshFiles } = useFiles(
+  const {
+    files,
+    loading: filesLoading,
+    loadingMore: filesLoadingMore,
+    hasMore: filesHasMore,
+    refresh: refreshFiles,
+    loadMore: loadMoreFiles,
+  } = useFiles(
     project.id,
     currentFolderId,
     searchScope === "project" ? search : "",
@@ -637,6 +644,9 @@ export function ProjectView({
         folders={search ? [] : folders}
         files={files}
         loading={filesLoading}
+        loadingMore={filesLoadingMore}
+        hasMore={filesHasMore}
+        onLoadMore={loadMoreFiles}
         search={search}
         onSearchChange={setSearch}
         searchScope={searchScope}

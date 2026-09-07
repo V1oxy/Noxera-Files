@@ -299,10 +299,10 @@ pub enum TaskSortField {
 }
 
 /// Every filter is optional and they combine with AND (spec: "фильтры можно
-/// комбинировать") - applied in Rust over the already-loaded task list
-/// (`tracker_tasks::list_all`) rather than as dynamic SQL, since a single
-/// user's local task list is small enough that this is simpler and safer
-/// than building a query string field-by-field.
+/// комбинировать") - translated into a dynamic, parameterized SQL query
+/// (`tracker_tasks::list_all`) rather than loaded-then-filtered-in-Rust, so
+/// cost stays proportional to `limit`, not to the total number of tasks -
+/// see that function's doc comment.
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskFilter {
@@ -319,6 +319,13 @@ pub struct TaskFilter {
     pub received_after: Option<String>,
     pub sort_field: Option<TaskSortField>,
     pub sort_dir: Option<super::SortDirection>,
+    /// Page size - `None` means "no limit" (used by the Excel export, which
+    /// legitimately wants every matching row). The "All Tasks" view always
+    /// sends one, so cost there never scales with total task count.
+    pub limit: Option<i64>,
+    /// Rows to skip before `limit` applies; `None`/omitted means 0. Ignored
+    /// when `limit` is `None`.
+    pub offset: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

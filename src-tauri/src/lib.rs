@@ -106,6 +106,7 @@ pub fn run() {
             commands::tracker_boards::reorder_tracker_priorities,
             commands::tracker_boards::delete_tracker_priority,
             commands::tracker_tasks::get_tracker_tasks,
+            commands::tracker_tasks::get_tracker_board_column_page,
             commands::tracker_tasks::get_all_tracker_tasks,
             commands::tracker_tasks::get_file_tracker_tasks,
             commands::tracker_tasks::get_tracker_task,

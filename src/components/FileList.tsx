@@ -8,6 +8,7 @@ import {
 } from "@dnd-kit/core";
 import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDownWideNarrow, ArrowUpWideNarrow, ChevronDown, FolderPlus, SearchX, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -35,6 +36,9 @@ interface FileListProps {
   folders: Folder[];
   files: FileEntry[];
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
   search: string;
   onSearchChange: (v: string) => void;
   searchScope: SearchScope;
@@ -72,6 +76,9 @@ export function FileList({
   folders,
   files,
   loading,
+  loadingMore,
+  hasMore,
+  onLoadMore,
   search,
   onSearchChange,
   searchScope,
@@ -98,9 +105,23 @@ export function FileList({
   const { t } = useLanguage();
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const isEmpty = folders.length === 0 && files.length === 0;
   const reorderable = search === "";
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  // Fetches the next page a little before the loaded files actually run out
+  // - used by the reorderable (drag-and-drop) branch below, which renders
+  // its loaded files directly rather than through the virtualizer (dnd-kit
+  // needs every reorderable row mounted; see the search-mode virtualizer
+  // for the branch that doesn't have that constraint).
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el || !hasMore || loadingMore) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 600) {
+      onLoadMore();
+    }
+  }
 
   // Local mirror so a file drag reorders instantly instead of waiting for
   // the reorder call + refetch to round-trip back through props. Folders no
@@ -108,6 +129,18 @@ export function FileList({
   // don't need one - the `folders` prop is rendered directly.
   const [fileOrder, setFileOrder] = useState(files);
   useEffect(() => setFileOrder(files), [files]);
+
+  // Search results have no drag-and-drop (see the `!reorderable` branch
+  // below), so unlike the reorderable branch above, this one can safely
+  // virtualize - only the visible rows mount, however many pages of
+  // results have been loaded. ProjectView always passes an empty
+  // `folders` array while searching, so this scroll area holds files only.
+  const searchResultsVirtualizer = useVirtualizer({
+    count: files.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 44,
+    overscan: 8,
+  });
 
   // The folder currently acting as a drop target mid-drag - drives its
   // highlight. Unlike files (which stay siblings and can only reorder),
@@ -244,7 +277,7 @@ export function FileList({
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-6 pt-2">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 pb-6 pt-2">
         {searchScope === "global" ? (
           <>
             {globalSearchLoading && (
@@ -340,6 +373,9 @@ export function FileList({
             </div>
           </DndContext>
         )}
+        {!loading && !isEmpty && reorderable && loadingMore && (
+          <p className="px-2 py-3 text-center text-[11px] text-label-tertiary">{t("files.loading")}</p>
+        )}
 
         {!loading && !isEmpty && !reorderable && (
           <div className="pointer-events-auto space-y-0.5">
@@ -352,15 +388,32 @@ export function FileList({
                 onDelete={onDeleteFolder}
               />
             ))}
-            {files.map((file) => (
-              <FileRow
-                key={file.id}
-                file={file}
-                isDropTarget={dropTarget?.type === "file" && dropTarget.id === file.id}
-                {...rowActions}
-              />
-            ))}
           </div>
+        )}
+        {!loading && !isEmpty && !reorderable && (
+          <div style={{ height: searchResultsVirtualizer.getTotalSize(), position: "relative" }}>
+            {searchResultsVirtualizer.getVirtualItems().map((virtualRow) => {
+              const file = files[virtualRow.index];
+              return (
+                <div
+                  key={file.id}
+                  data-index={virtualRow.index}
+                  ref={searchResultsVirtualizer.measureElement}
+                  className="absolute left-0 top-0 w-full pb-0.5"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  <FileRow
+                    file={file}
+                    isDropTarget={dropTarget?.type === "file" && dropTarget.id === file.id}
+                    {...rowActions}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {!loading && !isEmpty && !reorderable && loadingMore && (
+          <p className="px-2 py-3 text-center text-[11px] text-label-tertiary">{t("files.loading")}</p>
         )}
           </>
         )}

@@ -342,6 +342,11 @@ export interface TrackerTaskFilter {
   receivedAfter?: string;
   sortField?: TaskSortField;
   sortDir?: SortDirection;
+  /** Page size - omitted means "every match" (only the Excel export wants
+   * that; the All Tasks view always sets one). */
+  limit?: number;
+  /** Rows to skip before `limit` applies; omitted means 0. */
+  offset?: number;
 }
 
 /** Scopes an Excel export - `statusIds` empty means "every status".
@@ -430,4 +435,8 @@ export interface LinkUpdateInput {
 export interface LinkFilter {
   search?: string;
   projectId?: string;
+  /** Page size - omitted defaults to a fixed page server-side. */
+  limit?: number;
+  /** Rows to skip before `limit` applies; omitted means 0. */
+  offset?: number;
 }

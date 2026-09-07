@@ -82,3 +82,49 @@ pub fn exists(conn: &Connection, id: &str) -> rusqlite::Result<bool> {
     .optional()
     .map(|r| r.is_some())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Not a correctness test - projects aren't paginated (unlike tasks/
+    /// files/links, they're a coarse top-level grouping expected to number
+    /// in the tens or hundreds, not hundreds of thousands). This just
+    /// measures what an extreme, unrealistic project count would actually
+    /// cost, to answer the question honestly with a number instead of a
+    /// guess.
+    ///
+    /// Run explicitly: `cargo test --release two_hundred_thousand_projects -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn two_hundred_thousand_projects_query_time() {
+        let dir = std::env::temp_dir().join(format!("noxera-projects-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let conn = crate::database::open(&dir.join("test.db")).unwrap();
+        let now = "2026-01-01T00:00:00+00:00";
+        const N: usize = 200_000;
+
+        let seed_start = std::time::Instant::now();
+        {
+            let tx = conn.unchecked_transaction().unwrap();
+            {
+                let mut stmt = tx
+                    .prepare("INSERT INTO projects (id, name, description, position, created_at, updated_at) VALUES (?1, ?2, NULL, ?3, ?4, ?4)")
+                    .unwrap();
+                for i in 0..N {
+                    stmt.execute(params![format!("p{i}"), format!("Project {i}"), i as i64, now]).unwrap();
+                }
+            }
+            tx.commit().unwrap();
+        }
+        eprintln!("seed {N} projects (raw batched insert): {:?}", seed_start.elapsed());
+
+        let list_start = std::time::Instant::now();
+        let all = list(&conn).unwrap();
+        eprintln!("list, unpaginated, over {N} rows: {:?}", list_start.elapsed());
+        assert_eq!(all.len(), N);
+
+        drop(conn);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}

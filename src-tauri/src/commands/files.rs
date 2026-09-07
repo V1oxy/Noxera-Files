@@ -8,7 +8,13 @@ use crate::utils::{now_iso, AppError, AppResult};
 
 use super::with_ready;
 
+/// Default page size when the frontend doesn't ask for a specific one -
+/// keeps a call from an older/other client bounded too, rather than only
+/// being safe when the caller remembers to pass a limit.
+const DEFAULT_PAGE_SIZE: i64 = 200;
+
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn get_files(
     state: State<AppState>,
     project_id: String,
@@ -16,6 +22,8 @@ pub fn get_files(
     search: Option<String>,
     sort_field: Option<SortField>,
     sort_dir: Option<SortDirection>,
+    limit: Option<i64>,
+    offset: Option<i64>,
 ) -> AppResult<Vec<FileEntry>> {
     // Default sort: Last Modified, newest first (spec section 50).
     let field = sort_field.unwrap_or(SortField::LastModified);
@@ -28,6 +36,8 @@ pub fn get_files(
             search.as_deref(),
             field,
             dir,
+            limit.unwrap_or(DEFAULT_PAGE_SIZE),
+            offset.unwrap_or(0),
         )?)
     })
 }

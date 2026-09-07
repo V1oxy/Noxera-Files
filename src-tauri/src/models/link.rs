@@ -91,4 +91,10 @@ pub struct LinkUpdateInput {
 pub struct LinkFilter {
     pub search: Option<String>,
     pub project_id: Option<String>,
+    /// Page size - `None` defaults to a fixed page (see
+    /// `commands::links::get_links`) so a caller that forgets to set it
+    /// still gets a bounded result.
+    pub limit: Option<i64>,
+    /// Rows to skip before `limit` applies; `None`/omitted means 0.
+    pub offset: Option<i64>,
 }

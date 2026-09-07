@@ -121,7 +121,14 @@ export const deleteProject = (projectId: string) => call<void>("delete_project",
 
 export const getFiles = (
   projectId: string,
-  opts?: { folderId?: string | null; search?: string; sortField?: SortField; sortDir?: SortDirection },
+  opts?: {
+    folderId?: string | null;
+    search?: string;
+    sortField?: SortField;
+    sortDir?: SortDirection;
+    limit?: number;
+    offset?: number;
+  },
 ) =>
   call<FileEntry[]>("get_files", {
     projectId,
@@ -129,6 +136,8 @@ export const getFiles = (
     search: opts?.search || null,
     sortField: opts?.sortField ?? null,
     sortDir: opts?.sortDir ?? null,
+    limit: opts?.limit ?? null,
+    offset: opts?.offset ?? null,
   });
 
 export const searchFilesGlobal = (search: string) =>
@@ -283,8 +292,26 @@ export const deleteTrackerPriority = (priorityId: string, reassignToPriorityId?:
 
 // ---- Tracker: tasks ---------------------------------------------------------------
 
-export const getTrackerTasks = (boardId: string, includeArchived?: boolean) =>
-  call<TrackerTask[]>("get_tracker_tasks", { boardId, includeArchived: includeArchived ?? null });
+export const getTrackerTasks = (boardId: string, includeArchived?: boolean, perStatusLimit?: number) =>
+  call<TrackerTask[]>("get_tracker_tasks", {
+    boardId,
+    includeArchived: includeArchived ?? null,
+    perStatusLimit: perStatusLimit ?? null,
+  });
+export const getTrackerBoardColumnPage = (
+  boardId: string,
+  statusId: string,
+  includeArchived: boolean | undefined,
+  limit: number,
+  offset: number,
+) =>
+  call<TrackerTask[]>("get_tracker_board_column_page", {
+    boardId,
+    statusId,
+    includeArchived: includeArchived ?? null,
+    limit,
+    offset,
+  });
 export const getAllTrackerTasks = (filter: TrackerTaskFilter) =>
   call<TrackerTask[]>("get_all_tracker_tasks", { filter });
 export const getFileTrackerTasks = (fileId: string) => call<TrackerTask[]>("get_file_tracker_tasks", { fileId });

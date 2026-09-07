@@ -74,9 +74,13 @@ pub fn delete_link_project(state: State<AppState>, project_id: String) -> AppRes
 
 // ---- Links ------------------------------------------------------------------
 
+const DEFAULT_PAGE_SIZE: i64 = 200;
+
 #[tauri::command]
 pub fn get_links(state: State<AppState>, filter: LinkFilter) -> AppResult<Vec<Link>> {
-    with_ready(&state, |conn, _| Ok(links_db::list(conn, &filter)?))
+    let limit = filter.limit.unwrap_or(DEFAULT_PAGE_SIZE);
+    let offset = filter.offset.unwrap_or(0);
+    with_ready(&state, |conn, _| Ok(links_db::list(conn, &filter, limit, offset)?))
 }
 
 #[tauri::command]

@@ -253,6 +253,12 @@ CREATE INDEX IF NOT EXISTS idx_tracker_priorities_board_id ON tracker_priorities
 CREATE INDEX IF NOT EXISTS idx_tracker_tasks_board_id ON tracker_tasks(board_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_tasks_status_id ON tracker_tasks(status_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_tasks_project_id ON tracker_tasks(project_id);
+-- Matches list_for_board's per-column window (PARTITION BY status_id ORDER
+-- BY pinned, position) and list_for_board_column's page query exactly, so
+-- SQLite can walk both straight off the index instead of sorting a whole
+-- board's rows to find the top of each column.
+CREATE INDEX IF NOT EXISTS idx_tracker_tasks_board_status_order
+    ON tracker_tasks(board_id, status_id, pinned DESC, position ASC);
 CREATE INDEX IF NOT EXISTS idx_tracker_task_labels_label_id ON tracker_task_labels(label_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_field_values_field_id ON tracker_field_values(field_id);
 CREATE INDEX IF NOT EXISTS idx_tracker_task_files_task_id ON tracker_task_files(task_id);

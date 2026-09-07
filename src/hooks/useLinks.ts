@@ -26,9 +26,16 @@ export function useLinkProjects() {
   return { projects, loading, refresh };
 }
 
+/** One page's worth of links per fetch, whether that's the initial load or
+ * a scroll-triggered "load more" - keeps this view's cost flat regardless
+ * of how many links exist in total (see `links::list`). */
+const LINKS_PAGE_SIZE = 200;
+
 export function useLinks(filter: LinkFilter) {
   const [links, setLinks] = useState<Link[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const filterKey = JSON.stringify(filter);
   const requestId = useRef(0);
 
@@ -36,8 +43,11 @@ export function useLinks(filter: LinkFilter) {
     const id = ++requestId.current;
     setLoading(true);
     try {
-      const result = await getLinks(filter);
-      if (id === requestId.current) setLinks(result);
+      const page = await getLinks({ ...filter, limit: LINKS_PAGE_SIZE, offset: 0 });
+      if (id === requestId.current) {
+        setLinks(page);
+        setHasMore(page.length === LINKS_PAGE_SIZE);
+      }
     } finally {
       if (id === requestId.current) setLoading(false);
     }
@@ -48,7 +58,23 @@ export function useLinks(filter: LinkFilter) {
     refresh();
   }, [refresh]);
 
-  return { links, loading, refresh, setLinks };
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    const id = ++requestId.current;
+    setLoadingMore(true);
+    try {
+      const page = await getLinks({ ...filter, limit: LINKS_PAGE_SIZE, offset: links.length });
+      if (id === requestId.current) {
+        setLinks((prev) => [...prev, ...page]);
+        setHasMore(page.length === LINKS_PAGE_SIZE);
+      }
+    } finally {
+      if (id === requestId.current) setLoadingMore(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, links.length, hasMore, loadingMore]);
+
+  return { links, loading, loadingMore, hasMore, refresh, loadMore, setLinks };
 }
 
 export function useLinkGroups(projectId: string | null) {

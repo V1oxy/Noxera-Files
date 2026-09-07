@@ -38,32 +38,56 @@ fn map_row(row: &Row) -> rusqlite::Result<RowWithSearchBlob> {
     Ok(RowWithSearchBlob { link, blob })
 }
 
-/// Loads links (all projects, or one if `filter.project_id` is set) and
-/// applies the search filter in Rust - mirrors `tracker_tasks::list_all`'s
-/// reasoning: a single user's local link list is small enough that this is
-/// simpler and safer than building dynamic SQL.
-pub fn list(conn: &Connection, filter: &LinkFilter) -> rusqlite::Result<Vec<Link>> {
-    let sql = format!("{SELECT_BASE} ORDER BY p.name COLLATE NOCASE ASC, g.position ASC, l.position ASC");
-    let mut stmt = conn.prepare(&sql)?;
-    let rows: Vec<RowWithSearchBlob> = stmt.query_map([], map_row)?.collect::<rusqlite::Result<_>>()?;
+const ORDER_BY: &str = "ORDER BY p.name COLLATE NOCASE ASC, g.position ASC, l.position ASC";
 
+/// Loads links (all projects, or one if `filter.project_id` is set),
+/// bounded to `limit` rows starting at `offset` either way, so a huge link
+/// collection never serializes/renders more than one page at a time.
+///
+/// Without a search term, `project_id` and the page window are pushed into
+/// SQL - fully bounded end to end regardless of total link count. *With* a
+/// search term, this still has to fetch and Unicode-lowercase every link in
+/// scope before it can paginate the matches (`LOWER()`/`NOCASE` in SQLite
+/// only case-folds ASCII, same reasoning as `files::list_for_project`'s
+/// search branch) - the page window still bounds what comes back, just not
+/// that branch's scan cost.
+pub fn list(conn: &Connection, filter: &LinkFilter, limit: i64, offset: i64) -> rusqlite::Result<Vec<Link>> {
     let term = filter.search.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_lowercase);
+
+    if term.is_none() {
+        return match &filter.project_id {
+            Some(project_id) => {
+                let sql = format!("{SELECT_BASE} WHERE l.project_id = ?1 {ORDER_BY} LIMIT ?2 OFFSET ?3");
+                let mut stmt = conn.prepare(&sql)?;
+                let rows = stmt.query_map(params![project_id, limit, offset], map_row)?;
+                rows.map(|r| r.map(|rw| rw.link)).collect()
+            }
+            None => {
+                let sql = format!("{SELECT_BASE} {ORDER_BY} LIMIT ?1 OFFSET ?2");
+                let mut stmt = conn.prepare(&sql)?;
+                let rows = stmt.query_map(params![limit, offset], map_row)?;
+                rows.map(|r| r.map(|rw| rw.link)).collect()
+            }
+        };
+    }
+
+    let sql = match &filter.project_id {
+        Some(_) => format!("{SELECT_BASE} WHERE l.project_id = ?1 {ORDER_BY}"),
+        None => format!("{SELECT_BASE} {ORDER_BY}"),
+    };
+    let mut stmt = conn.prepare(&sql)?;
+    let rows: Vec<RowWithSearchBlob> = match &filter.project_id {
+        Some(project_id) => stmt.query_map(params![project_id], map_row)?.collect::<rusqlite::Result<_>>()?,
+        None => stmt.query_map([], map_row)?.collect::<rusqlite::Result<_>>()?,
+    };
+
+    let term = term.unwrap();
     Ok(rows
         .into_iter()
-        .filter(|rw| {
-            if let Some(project_id) = &filter.project_id {
-                if rw.link.project_id != *project_id {
-                    return false;
-                }
-            }
-            if let Some(term) = &term {
-                if !rw.blob.to_lowercase().contains(term) {
-                    return false;
-                }
-            }
-            true
-        })
+        .filter(|rw| rw.blob.to_lowercase().contains(&term))
         .map(|rw| rw.link)
+        .skip(offset.max(0) as usize)
+        .take(limit.max(0) as usize)
         .collect())
 }
 
@@ -163,4 +187,107 @@ pub fn set_position(conn: &Connection, id: &str, position: i64) -> rusqlite::Res
 
 pub fn delete(conn: &Connection, id: &str) -> rusqlite::Result<usize> {
     conn.execute("DELETE FROM links WHERE id = ?1", params![id])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::link_projects;
+
+    fn setup() -> (Connection, std::path::PathBuf, String) {
+        let dir = std::env::temp_dir().join(format!("noxera-links-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let conn = crate::database::open(&dir.join("test.db")).unwrap();
+        let now = "2026-01-01T00:00:00+00:00";
+        let project_id = "link-project-1".to_string();
+        link_projects::create(&conn, &project_id, "Project", now).unwrap();
+        (conn, dir, project_id)
+    }
+
+    fn teardown(conn: Connection, dir: std::path::PathBuf) {
+        drop(conn);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn list_paginates_without_a_search_term() {
+        let (conn, dir, project_id) = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        for i in 0..5 {
+            create(&conn, &format!("l{i}"), &project_id, None, &format!("Link {i}"), "https://example.com", None, now).unwrap();
+        }
+
+        let filter = LinkFilter { project_id: Some(project_id.clone()), ..Default::default() };
+        let page1 = list(&conn, &filter, 2, 0).unwrap();
+        assert_eq!(page1.iter().map(|l| l.title.as_str()).collect::<Vec<_>>(), vec!["Link 0", "Link 1"]);
+        let page2 = list(&conn, &filter, 2, 2).unwrap();
+        assert_eq!(page2.iter().map(|l| l.title.as_str()).collect::<Vec<_>>(), vec!["Link 2", "Link 3"]);
+        let page3 = list(&conn, &filter, 2, 4).unwrap();
+        assert_eq!(page3.iter().map(|l| l.title.as_str()).collect::<Vec<_>>(), vec!["Link 4"]);
+
+        teardown(conn, dir);
+    }
+
+    #[test]
+    fn list_search_matches_title_and_still_paginates() {
+        let (conn, dir, project_id) = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        create(&conn, "l1", &project_id, None, "Design docs", "https://a.example", None, now).unwrap();
+        create(&conn, "l2", &project_id, None, "Unrelated", "https://b.example", None, now).unwrap();
+        create(&conn, "l3", &project_id, None, "More design work", "https://c.example", None, now).unwrap();
+
+        let filter = LinkFilter { search: Some("design".to_string()), ..Default::default() };
+        let hits = list(&conn, &filter, 10, 0).unwrap();
+        assert_eq!(hits.iter().map(|l| l.title.as_str()).collect::<Vec<_>>(), vec!["Design docs", "More design work"]);
+
+        let first_page = list(&conn, &filter, 1, 0).unwrap();
+        assert_eq!(first_page.len(), 1);
+
+        teardown(conn, dir);
+    }
+
+    /// Not a correctness test - seeds 200,000 links into one project, then
+    /// times a paginated browse page and a paginated search page to confirm
+    /// cost stays flat (proportional to the page size, not to 200,000).
+    ///
+    /// Run explicitly: `cargo test --release two_hundred_thousand_links -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn two_hundred_thousand_links_stay_fast_to_page() {
+        let (conn, dir, project_id) = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        const N: usize = 200_000;
+
+        let seed_start = std::time::Instant::now();
+        {
+            let tx = conn.unchecked_transaction().unwrap();
+            {
+                let mut stmt = tx
+                    .prepare(
+                        "INSERT INTO links (id, project_id, group_id, title, url, description, position, created_at, updated_at) \
+                         VALUES (?1, ?2, NULL, ?3, ?4, NULL, ?5, ?6, ?6)",
+                    )
+                    .unwrap();
+                for i in 0..N {
+                    stmt.execute(params![format!("l{i}"), project_id, format!("Link {i}"), "https://example.com", i as i64, now]).unwrap();
+                }
+            }
+            tx.commit().unwrap();
+        }
+        eprintln!("seed {N} links (raw batched insert): {:?}", seed_start.elapsed());
+
+        let filter = LinkFilter { project_id: Some(project_id.clone()), ..Default::default() };
+        let browse_start = std::time::Instant::now();
+        let page = list(&conn, &filter, 150, 0).unwrap();
+        eprintln!("list, one page of 150, over {N} rows: {:?}", browse_start.elapsed());
+        assert_eq!(page.len(), 150);
+
+        let search_filter = LinkFilter { search: Some("199999".to_string()), ..Default::default() };
+        let search_start = std::time::Instant::now();
+        let hits = list(&conn, &search_filter, 150, 0).unwrap();
+        eprintln!("list, search + page, over {N} rows: {:?}", search_start.elapsed());
+        assert_eq!(hits.len(), 1);
+
+        teardown(conn, dir);
+    }
 }

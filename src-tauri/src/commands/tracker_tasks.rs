@@ -24,10 +24,31 @@ use super::with_ready;
 // ---- Listing ------------------------------------------------------------------
 
 #[tauri::command]
-pub fn get_tracker_tasks(state: State<AppState>, board_id: String, include_archived: Option<bool>) -> AppResult<Vec<Task>> {
+pub fn get_tracker_tasks(
+    state: State<AppState>,
+    board_id: String,
+    include_archived: Option<bool>,
+    per_status_limit: Option<i64>,
+) -> AppResult<Vec<Task>> {
     with_ready(&state, |conn, _| {
         task_files_db::sync_always_latest_all(conn, &now_iso())?;
-        Ok(tasks_db::list_for_board(conn, &board_id, include_archived.unwrap_or(false))?)
+        Ok(tasks_db::list_for_board(conn, &board_id, include_archived.unwrap_or(false), per_status_limit)?)
+    })
+}
+
+/// One status column's next page, once it has more tasks than
+/// `get_tracker_tasks`'s initial `per_status_limit` returned for it.
+#[tauri::command]
+pub fn get_tracker_board_column_page(
+    state: State<AppState>,
+    board_id: String,
+    status_id: String,
+    include_archived: Option<bool>,
+    limit: i64,
+    offset: i64,
+) -> AppResult<Vec<Task>> {
+    with_ready(&state, |conn, _| {
+        Ok(tasks_db::list_for_board_column(conn, &board_id, &status_id, include_archived.unwrap_or(false), limit, offset)?)
     })
 }
 

@@ -1,5 +1,5 @@
 import { FolderPlus, Link2, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/Button";
 import { ContextMenu } from "@/components/ContextMenu";
@@ -41,12 +41,21 @@ export function LinksView({ projects, onProjectsChanged, activeTab, onActiveTabC
     [search, activeTab],
   );
 
-  const { links, refresh: refreshLinks } = useLinks(filter);
+  const { links, loadingMore, hasMore, refresh: refreshLinks, loadMore } = useLinks(filter);
   const { groups: allGroups, refresh: refreshAllGroups } = useAllLinkGroups();
 
   function refreshAll() {
     void refreshLinks();
     void refreshAllGroups();
+  }
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el || !hasMore || loadingMore) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 600) {
+      void loadMore();
+    }
   }
 
   async function handleOpen(link: LinkType) {
@@ -181,7 +190,7 @@ export function LinksView({ projects, onProjectsChanged, activeTab, onActiveTabC
         />
       )}
 
-      <div className="flex-1 overflow-y-auto px-6 pb-8">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-6 pb-8">
         {nothingAtAll ? (
           <EmptyState
             icon={FolderPlus}
@@ -236,6 +245,7 @@ export function LinksView({ projects, onProjectsChanged, activeTab, onActiveTabC
                 onChanged={refreshAll}
               />
             ))}
+            {loadingMore && <p className="px-2 py-3 text-center text-[11px] text-label-tertiary">{t("files.loading")}</p>}
           </div>
         )}
       </div>

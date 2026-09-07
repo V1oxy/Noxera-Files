@@ -49,7 +49,13 @@ export function TrackerView({
 
   const [showArchived, setShowArchived] = useState(false);
   const { statuses, refresh: refreshStatuses } = useTrackerStatuses(board?.id ?? null);
-  const { tasks, refresh: refreshTasks } = useTrackerTasks(board?.id ?? null, showArchived);
+  const {
+    tasks,
+    columnHasMore,
+    columnLoadingMore,
+    refresh: refreshTasks,
+    loadMoreForStatus,
+  } = useTrackerTasks(board?.id ?? null, showArchived);
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
@@ -173,6 +179,9 @@ export function TrackerView({
             statuses={statuses}
             tasks={tasks}
             cardSize={board.cardSize}
+            columnHasMore={columnHasMore}
+            columnLoadingMore={columnLoadingMore}
+            onLoadMoreForStatus={loadMoreForStatus}
             onOpenTask={(task) => setSelectedTaskId(task.id)}
             onMove={handleMove}
             onQuickAdd={handleQuickAdd}

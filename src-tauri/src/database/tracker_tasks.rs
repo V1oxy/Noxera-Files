@@ -1,9 +1,14 @@
-use rusqlite::{params, Connection, OptionalExtension, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row, ToSql};
 
 use crate::models::{SortDirection, Task, TaskDetail, TaskFilter, TaskSortField, TaskUpdateInput, TrackerExportFilter};
 
 use super::{tracker_events, tracker_field_values, tracker_task_files, tracker_task_local_files};
 
+/// Every column `Task` needs, including three correlated-but-indexed
+/// subqueries (`tracker_task_files.task_id` and the
+/// `tracker_task_labels`/`tracker_field_values` composite primary keys all
+/// lead with the join column) so per-row cost is an index lookup, not a
+/// table scan, regardless of table size.
 const SELECT_BASE: &str = "SELECT t.id, t.board_id, b.name AS board_name, t.status_id, s.name AS status_name, \
     s.color AS status_color, s.is_done AS status_is_done, t.title, t.description, t.project_id, p.name AS project_name, \
     t.customer, t.priority AS priority_id, pr.name AS priority_name, pr.color AS priority_color, \
@@ -11,33 +16,21 @@ const SELECT_BASE: &str = "SELECT t.id, t.board_id, b.name AS board_name, t.stat
     t.created_at, t.updated_at, \
     (SELECT COUNT(*) FROM tracker_task_files tf WHERE tf.task_id = t.id) AS file_count, \
     (SELECT COUNT(*) FROM tracker_task_files tf WHERE tf.task_id = t.id AND tf.unseen_update = 1) AS unseen_count, \
-    (SELECT GROUP_CONCAT(label_id) FROM tracker_task_labels WHERE task_id = t.id) AS label_ids_concat, \
-    (SELECT GROUP_CONCAT(cached_file_name, char(31)) FROM tracker_task_files WHERE task_id = t.id) AS file_names_blob, \
-    (SELECT GROUP_CONCAT(value, char(31)) FROM tracker_field_values WHERE task_id = t.id AND value IS NOT NULL) AS field_values_blob \
+    (SELECT GROUP_CONCAT(label_id) FROM tracker_task_labels WHERE task_id = t.id) AS label_ids_concat \
     FROM tracker_tasks t \
     JOIN tracker_boards b ON b.id = t.board_id \
     JOIN tracker_statuses s ON s.id = t.status_id \
     JOIN tracker_priorities pr ON pr.id = t.priority \
     LEFT JOIN projects p ON p.id = t.project_id";
 
-/// A row plus the extra blob columns needed for full-text search, which
-/// aren't part of the public `Task` shape - kept alongside it only long
-/// enough for `list_all` to filter on, then discarded.
-struct RowWithSearchBlob {
-    task: Task,
-    blob: String,
-}
-
-fn map_row(row: &Row) -> rusqlite::Result<RowWithSearchBlob> {
+fn map_row(row: &Row) -> rusqlite::Result<Task> {
     let label_ids_concat: Option<String> = row.get("label_ids_concat")?;
     let label_ids = label_ids_concat
         .map(|s| s.split(',').map(str::to_string).collect())
         .unwrap_or_default();
-    let file_names_blob: Option<String> = row.get("file_names_blob")?;
-    let field_values_blob: Option<String> = row.get("field_values_blob")?;
     let unseen_count: i64 = row.get("unseen_count")?;
 
-    let task = Task {
+    Ok(Task {
         id: row.get("id")?,
         board_id: row.get("board_id")?,
         board_name: row.get("board_name")?,
@@ -64,19 +57,7 @@ fn map_row(row: &Row) -> rusqlite::Result<RowWithSearchBlob> {
         file_count: row.get("file_count")?,
         has_unseen_update: unseen_count > 0,
         label_ids,
-    };
-
-    let blob = format!(
-        "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
-        task.title,
-        task.description.as_deref().unwrap_or(""),
-        task.project_name.as_deref().unwrap_or(""),
-        task.customer.as_deref().unwrap_or(""),
-        file_names_blob.as_deref().unwrap_or(""),
-        field_values_blob.as_deref().unwrap_or(""),
-    );
-
-    Ok(RowWithSearchBlob { task, blob })
+    })
 }
 
 /// Tasks pinned to the top of their column, then manual drag order - the
@@ -84,136 +65,189 @@ fn map_row(row: &Row) -> rusqlite::Result<RowWithSearchBlob> {
 /// status client-side for the Kanban view.
 const BOARD_ORDER: &str = "ORDER BY t.pinned DESC, t.position ASC";
 
-pub fn list_for_board(conn: &Connection, board_id: &str, include_archived: bool) -> rusqlite::Result<Vec<Task>> {
-    let sql = if include_archived {
-        format!("{SELECT_BASE} WHERE t.board_id = ?1 {BOARD_ORDER}")
-    } else {
-        format!("{SELECT_BASE} WHERE t.board_id = ?1 AND t.archived = 0 {BOARD_ORDER}")
-    };
+/// Loads a board's tasks for the Kanban view. `per_status_limit`, when set,
+/// caps how many tasks come back *per status column* (via a `ROW_NUMBER()`
+/// window, not a plain `LIMIT` - a plain limit would just return the first N
+/// tasks board-wide and could starve later columns entirely) - the initial
+/// board load always passes one, so opening a board costs the same whether
+/// it holds 50 tasks or 200,000; a column past that cap gets the rest one
+/// page at a time from `list_for_board_column` as the user scrolls it.
+pub fn list_for_board(
+    conn: &Connection,
+    board_id: &str,
+    include_archived: bool,
+    per_status_limit: Option<i64>,
+) -> rusqlite::Result<Vec<Task>> {
+    let archived_clause = if include_archived { "" } else { "AND t.archived = 0" };
+    match per_status_limit {
+        None => {
+            let sql = format!("{SELECT_BASE} WHERE t.board_id = ?1 {archived_clause} {BOARD_ORDER}");
+            let mut stmt = conn.prepare(&sql)?;
+            let rows = stmt.query_map(params![board_id], map_row)?;
+            rows.collect()
+        }
+        Some(limit) => {
+            // The window function only needs to look at bare `tracker_tasks`
+            // columns to pick which ids qualify - computing it against the
+            // full `SELECT_BASE` (joins + 3 correlated subqueries) would
+            // force those subqueries to run for every task on the board
+            // before the window could discard most of them. Instead, narrow
+            // to the qualifying ids first (cheap - one table, no joins) and
+            // only then run the real, subquery-bearing select for exactly
+            // those rows - as an explicit JOIN against that narrowed set
+            // rather than a `WHERE t.id IN (...)`, since SQLite reliably
+            // materializes a FROM-clause subquery once, while a window
+            // function inside an IN-subquery isn't eligible for the usual
+            // subquery flattening and can otherwise get re-evaluated per
+            // outer row (catastrophic - a full per-status sort repeated once
+            // per task on the board instead of once total).
+            let sql = format!(
+                "{SELECT_BASE} JOIN (\
+                   SELECT id FROM (\
+                     SELECT id, ROW_NUMBER() OVER (PARTITION BY status_id ORDER BY pinned DESC, position ASC) AS rn \
+                     FROM tracker_tasks t WHERE t.board_id = ?1 {archived_clause}\
+                   ) WHERE rn <= ?2\
+                 ) ranked ON ranked.id = t.id \
+                 {BOARD_ORDER}"
+            );
+            let mut stmt = conn.prepare(&sql)?;
+            let rows = stmt.query_map(params![board_id, limit], map_row)?;
+            rows.collect()
+        }
+    }
+}
+
+/// One status column's next page (for "load more" once a column has more
+/// tasks than `list_for_board`'s initial `per_status_limit` showed).
+pub fn list_for_board_column(
+    conn: &Connection,
+    board_id: &str,
+    status_id: &str,
+    include_archived: bool,
+    limit: i64,
+    offset: i64,
+) -> rusqlite::Result<Vec<Task>> {
+    let archived_clause = if include_archived { "" } else { "AND t.archived = 0" };
+    let sql = format!("{SELECT_BASE} WHERE t.board_id = ?1 AND t.status_id = ?2 {archived_clause} {BOARD_ORDER} LIMIT ?3 OFFSET ?4");
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(params![board_id], map_row)?;
-    rows.map(|r| r.map(|rw| rw.task)).collect()
+    let rows = stmt.query_map(params![board_id, status_id, limit, offset], map_row)?;
+    rows.collect()
 }
 
 pub fn get(conn: &Connection, id: &str) -> rusqlite::Result<Option<Task>> {
     let sql = format!("{SELECT_BASE} WHERE t.id = ?1");
-    conn.query_row(&sql, params![id], map_row)
-        .optional()
-        .map(|r| r.map(|rw| rw.task))
+    conn.query_row(&sql, params![id], map_row).optional()
 }
 
-fn matches_filter(task: &Task, blob: &str, filter: &TaskFilter) -> bool {
-    if let Some(term) = filter.search.as_deref().filter(|s| !s.trim().is_empty()) {
-        if !blob.to_lowercase().contains(&term.trim().to_lowercase()) {
-            return false;
+fn sort_column(field: TaskSortField) -> &'static str {
+    match field {
+        TaskSortField::Created => "t.created_at",
+        TaskSortField::ReceivedAt => "t.received_at",
+        TaskSortField::UpdatedAt => "t.updated_at",
+        TaskSortField::CompletedAt => "COALESCE(t.completed_at, '')",
+        TaskSortField::Title => "t.title COLLATE NOCASE",
+        TaskSortField::Customer => "COALESCE(t.customer, '') COLLATE NOCASE",
+        // Priority sorts by its board-defined position, not a string -
+        // `priority_position` is SELECT_BASE's own alias for `pr.position`,
+        // referencing it here is standard SQLite (an ORDER BY may name a
+        // result-column alias, not just a source-table column).
+        TaskSortField::Priority => "priority_position",
+    }
+}
+
+/// Loads tasks matching `filter` - search, every filter field, sort and
+/// pagination are all translated into one parameterized SQL query (WHERE/
+/// EXISTS clauses + ORDER BY + LIMIT/OFFSET), so cost is proportional to
+/// `filter.limit`, never to the total number of tasks across every board.
+/// Backs the cross-board "All Tasks" view (which always sets `limit`) and,
+/// with `limit` left `None`, the Excel export (which legitimately wants
+/// every matching row for a one-off report).
+pub fn list_all(conn: &Connection, filter: &TaskFilter) -> rusqlite::Result<Vec<Task>> {
+    let mut clauses: Vec<String> = Vec::new();
+    let mut args: Vec<Box<dyn ToSql>> = Vec::new();
+
+    if let Some(term) = filter.search.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        let pattern = format!("%{}%", term.to_lowercase());
+        clauses.push(
+            "(LOWER(t.title) LIKE ? \
+              OR LOWER(COALESCE(t.description, '')) LIKE ? \
+              OR LOWER(COALESCE(p.name, '')) LIKE ? \
+              OR LOWER(COALESCE(t.customer, '')) LIKE ? \
+              OR EXISTS (SELECT 1 FROM tracker_task_files tf WHERE tf.task_id = t.id AND LOWER(COALESCE(tf.cached_file_name, '')) LIKE ?) \
+              OR EXISTS (SELECT 1 FROM tracker_field_values fv WHERE fv.task_id = t.id AND fv.value IS NOT NULL AND LOWER(fv.value) LIKE ?))"
+                .to_string(),
+        );
+        for _ in 0..6 {
+            args.push(Box::new(pattern.clone()));
         }
     }
     if let Some(project_id) = &filter.project_id {
-        if task.project_id.as_deref() != Some(project_id.as_str()) {
-            return false;
-        }
+        clauses.push("t.project_id = ?".to_string());
+        args.push(Box::new(project_id.clone()));
     }
     if let Some(board_id) = &filter.board_id {
-        if task.board_id != *board_id {
-            return false;
-        }
+        clauses.push("t.board_id = ?".to_string());
+        args.push(Box::new(board_id.clone()));
     }
     if let Some(status_id) = &filter.status_id {
-        if task.status_id != *status_id {
-            return false;
-        }
+        clauses.push("t.status_id = ?".to_string());
+        args.push(Box::new(status_id.clone()));
     }
-    if let Some(customer) = filter.customer.as_deref().filter(|s| !s.trim().is_empty()) {
-        let needle = customer.trim().to_lowercase();
-        if !task.customer.as_deref().unwrap_or("").to_lowercase().contains(&needle) {
-            return false;
-        }
+    if let Some(customer) = filter.customer.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        clauses.push("LOWER(COALESCE(t.customer, '')) LIKE ?".to_string());
+        args.push(Box::new(format!("%{}%", customer.to_lowercase())));
     }
     if let Some(priority_id) = &filter.priority_id {
-        if task.priority_id != *priority_id {
-            return false;
-        }
+        clauses.push("t.priority = ?".to_string());
+        args.push(Box::new(priority_id.clone()));
     }
     if let Some(label_id) = &filter.label_id {
-        if !task.label_ids.iter().any(|l| l == label_id) {
-            return false;
-        }
+        clauses.push("EXISTS (SELECT 1 FROM tracker_task_labels tl WHERE tl.task_id = t.id AND tl.label_id = ?)".to_string());
+        args.push(Box::new(label_id.clone()));
     }
     if let Some(has_files) = filter.has_files {
-        if has_files != (task.file_count > 0) {
-            return false;
-        }
+        let exists = "EXISTS (SELECT 1 FROM tracker_task_files tf WHERE tf.task_id = t.id)";
+        clauses.push(if has_files { exists.to_string() } else { format!("NOT {exists}") });
     }
     if let Some(before) = &filter.received_before {
-        if task.received_at.as_str() > before.as_str() {
-            return false;
-        }
+        clauses.push("t.received_at <= ?".to_string());
+        args.push(Box::new(before.clone()));
     }
     if let Some(after) = &filter.received_after {
-        if task.received_at.as_str() < after.as_str() {
-            return false;
-        }
+        clauses.push("t.received_at >= ?".to_string());
+        args.push(Box::new(after.clone()));
     }
-    if filter.include_archived != Some(true) && task.archived {
-        return false;
+    if filter.include_archived != Some(true) {
+        clauses.push("t.archived = 0".to_string());
     }
-    true
-}
 
-fn sort_key(task: &Task, field: TaskSortField) -> &str {
-    match field {
-        TaskSortField::Created => &task.created_at,
-        TaskSortField::ReceivedAt => &task.received_at,
-        TaskSortField::UpdatedAt => &task.updated_at,
-        TaskSortField::CompletedAt => task.completed_at.as_deref().unwrap_or(""),
-        TaskSortField::Title => &task.title,
-        TaskSortField::Customer => task.customer.as_deref().unwrap_or(""),
-        // Priority is sorted separately below (by its board-defined position,
-        // not a string).
-        TaskSortField::Priority => "",
-    }
-}
-
-/// Loads every task across every board and applies `filter`'s search,
-/// filters and sort entirely in Rust (see `TaskFilter`'s doc comment for
-/// why). Backs the cross-board "All Tasks" view.
-pub fn list_all(conn: &Connection, filter: &TaskFilter) -> rusqlite::Result<Vec<Task>> {
-    let sql = format!("{SELECT_BASE} ORDER BY t.created_at DESC");
-    let mut stmt = conn.prepare(&sql)?;
-    let rows: Vec<RowWithSearchBlob> = stmt.query_map([], map_row)?.collect::<rusqlite::Result<_>>()?;
-
-    let mut tasks: Vec<Task> = rows
-        .into_iter()
-        .filter(|rw| matches_filter(&rw.task, &rw.blob, filter))
-        .map(|rw| rw.task)
-        .collect();
+    let where_sql = if clauses.is_empty() { String::new() } else { format!("WHERE {}", clauses.join(" AND ")) };
 
     let field = filter.sort_field.unwrap_or(TaskSortField::Created);
-    let dir = filter.sort_dir.unwrap_or(SortDirection::Desc);
-    if field == TaskSortField::Priority {
-        tasks.sort_by_key(|t| t.priority_position);
-    } else if field == TaskSortField::Title || field == TaskSortField::Customer {
-        // Case-insensitive for the two free-text fields, so "apple" and
-        // "Banana" sort by their letters rather than by ASCII case.
-        tasks.sort_by_key(|a| sort_key(a, field).to_lowercase());
+    let dir = if filter.sort_dir.unwrap_or(SortDirection::Desc) == SortDirection::Desc { "DESC" } else { "ASC" };
+    let order_sql = format!("ORDER BY t.pinned DESC, {} {dir}", sort_column(field));
+
+    let limit_sql = if let Some(limit) = filter.limit {
+        args.push(Box::new(limit));
+        args.push(Box::new(filter.offset.unwrap_or(0)));
+        "LIMIT ? OFFSET ?".to_string()
     } else {
-        tasks.sort_by(|a, b| sort_key(a, field).cmp(sort_key(b, field)));
-    }
-    if dir == SortDirection::Desc {
-        tasks.reverse();
-    }
-    // Pinned tasks still float to the top within the sorted list, mirroring
-    // the board view's convention.
-    tasks.sort_by_key(|t| !t.pinned);
-    Ok(tasks)
+        String::new()
+    };
+
+    let sql = format!("{SELECT_BASE} {where_sql} {order_sql} {limit_sql}");
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(args.iter().map(|a| a.as_ref())), map_row)?;
+    rows.collect()
 }
 
 /// Backs the Excel export (see `commands::tracker_export`) - reuses
-/// `list_all`/`matches_filter` for everything `TaskFilter` already knows how
-/// to do (project scoping, the `received_at` date range, always including
-/// archived tasks since a report shouldn't silently drop historical ones),
-/// then applies the one thing `TaskFilter` doesn't support: matching against
-/// several statuses at once rather than just one.
+/// `list_all` for everything `TaskFilter` already knows how to do (project
+/// scoping, the `received_at` date range, always including archived tasks
+/// since a report shouldn't silently drop historical ones, and no `limit` -
+/// an export legitimately wants every matching row), then applies the one
+/// thing `TaskFilter` doesn't support: matching against several statuses at
+/// once rather than just one.
 pub fn list_for_export(conn: &Connection, filter: &TrackerExportFilter) -> rusqlite::Result<Vec<Task>> {
     let base_filter = TaskFilter {
         project_id: filter.project_id.clone(),
@@ -236,7 +270,7 @@ pub fn list_for_file(conn: &Connection, file_id: &str) -> rusqlite::Result<Vec<T
     );
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(params![file_id], map_row)?;
-    rows.map(|r| r.map(|rw| rw.task)).collect()
+    rows.collect()
 }
 
 pub fn get_detail(conn: &Connection, id: &str, now: &str) -> rusqlite::Result<Option<TaskDetail>> {
@@ -393,4 +427,195 @@ pub fn set_archived(conn: &Connection, id: &str, archived: bool, now: &str) -> r
 
 pub fn delete(conn: &Connection, id: &str) -> rusqlite::Result<usize> {
     conn.execute("DELETE FROM tracker_tasks WHERE id = ?1", params![id])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::{tracker_boards, tracker_priorities, tracker_statuses};
+
+    struct Fixture {
+        conn: Connection,
+        dir: std::path::PathBuf,
+        board_id: String,
+        status_a: String,
+        status_b: String,
+        priority_low: String,
+        priority_high: String,
+    }
+
+    fn setup() -> Fixture {
+        let dir = std::env::temp_dir().join(format!("noxera-tasks-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let conn = crate::database::open(&dir.join("test.db")).unwrap();
+        let now = "2026-01-01T00:00:00+00:00";
+
+        let board_id = "board-1".to_string();
+        tracker_boards::create(&conn, &board_id, "Board", None, now).unwrap();
+        let status_a = "status-a".to_string();
+        let status_b = "status-b".to_string();
+        tracker_statuses::create(&conn, &status_a, &board_id, "Todo", "#000", true, now).unwrap();
+        tracker_statuses::create(&conn, &status_b, &board_id, "Done", "#000", false, now).unwrap();
+        let priority_low = "priority-low".to_string();
+        let priority_high = "priority-high".to_string();
+        tracker_priorities::create(&conn, &priority_low, &board_id, "Low", "#000", true, now).unwrap();
+        tracker_priorities::create(&conn, &priority_high, &board_id, "High", "#000", false, now).unwrap();
+
+        Fixture { conn, dir, board_id, status_a, status_b, priority_low, priority_high }
+    }
+
+    fn teardown(f: Fixture) {
+        drop(f.conn);
+        std::fs::remove_dir_all(&f.dir).ok();
+    }
+
+    fn ids(tasks: &[Task]) -> Vec<&str> {
+        tasks.iter().map(|t| t.id.as_str()).collect()
+    }
+
+    #[test]
+    fn list_all_filters_search_and_sort() {
+        let f = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        create(&f.conn, "t1", &f.board_id, &f.status_a, "Alpha task", Some("about apples"), None, Some("Acme"), &f.priority_low, "2026-01-01", now).unwrap();
+        create(&f.conn, "t2", &f.board_id, &f.status_a, "Beta task", None, None, None, &f.priority_high, "2026-01-02", now).unwrap();
+        create(&f.conn, "t3", &f.board_id, &f.status_b, "Gamma task", None, None, None, &f.priority_low, "2026-01-03", now).unwrap();
+
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("beta".into()), ..Default::default() }).unwrap()), vec!["t2"]);
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("apples".into()), ..Default::default() }).unwrap()), vec!["t1"]);
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { status_id: Some(f.status_b.clone()), ..Default::default() }).unwrap()), vec!["t3"]);
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { customer: Some("acme".into()), ..Default::default() }).unwrap()), vec!["t1"]);
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { priority_id: Some(f.priority_high.clone()), ..Default::default() }).unwrap()), vec!["t2"]);
+
+        let sorted = list_all(&f.conn, &TaskFilter { sort_field: Some(TaskSortField::ReceivedAt), sort_dir: Some(SortDirection::Asc), ..Default::default() }).unwrap();
+        assert_eq!(ids(&sorted), vec!["t1", "t2", "t3"]);
+
+        teardown(f);
+    }
+
+    #[test]
+    fn list_all_paginates_with_limit_and_offset() {
+        let f = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        for i in 0..5 {
+            create(&f.conn, &format!("t{i}"), &f.board_id, &f.status_a, &format!("Task {i}"), None, None, None, &f.priority_low, &format!("2026-01-0{}", i + 1), now).unwrap();
+        }
+        let sort = TaskFilter { sort_field: Some(TaskSortField::ReceivedAt), sort_dir: Some(SortDirection::Asc), ..Default::default() };
+
+        let page1 = list_all(&f.conn, &TaskFilter { limit: Some(2), offset: Some(0), ..sort.clone() }).unwrap();
+        assert_eq!(ids(&page1), vec!["t0", "t1"]);
+        let page2 = list_all(&f.conn, &TaskFilter { limit: Some(2), offset: Some(2), ..sort.clone() }).unwrap();
+        assert_eq!(ids(&page2), vec!["t2", "t3"]);
+        let page3 = list_all(&f.conn, &TaskFilter { limit: Some(2), offset: Some(4), ..sort }).unwrap();
+        assert_eq!(ids(&page3), vec!["t4"]);
+
+        teardown(f);
+    }
+
+    #[test]
+    fn list_all_floats_pinned_tasks_above_the_requested_sort_order() {
+        let f = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        create(&f.conn, "t1", &f.board_id, &f.status_a, "First", None, None, None, &f.priority_low, "2026-01-01", now).unwrap();
+        create(&f.conn, "t2", &f.board_id, &f.status_a, "Second", None, None, None, &f.priority_low, "2026-01-02", now).unwrap();
+        create(&f.conn, "t3", &f.board_id, &f.status_a, "Third", None, None, None, &f.priority_low, "2026-01-03", now).unwrap();
+        set_pinned(&f.conn, "t3", true, now).unwrap();
+
+        let hits = list_all(&f.conn, &TaskFilter { sort_field: Some(TaskSortField::ReceivedAt), sort_dir: Some(SortDirection::Asc), ..Default::default() }).unwrap();
+        // t3 is pinned so it floats to the top even though its receivedAt sorts last.
+        assert_eq!(ids(&hits), vec!["t3", "t1", "t2"]);
+
+        teardown(f);
+    }
+
+    #[test]
+    fn list_all_excludes_archived_unless_asked_for() {
+        let f = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        create(&f.conn, "t1", &f.board_id, &f.status_a, "Active", None, None, None, &f.priority_low, "2026-01-01", now).unwrap();
+        create(&f.conn, "t2", &f.board_id, &f.status_a, "Archived", None, None, None, &f.priority_low, "2026-01-01", now).unwrap();
+        set_archived(&f.conn, "t2", true, now).unwrap();
+
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter::default()).unwrap()), vec!["t1"]);
+        assert_eq!(list_all(&f.conn, &TaskFilter { include_archived: Some(true), ..Default::default() }).unwrap().len(), 2);
+
+        teardown(f);
+    }
+
+    #[test]
+    fn list_for_board_caps_per_status_column_without_starving_others() {
+        let f = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        for i in 0..5 {
+            create(&f.conn, &format!("a{i}"), &f.board_id, &f.status_a, &format!("A{i}"), None, None, None, &f.priority_low, "2026-01-01", now).unwrap();
+        }
+        create(&f.conn, "b0", &f.board_id, &f.status_b, "B0", None, None, None, &f.priority_low, "2026-01-01", now).unwrap();
+
+        let capped = list_for_board(&f.conn, &f.board_id, false, Some(2)).unwrap();
+        assert_eq!(capped.iter().filter(|t| t.status_id == f.status_a).count(), 2, "column A must be capped even though it has 5 tasks");
+        assert_eq!(capped.iter().filter(|t| t.status_id == f.status_b).count(), 1, "column B's only task must still come back, not get starved by column A's cap");
+
+        let page2 = list_for_board_column(&f.conn, &f.board_id, &f.status_a, false, 2, 2).unwrap();
+        assert_eq!(page2.len(), 2);
+        let page3 = list_for_board_column(&f.conn, &f.board_id, &f.status_a, false, 2, 4).unwrap();
+        assert_eq!(page3.len(), 1);
+
+        teardown(f);
+    }
+
+    /// Not a correctness test - seeds 200,000 tracker tasks into a
+    /// throwaway database, then times the exact paginated query paths the
+    /// Kanban board and "All Tasks" view now run through, to confirm cost
+    /// stays flat (proportional to the page size, not to 200,000) after
+    /// moving off the old "load everything, filter/sort in Rust" approach.
+    ///
+    /// Run explicitly: `cargo test --release two_hundred_thousand -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn two_hundred_thousand_tasks_stay_fast_to_page() {
+        let f = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        const N: usize = 200_000;
+
+        let seed_start = std::time::Instant::now();
+        {
+            let tx = f.conn.unchecked_transaction().unwrap();
+            {
+                let mut stmt = tx
+                    .prepare(
+                        "INSERT INTO tracker_tasks \
+                         (id, board_id, status_id, title, description, project_id, customer, priority, \
+                          pinned, archived, position, received_at, completed_at, created_at, updated_at) \
+                         VALUES (?1, ?2, ?3, ?4, NULL, NULL, NULL, ?5, 0, 0, ?6, ?7, NULL, ?8, ?8)",
+                    )
+                    .unwrap();
+                for i in 0..N {
+                    let status = if i % 2 == 0 { &f.status_a } else { &f.status_b };
+                    stmt.execute(params![
+                        format!("t{i}"), f.board_id, status, format!("Task number {i}"), f.priority_low, i as i64, "2026-01-01", now,
+                    ])
+                    .unwrap();
+                }
+            }
+            tx.commit().unwrap();
+        }
+        eprintln!("seed {N} tasks (raw batched insert): {:?}", seed_start.elapsed());
+
+        let board_start = std::time::Instant::now();
+        let capped = list_for_board(&f.conn, &f.board_id, false, Some(100)).unwrap();
+        eprintln!("list_for_board, capped at 100/column, over {N} rows: {:?}", board_start.elapsed());
+        assert_eq!(capped.len(), 200); // 100 from each of the 2 status columns
+
+        let all_start = std::time::Instant::now();
+        let page = list_all(&f.conn, &TaskFilter { limit: Some(150), ..Default::default() }).unwrap();
+        eprintln!("list_all, one page of 150, over {N} rows: {:?}", all_start.elapsed());
+        assert_eq!(page.len(), 150);
+
+        let search_start = std::time::Instant::now();
+        let hits = list_all(&f.conn, &TaskFilter { search: Some("199999".into()), limit: Some(150), ..Default::default() }).unwrap();
+        eprintln!("list_all, search + one page of 150, over {N} rows: {:?}", search_start.elapsed());
+        assert_eq!(hits.len(), 1);
+
+        teardown(f);
+    }
 }
