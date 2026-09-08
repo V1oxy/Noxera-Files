@@ -363,6 +363,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "tracker.useThisFile": "Use This File",
     "tracker.createTaskFromFile": "Create Task",
     "tracker.createTaskFromVersion": "Create Task",
+    "tracker.createTaskFromLink": "Create Task",
     "tracker.linkedTasks": "Tasks",
 
     "tracker.tabFiles": "Files",
@@ -872,6 +873,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "tracker.useThisFile": "Использовать этот файл",
     "tracker.createTaskFromFile": "Создать задачу",
     "tracker.createTaskFromVersion": "Создать задачу",
+    "tracker.createTaskFromLink": "Создать задачу",
     "tracker.linkedTasks": "Задачи",
 
     "tracker.tabFiles": "Файлы",

@@ -58,6 +58,7 @@ interface ProjectLinksBoardProps {
   isSearching: boolean;
   onOpenLink: (link: Link) => void;
   onEditLink: (link: Link) => void;
+  onCreateTaskLink: (link: Link) => void;
   onChanged: () => void;
 }
 
@@ -71,6 +72,7 @@ export function ProjectLinksBoard({
   isSearching,
   onOpenLink,
   onEditLink,
+  onCreateTaskLink,
   onChanged,
 }: ProjectLinksBoardProps) {
   const { t, translateError } = useLanguage();
@@ -261,6 +263,7 @@ export function ProjectLinksBoard({
                 showProjectOnCard={showProjectOnCard}
                 onOpenLink={onOpenLink}
                 onEditLink={onEditLink}
+                onCreateTaskLink={onCreateTaskLink}
                 onDeleteLink={setDeleteTarget}
                 onRenameGroup={group ? () => setRenameTarget(group) : undefined}
                 onDeleteGroup={group ? () => setDeleteGroupTarget(group) : undefined}
@@ -330,6 +333,7 @@ function GroupSection({
   showProjectOnCard,
   onOpenLink,
   onEditLink,
+  onCreateTaskLink,
   onDeleteLink,
   onRenameGroup,
   onDeleteGroup,
@@ -345,6 +349,7 @@ function GroupSection({
   showProjectOnCard: boolean;
   onOpenLink: (link: Link) => void;
   onEditLink: (link: Link) => void;
+  onCreateTaskLink: (link: Link) => void;
   onDeleteLink: (link: Link) => void;
   onRenameGroup?: () => void;
   onDeleteGroup?: () => void;
@@ -410,7 +415,7 @@ function GroupSection({
         >
           <SortableContext items={links.map((l) => l.id)} strategy={rectSortingStrategy}>
             {links.map((link) => (
-              <LinkCard key={link.id} link={link} showProject={showProjectOnCard} onOpen={onOpenLink} onEdit={onEditLink} onDelete={onDeleteLink} />
+              <LinkCard key={link.id} link={link} showProject={showProjectOnCard} onOpen={onOpenLink} onEdit={onEditLink} onDelete={onDeleteLink} onCreateTask={onCreateTaskLink} />
             ))}
           </SortableContext>
           {links.length === 0 && <p className="col-span-full px-2 py-3 text-center text-[11.5px] text-label-tertiary">{t("links.emptyGroup")}</p>}

@@ -9,7 +9,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { ToastContainer } from "@/components/Toast";
 import { NewBoardModal } from "@/components/tracker/NewBoardModal";
-import type { NewTaskInitialFile } from "@/components/tracker/NewTaskModal";
+import type { NewTaskInitialFile, NewTaskInitialLink } from "@/components/tracker/NewTaskModal";
 import { WhatsNewModal } from "@/components/WhatsNewModal";
 import { AccentColorProvider, useAccentColor } from "@/hooks/useAccentColor";
 import { LanguageProvider, useLanguage } from "@/hooks/useLanguage";
@@ -50,6 +50,7 @@ function MainShell() {
   const runBoardReorder = useSerialTask();
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [pendingNewTaskFile, setPendingNewTaskFile] = useState<NewTaskInitialFile | null>(null);
+  const [pendingNewTaskLink, setPendingNewTaskLink] = useState<NewTaskInitialLink | null>(null);
   // Defaults to visible so the section doesn't flash hidden while settings
   // are still loading - flipped to false only once we actually know the
   // user turned it off (see Settings' onTrackerEnabledChanged).
@@ -75,6 +76,11 @@ function MainShell() {
 
   function createTaskFromFile(file: NewTaskInitialFile) {
     setPendingNewTaskFile(file);
+    setView("tracker");
+  }
+
+  function createTaskFromLink(link: NewTaskInitialLink) {
+    setPendingNewTaskLink(link);
     setView("tracker");
   }
 
@@ -217,6 +223,7 @@ function MainShell() {
             onProjectsChanged={() => refreshLinkProjects()}
             activeTab={linksTab}
             onActiveTabChange={setLinksTab}
+            onCreateTaskFromLink={createTaskFromLink}
           />
         ) : view === "tracker" && trackerEnabled ? (
           <TrackerView
@@ -228,6 +235,8 @@ function MainShell() {
             onPendingTaskHandled={() => setPendingTaskId(null)}
             pendingNewTaskFile={pendingNewTaskFile}
             onPendingNewTaskFileHandled={() => setPendingNewTaskFile(null)}
+            pendingNewTaskLink={pendingNewTaskLink}
+            onPendingNewTaskLinkHandled={() => setPendingNewTaskLink(null)}
             onOpenProject={handleOpenProjectFromTracker}
           />
         ) : selectedProject ? (

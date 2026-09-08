@@ -1,4 +1,4 @@
-import { FileText, HardDrive, RefreshCw, X } from "lucide-react";
+import { FileText, HardDrive, Link as LinkIcon, Plus, RefreshCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
@@ -6,22 +6,32 @@ import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/Modal";
 import { Select } from "@/components/Select";
 import { CustomFieldInputs, fieldLabelClass } from "@/components/tracker/CustomFieldInputs";
 import { FilePickerModal, type FilePickerResult } from "@/components/tracker/FilePickerModal";
+import { LinkPickerModal } from "@/components/tracker/LinkPickerModal";
 import { useTrackerBoards, useTrackerFields, useTrackerPriorities, useTrackerStatuses } from "@/hooks/useTracker";
 import { useLanguage } from "@/hooks/useLanguage";
-import { addTrackerTaskLocalFile, ApiError, createTrackerTask, pickFilesToUpload } from "@/services/api";
-import type { TrackerFieldValue, TrackerTaskDetail } from "@/types";
+import {
+  addTrackerTaskAdhocLink,
+  addTrackerTaskLocalFile,
+  ApiError,
+  attachTrackerTaskLink,
+  createTrackerTask,
+  pickFilesToUpload,
+} from "@/services/api";
+import type { Link, TrackerFieldValue, TrackerTaskDetail } from "@/types";
 
 function baseName(path: string): string {
   return path.split(/[\\/]/).pop() || path;
 }
 
 export type NewTaskInitialFile = FilePickerResult;
+export type NewTaskInitialLink = Link;
 
 interface NewTaskModalProps {
   open: boolean;
   defaultBoardId?: string | null;
   defaultStatusId?: string | null;
   initialFile?: NewTaskInitialFile | null;
+  initialLink?: NewTaskInitialLink | null;
   onCancel: () => void;
   onCreated: (detail: TrackerTaskDetail) => void;
 }
@@ -34,7 +44,7 @@ const inputClass =
   "w-full rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 h-8 text-[13px] text-label-primary outline-none focus:border-accent/50 focus:bg-surface-content disabled:opacity-50 dark:bg-white/[0.05]";
 const labelClass = "text-[11px] font-medium uppercase tracking-wide text-label-tertiary";
 
-export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFile, onCancel, onCreated }: NewTaskModalProps) {
+export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFile, initialLink, onCancel, onCreated }: NewTaskModalProps) {
   const { t, translateError } = useLanguage();
   const { boards } = useTrackerBoards();
   const [boardId, setBoardId] = useState<string>("");
@@ -48,8 +58,14 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<FilePickerResult[]>(initialFile ? [initialFile] : []);
   const [localFilePaths, setLocalFilePaths] = useState<string[]>([]);
+  const [links, setLinks] = useState<Link[]>(initialLink ? [initialLink] : []);
+  const [adhocLinks, setAdhocLinks] = useState<{ title: string; url: string }[]>([]);
+  const [adhocLinkFormOpen, setAdhocLinkFormOpen] = useState(false);
+  const [adhocTitle, setAdhocTitle] = useState("");
+  const [adhocUrl, setAdhocUrl] = useState("");
   const [fieldValues, setFieldValues] = useState<Map<string, string | null>>(new Map());
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
@@ -64,18 +80,23 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
     if (!open) return;
     setBoardId(defaultBoardId ?? boards[0]?.id ?? "");
     setStatusId(defaultStatusId ?? "");
-    setTitle(initialFile?.file.name ?? "");
+    setTitle(initialFile?.file.name ?? initialLink?.title ?? "");
     setPriorityId("");
     setReceivedAt(todayDate());
     setDescription("");
     setFiles(initialFile ? [initialFile] : []);
     setLocalFilePaths([]);
+    setLinks(initialLink ? [initialLink] : []);
+    setAdhocLinks([]);
+    setAdhocLinkFormOpen(false);
+    setAdhocTitle("");
+    setAdhocUrl("");
     setFieldValues(new Map());
     setError(null);
     setBusy(false);
     setConfirmDiscardOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialFile]);
+  }, [open, initialFile, initialLink]);
 
   // Defensive fallback for boards resolving after the modal already opened
   // (e.g. the very first paint before useTrackerBoards' fetch lands).
@@ -140,11 +161,34 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
     setFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function handleAddStorageLink(link: Link) {
+    setLinks((prev) => [...prev, link]);
+    setLinkPickerOpen(false);
+  }
+
+  function handleRemoveStorageLink(index: number) {
+    setLinks((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleAddAdhocLink() {
+    if (!adhocTitle.trim() || !adhocUrl.trim()) return;
+    setAdhocLinks((prev) => [...prev, { title: adhocTitle.trim(), url: adhocUrl.trim() }]);
+    setAdhocTitle("");
+    setAdhocUrl("");
+    setAdhocLinkFormOpen(false);
+  }
+
+  function handleRemoveAdhocLink(index: number) {
+    setAdhocLinks((prev) => prev.filter((_, i) => i !== index));
+  }
+
   const isDirty =
     title.trim() !== "" ||
     description.trim() !== "" ||
     files.length > 0 ||
     localFilePaths.length > 0 ||
+    links.length > 0 ||
+    adhocLinks.length > 0 ||
     // Only counts a field as "touched" if it differs from its own default -
     // a board whose fields have defaults would otherwise flag a completely
     // untouched form as dirty the moment it opens (those defaults refill
@@ -188,6 +232,12 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
       });
       for (const path of localFilePaths) {
         detail = await addTrackerTaskLocalFile(detail.id, path);
+      }
+      for (const link of links) {
+        detail = await attachTrackerTaskLink(detail.id, link.id);
+      }
+      for (const adhoc of adhocLinks) {
+        detail = await addTrackerTaskAdhocLink(detail.id, adhoc.title, adhoc.url);
       }
       onCreated(detail);
     } catch (e) {
@@ -284,6 +334,85 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
               {t("tracker.addFileFromComputer")}
             </button>
 
+            {links.map((link, i) => (
+              <div key={`${link.id}-${i}`} className="rounded-apple border border-surface-border bg-surface-card p-2.5">
+                <div className="flex items-center gap-2">
+                  <LinkIcon size={15} className="shrink-0 text-label-secondary" />
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-label-primary">{link.title}</span>
+                  <button onClick={() => handleRemoveStorageLink(i)} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:bg-black/[0.06] dark:hover:bg-white/[0.1]">
+                    <X size={13} />
+                  </button>
+                </div>
+                <p className="mt-1 truncate text-[11px] text-label-secondary">{link.url}</p>
+              </div>
+            ))}
+            {adhocLinks.map((link, i) => (
+              <div key={`${link.url}-${i}`} className="flex items-center gap-2 rounded-apple border border-surface-border bg-surface-card px-2.5 py-2">
+                <LinkIcon size={14} className="shrink-0 text-label-secondary" />
+                <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-label-primary">{link.title}</span>
+                <button onClick={() => handleRemoveAdhocLink(i)} className="shrink-0 rounded-apple-sm p-1 text-label-tertiary hover:bg-black/[0.06] dark:hover:bg-white/[0.1]">
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+
+            <button
+              onClick={() => setLinkPickerOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-apple-sm border border-dashed border-surface-border py-2 text-[12.5px] text-label-secondary hover:border-accent/40 hover:text-accent"
+            >
+              <LinkIcon size={14} />
+              {t("tracker.attachFromLinks")}
+            </button>
+
+            {adhocLinkFormOpen ? (
+              <div className="rounded-apple border border-accent/40 bg-surface-card p-2">
+                <input
+                  autoFocus
+                  value={adhocTitle}
+                  onChange={(e) => setAdhocTitle(e.target.value)}
+                  placeholder={t("tracker.linkTitlePlaceholder")}
+                  className="w-full bg-transparent text-[12.5px] text-label-primary outline-none placeholder:text-label-tertiary"
+                />
+                <input
+                  value={adhocUrl}
+                  onChange={(e) => setAdhocUrl(e.target.value)}
+                  placeholder={t("tracker.linkUrlPlaceholder")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAddAdhocLink();
+                    else if (e.key === "Escape") setAdhocLinkFormOpen(false);
+                  }}
+                  className="mt-1 w-full bg-transparent text-[12.5px] text-label-primary outline-none placeholder:text-label-tertiary"
+                />
+                <div className="mt-1.5 flex justify-end gap-1">
+                  <button
+                    onClick={() => {
+                      setAdhocLinkFormOpen(false);
+                      setAdhocTitle("");
+                      setAdhocUrl("");
+                    }}
+                    className="rounded-apple-sm p-1 text-label-tertiary hover:bg-black/[0.06] dark:hover:bg-white/[0.1]"
+                  >
+                    <X size={13} />
+                  </button>
+                  <button
+                    disabled={!adhocTitle.trim() || !adhocUrl.trim()}
+                    onClick={handleAddAdhocLink}
+                    className="rounded-apple-sm bg-accent px-2 py-1 text-[11.5px] font-medium text-white disabled:opacity-40"
+                  >
+                    {t("common.create")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAdhocLinkFormOpen(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-apple-sm border border-dashed border-surface-border py-2 text-[12.5px] text-label-secondary hover:border-accent/40 hover:text-accent"
+              >
+                <Plus size={14} />
+                {t("tracker.addPlainLink")}
+              </button>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>{t("tracker.fieldPriority")}</label>
@@ -334,6 +463,8 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
       </Modal>
 
       <FilePickerModal open={pickerOpen} onCancel={() => setPickerOpen(false)} onConfirm={handleAddStorageFile} />
+
+      <LinkPickerModal open={linkPickerOpen} onCancel={() => setLinkPickerOpen(false)} onConfirm={handleAddStorageLink} />
 
       <Modal open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} width={360}>
         <ModalHeader title={t("tracker.discardTaskTitle")} subtitle={t("tracker.discardTaskMessage")} />

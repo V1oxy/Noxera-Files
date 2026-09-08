@@ -473,7 +473,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   return (
     <>
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in" onMouseDown={(e) => e.target === e.currentTarget && handleRequestClose()}>
-        <div className="animate-scale-in relative flex h-[82vh] w-[760px] max-w-[95vw] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="animate-scale-in relative flex h-[82vh] w-[830px] max-w-[95vw] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple" onMouseDown={(e) => e.stopPropagation()}>
           {isDragActive && !localFileHistoryId && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-apple-lg border-2 border-dashed border-accent bg-accent/[0.08] backdrop-blur-[1px]">
               <div className="flex flex-col items-center gap-2 text-accent">
@@ -608,8 +608,8 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
             </div>
 
             {/* Sidebar: files + history */}
-            <div className="flex w-80 shrink-0 flex-col border-l border-surface-border bg-black/[0.012] dark:bg-white/[0.015]">
-              <div className="flex shrink-0 gap-4 overflow-x-auto border-b border-surface-border px-4 pt-3">
+            <div className="flex w-96 shrink-0 flex-col border-l border-surface-border bg-black/[0.012] dark:bg-white/[0.015]">
+              <div className="flex shrink-0 gap-3 overflow-x-auto border-b border-surface-border px-4 pt-3">
                 <button onClick={() => setTab("files")} className={`relative shrink-0 pb-2.5 text-[12px] font-medium transition-colors ${tab === "files" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
                   {t("tracker.tabFiles")} {detail.files.length + detail.localFiles.length > 0 && `(${detail.files.length + detail.localFiles.length})`}
                   {tab === "files" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}

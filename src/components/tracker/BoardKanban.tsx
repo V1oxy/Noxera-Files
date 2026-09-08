@@ -16,9 +16,11 @@ import { createPortal } from "react-dom";
 
 import { TaskCard, TaskCardOverlay } from "@/components/tracker/TaskCard";
 import { useLanguage } from "@/hooks/useLanguage";
+import { getAllTrackerTasks } from "@/services/api";
 import type { CardDisplayConfig, CardSize, TrackerPriority, TrackerStatus, TrackerTask } from "@/types";
 
 interface BoardKanbanProps {
+  boardId: string;
   statuses: TrackerStatus[];
   tasks: TrackerTask[];
   priorities: TrackerPriority[];
@@ -286,6 +288,7 @@ function Column({
 }
 
 export function BoardKanban({
+  boardId,
   statuses,
   tasks,
   priorities,
@@ -313,16 +316,52 @@ export function BoardKanban({
   // status is shown" (the default), so a newly created status shows up on
   // the board without the user having to opt it in.
   const [hiddenStatusIds, setHiddenStatusIds] = useState<Set<string>>(new Set());
+  // Backend-matched task ids for the current query - null while there's no
+  // query, or while the debounced fetch below hasn't resolved yet (in which
+  // case filteredTasks below falls back to a plain client-side title match
+  // so results don't flash empty during that brief window). Going through
+  // the backend (rather than filtering `tasks` by title alone) is what lets
+  // this match a task's attached file/link names too, same as All Tasks'
+  // search - it only ever narrows within the tasks already loaded on this
+  // board, though, so a match that exists only past a column's load cap
+  // still won't surface until that column is scrolled further.
+  const [searchMatchIds, setSearchMatchIds] = useState<Set<string> | null>(null);
 
   const query = searchQuery.trim().toLowerCase();
   const visibleStatuses = statuses.filter((s) => !hiddenStatusIds.has(s.id));
+
+  useEffect(() => {
+    if (query === "") {
+      setSearchMatchIds(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      getAllTrackerTasks({ boardId, search: query, limit: 1000 })
+        .then((hits) => {
+          if (!cancelled) setSearchMatchIds(new Set(hits.map((h) => h.id)));
+        })
+        .catch(() => {
+          if (!cancelled) setSearchMatchIds(new Set());
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query, boardId]);
+
   // Case-insensitive, Unicode-aware (JS `toLowerCase()` handles Cyrillic
   // correctly, unlike SQLite's `LOWER()` - see the backend fix for the same
-  // bug in tracker task search) substring match against the title, scoped to
-  // whichever statuses are currently visible.
+  // bug in tracker task search) substring match, scoped to whichever
+  // statuses are currently visible.
   const isFiltered = query !== "" || hiddenStatusIds.size > 0;
   const filteredTasks = isFiltered
-    ? tasks.filter((task) => !hiddenStatusIds.has(task.statusId) && (query === "" || task.title.toLowerCase().includes(query)))
+    ? tasks.filter(
+        (task) =>
+          !hiddenStatusIds.has(task.statusId) &&
+          (query === "" || (searchMatchIds?.has(task.id) ?? task.title.toLowerCase().includes(query))),
+      )
     : tasks;
   // While actively searching, a column with zero matches is noise - hide it
   // entirely rather than showing an empty column. Only search does this

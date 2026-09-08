@@ -20,9 +20,10 @@ interface LinksViewProps {
   onProjectsChanged: () => void;
   activeTab: string;
   onActiveTabChange: (tab: string) => void;
+  onCreateTaskFromLink: (link: LinkType) => void;
 }
 
-export function LinksView({ projects, onProjectsChanged, activeTab, onActiveTabChange }: LinksViewProps) {
+export function LinksView({ projects, onProjectsChanged, activeTab, onActiveTabChange, onCreateTaskFromLink }: LinksViewProps) {
   const { t, translateError } = useLanguage();
   const { showToast } = useToast();
   const [search, setSearch] = useState("");
@@ -243,6 +244,7 @@ export function LinksView({ projects, onProjectsChanged, activeTab, onActiveTabC
                 isSearching={isSearching}
                 onOpenLink={handleOpen}
                 onEditLink={handleEdit}
+                onCreateTaskLink={onCreateTaskFromLink}
                 onChanged={refreshAll}
               />
             ))}

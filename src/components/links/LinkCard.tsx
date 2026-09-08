@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ExternalLink, Link2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, Link2, ListPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { ContextMenu } from "@/components/ContextMenu";
@@ -42,9 +42,10 @@ interface LinkCardProps {
   onOpen: (link: Link) => void;
   onEdit: (link: Link) => void;
   onDelete: (link: Link) => void;
+  onCreateTask: (link: Link) => void;
 }
 
-export function LinkCard({ link, showProject = false, onOpen, onEdit, onDelete }: LinkCardProps) {
+export function LinkCard({ link, showProject = false, onOpen, onEdit, onDelete, onCreateTask }: LinkCardProps) {
   const { t } = useLanguage();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: link.id });
@@ -90,6 +91,7 @@ export function LinkCard({ link, showProject = false, onOpen, onEdit, onDelete }
           items={[
             { label: t("menu.open"), icon: ExternalLink, onClick: () => onOpen(link) },
             { label: t("menu.edit"), icon: Pencil, onClick: () => onEdit(link) },
+            { label: t("tracker.createTaskFromLink"), icon: ListPlus, onClick: () => onCreateTask(link), dividerBefore: true },
             { label: t("menu.delete"), icon: Trash2, onClick: () => onDelete(link), danger: true, dividerBefore: true },
           ]}
         />

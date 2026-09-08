@@ -177,10 +177,14 @@ pub fn list_all(conn: &Connection, filter: &TaskFilter) -> rusqlite::Result<Vec<
               OR lower_unicode(COALESCE(p.name, '')) LIKE ? \
               OR lower_unicode(COALESCE(t.customer, '')) LIKE ? \
               OR EXISTS (SELECT 1 FROM tracker_task_files tf WHERE tf.task_id = t.id AND lower_unicode(COALESCE(tf.cached_file_name, '')) LIKE ?) \
+              OR EXISTS (SELECT 1 FROM tracker_task_local_files lf WHERE lf.task_id = t.id AND lower_unicode(lf.file_name) LIKE ?) \
+              OR EXISTS (SELECT 1 FROM tracker_task_links tl LEFT JOIN links l ON l.id = tl.link_id \
+                         WHERE tl.task_id = t.id AND (lower_unicode(COALESCE(l.title, tl.cached_title)) LIKE ? \
+                         OR lower_unicode(COALESCE(l.url, tl.cached_url)) LIKE ?)) \
               OR EXISTS (SELECT 1 FROM tracker_field_values fv WHERE fv.task_id = t.id AND fv.value IS NOT NULL AND lower_unicode(fv.value) LIKE ?))"
                 .to_string(),
         );
-        for _ in 0..6 {
+        for _ in 0..9 {
             args.push(Box::new(pattern.clone()));
         }
     }
@@ -436,7 +440,10 @@ pub fn delete(conn: &Connection, id: &str) -> rusqlite::Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::{tracker_boards, tracker_priorities, tracker_statuses};
+    use crate::database::{
+        link_projects, links, tracker_boards, tracker_priorities, tracker_statuses, tracker_task_links,
+        tracker_task_local_files,
+    };
 
     struct Fixture {
         conn: Connection,
@@ -493,6 +500,32 @@ mod tests {
 
         let sorted = list_all(&f.conn, &TaskFilter { sort_field: Some(TaskSortField::ReceivedAt), sort_dir: Some(SortDirection::Asc), ..Default::default() }).unwrap();
         assert_eq!(ids(&sorted), vec!["t1", "t2", "t3"]);
+
+        teardown(f);
+    }
+
+    /// Reported gap: searching by a task's attached local file's name, or an
+    /// attached link's title/url, found nothing - only the task's own
+    /// fields and storage-file attachments were ever checked.
+    #[test]
+    fn list_all_search_matches_local_files_and_links() {
+        let f = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        create(&f.conn, "t1", &f.board_id, &f.status_a, "Task with local file", None, None, None, &f.priority_low, "2026-01-01", now).unwrap();
+        create(&f.conn, "t2", &f.board_id, &f.status_a, "Task with link", None, None, None, &f.priority_low, "2026-01-02", now).unwrap();
+        create(&f.conn, "t3", &f.board_id, &f.status_a, "Task with nothing", None, None, None, &f.priority_low, "2026-01-03", now).unwrap();
+
+        tracker_task_local_files::create(&f.conn, "lf1", "t1", "Инструкция.docx", "path/v1", 100, None, now).unwrap();
+
+        let project_id = "link-project-1".to_string();
+        link_projects::create(&f.conn, &project_id, "Bookmarks", now).unwrap();
+        let link_id = "link-1".to_string();
+        links::create(&f.conn, &link_id, &project_id, None, "Design spec", "https://docs.example.com/spec", None, now).unwrap();
+        tracker_task_links::attach(&f.conn, "tl1", "t2", &link_id, "Design spec", "https://docs.example.com/spec", now).unwrap();
+
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("инструкция".into()), ..Default::default() }).unwrap()), vec!["t1"]);
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("design".into()), ..Default::default() }).unwrap()), vec!["t2"]);
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("docs.example.com".into()), ..Default::default() }).unwrap()), vec!["t2"]);
 
         teardown(f);
     }

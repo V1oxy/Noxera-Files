@@ -8,7 +8,7 @@ import { AllTasksView } from "@/components/tracker/AllTasksView";
 import { BoardKanban } from "@/components/tracker/BoardKanban";
 import { BoardSettingsModal } from "@/components/tracker/BoardSettingsModal";
 import { ExportExcelModal } from "@/components/tracker/ExportExcelModal";
-import { NewTaskModal, type NewTaskInitialFile } from "@/components/tracker/NewTaskModal";
+import { NewTaskModal, type NewTaskInitialFile, type NewTaskInitialLink } from "@/components/tracker/NewTaskModal";
 import { TaskDetailPanel } from "@/components/tracker/TaskDetailPanel";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useSerialTask } from "@/hooks/useSerialTask";
@@ -27,6 +27,8 @@ interface TrackerViewProps {
   onPendingTaskHandled: () => void;
   pendingNewTaskFile: NewTaskInitialFile | null;
   onPendingNewTaskFileHandled: () => void;
+  pendingNewTaskLink: NewTaskInitialLink | null;
+  onPendingNewTaskLinkHandled: () => void;
   onOpenProject: (projectId: string) => void;
 }
 
@@ -39,6 +41,8 @@ export function TrackerView({
   onPendingTaskHandled,
   pendingNewTaskFile,
   onPendingNewTaskFileHandled,
+  pendingNewTaskLink,
+  onPendingNewTaskLinkHandled,
   onOpenProject,
 }: TrackerViewProps) {
   const { t, translateError } = useLanguage();
@@ -93,6 +97,12 @@ export function TrackerView({
       setNewTaskOpen(true);
     }
   }, [pendingNewTaskFile]);
+
+  useEffect(() => {
+    if (pendingNewTaskLink) {
+      setNewTaskOpen(true);
+    }
+  }, [pendingNewTaskLink]);
 
   // Every task mutation that can change a board's (non-archived) task count
   // - create, delete, archive/unarchive, duplicate, move between boards
@@ -221,6 +231,7 @@ export function TrackerView({
           </div>
 
           <BoardKanban
+            boardId={board.id}
             statuses={statuses}
             tasks={tasks}
             priorities={priorities}
@@ -291,13 +302,16 @@ export function TrackerView({
         defaultBoardId={board?.id ?? boards[0]?.id ?? null}
         defaultStatusId={newTaskStatusId}
         initialFile={pendingNewTaskFile}
+        initialLink={pendingNewTaskLink}
         onCancel={() => {
           setNewTaskOpen(false);
           if (pendingNewTaskFile) onPendingNewTaskFileHandled();
+          if (pendingNewTaskLink) onPendingNewTaskLinkHandled();
         }}
         onCreated={(detail) => {
           setNewTaskOpen(false);
           if (pendingNewTaskFile) onPendingNewTaskFileHandled();
+          if (pendingNewTaskLink) onPendingNewTaskLinkHandled();
           refreshCurrentList();
           setSelectedTaskId(detail.id);
         }}
