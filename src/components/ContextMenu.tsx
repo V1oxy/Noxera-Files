@@ -24,9 +24,14 @@ interface MenuPanelProps {
   y: number;
   items: ContextMenuItem[];
   onSelect: (item: ContextMenuItem) => void;
+  /** Every currently-mounted panel (this one and any open submenu) registers
+   * its own root DOM node here, so the top-level outside-click check can
+   * treat a click anywhere in the whole (possibly multi-panel) menu as
+   * "inside" - see the note on why each panel portals independently below. */
+  registry: Set<HTMLElement>;
 }
 
-function MenuPanel({ x, y, items, onSelect }: MenuPanelProps) {
+function MenuPanel({ x, y, items, onSelect, registry }: MenuPanelProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y, visible: false });
   const [openIndex, setOpenIndex] = useState<number | null>(null);
@@ -41,7 +46,16 @@ function MenuPanel({ x, y, items, onSelect }: MenuPanelProps) {
     setPos({ left, top, visible: true });
   }, [x, y]);
 
-  return (
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    registry.add(el);
+    return () => {
+      registry.delete(el);
+    };
+  }, [registry]);
+
+  return createPortal(
     <div
       ref={ref}
       style={{ left: pos.left, top: pos.top, opacity: pos.visible ? 1 : 0 }}
@@ -87,12 +101,14 @@ function MenuPanel({ x, y, items, onSelect }: MenuPanelProps) {
                 y={anchor.getBoundingClientRect().top}
                 items={item.submenu}
                 onSelect={onSelect}
+                registry={registry}
               />
             )}
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -104,11 +120,15 @@ interface ContextMenuProps {
 }
 
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  // A ref (not state) - membership changes as submenus open/close, but
+  // that alone should never trigger a re-render here.
+  const registry = useRef<Set<HTMLElement>>(new Set()).current;
 
   useLayoutEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      const insideMenu = Array.from(registry).some((el) => el.contains(target));
+      if (!insideMenu) onClose();
     };
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -119,20 +139,18 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       window.removeEventListener("mousedown", handleClick);
       window.removeEventListener("keydown", handleKey);
     };
-  }, [onClose]);
+  }, [onClose, registry]);
 
-  return createPortal(
-    <div ref={wrapperRef}>
-      <MenuPanel
-        x={x}
-        y={y}
-        items={items}
-        onSelect={(item) => {
-          onClose();
-          item.onClick?.();
-        }}
-      />
-    </div>,
-    document.body,
+  return (
+    <MenuPanel
+      x={x}
+      y={y}
+      items={items}
+      onSelect={(item) => {
+        onClose();
+        item.onClick?.();
+      }}
+      registry={registry}
+    />
   );
 }

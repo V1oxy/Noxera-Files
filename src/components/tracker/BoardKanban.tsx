@@ -324,6 +324,12 @@ export function BoardKanban({
   const filteredTasks = isFiltered
     ? tasks.filter((task) => !hiddenStatusIds.has(task.statusId) && (query === "" || task.title.toLowerCase().includes(query)))
     : tasks;
+  // While actively searching, a column with zero matches is noise - hide it
+  // entirely rather than showing an empty column. Only search does this
+  // (not the status checkbox filter above): that filter is the user's own
+  // explicit choice of which columns to see, so it must never be overridden
+  // just because a column happens to be empty right now.
+  const displayedStatuses = query !== "" ? visibleStatuses.filter((s) => filteredTasks.some((t) => t.statusId === s.id)) : visibleStatuses;
 
   useEffect(() => {
     // A drag in progress owns `columns` as local, optimistic state - only
@@ -331,7 +337,7 @@ export function BoardKanban({
     // dragged, so a mid-drag refetch (e.g. another task's "file updated"
     // sync) can never yank a card out from under the pointer.
     if (!activeTask) {
-      setColumns(groupByStatus(visibleStatuses, filteredTasks));
+      setColumns(groupByStatus(displayedStatuses, filteredTasks));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statuses, tasks, hiddenStatusIds, searchQuery]);
@@ -380,7 +386,7 @@ export function BoardKanban({
     setActiveTask(null);
     setOverContainerId(null);
     if (!over) {
-      setColumns(groupByStatus(visibleStatuses, filteredTasks));
+      setColumns(groupByStatus(displayedStatuses, filteredTasks));
       return;
     }
     const activeContainer = findContainer(active.id as string);
@@ -402,7 +408,7 @@ export function BoardKanban({
   function handleDragCancel() {
     setActiveTask(null);
     setOverContainerId(null);
-    setColumns(groupByStatus(visibleStatuses, filteredTasks));
+    setColumns(groupByStatus(displayedStatuses, filteredTasks));
   }
 
   return (

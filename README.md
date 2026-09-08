@@ -55,8 +55,11 @@ npm run tauri build     # build the full native app + installer for the current 
 
 Output lands in `src-tauri/target/release/bundle/`:
 
-- **Windows** → `nsis/NoxeraFiles-Setup.exe` (and/or `msi/*.msi`), plus the
-  raw `noxera-files.exe` in `target/release/`
+- **Windows** → `nsis/NoxeraFiles-Setup.exe`, plus the raw `noxera-files.exe`
+  in `target/release/`. Deliberately NSIS-only, not MSI: Tauri's WiX/MSI
+  bundler can only install per-machine, which always needs an admin/UAC
+  prompt - the NSIS one is configured `installMode: "currentUser"` so
+  installing (and updating) never asks for one.
 - **macOS** → `macos/Noxera Files.app` and `dmg/*.dmg`
 - **Linux** → `deb/*.deb`, `rpm/*.rpm`, `appimage/*.AppImage`
 
