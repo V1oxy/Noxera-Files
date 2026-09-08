@@ -2,6 +2,7 @@ import { Archive, FileSpreadsheet, LayoutGrid, Plus, Rows3 } from "lucide-react"
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/Button";
+import { DeleteModal } from "@/components/DeleteModal";
 import { EmptyState } from "@/components/EmptyState";
 import { AllTasksView } from "@/components/tracker/AllTasksView";
 import { BoardKanban } from "@/components/tracker/BoardKanban";
@@ -13,9 +14,9 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { useSerialTask } from "@/hooks/useSerialTask";
 import { useToast } from "@/hooks/useToast";
 import type { TrackerUiState, TrackerViewState } from "@/hooks/useTracker";
-import { useTrackerStatuses, useTrackerTasks } from "@/hooks/useTracker";
-import { ApiError, createTrackerTask, moveTrackerTask, setTrackerBoardCardSize } from "@/services/api";
-import type { CardSize, TrackerBoard } from "@/types";
+import { useTrackerPriorities, useTrackerStatuses, useTrackerTasks } from "@/hooks/useTracker";
+import { ApiError, createTrackerTask, deleteTrackerTask, moveTrackerTask, setTrackerBoardCardSize, updateTrackerTask } from "@/services/api";
+import type { CardSize, TrackerBoard, TrackerTask } from "@/types";
 
 interface TrackerViewProps {
   boards: TrackerBoard[];
@@ -49,6 +50,7 @@ export function TrackerView({
 
   const [showArchived, setShowArchived] = useState(false);
   const { statuses, refresh: refreshStatuses } = useTrackerStatuses(board?.id ?? null);
+  const { priorities } = useTrackerPriorities(board?.id ?? null);
   const {
     tasks,
     columnHasMore,
@@ -62,6 +64,10 @@ export function TrackerView({
   const [newTaskStatusId, setNewTaskStatusId] = useState<string | null>(null);
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  // Set by a right-click "Delete Task" from the Kanban card or All Tasks row
+  // context menu - a lighter-weight confirm flow than opening the full
+  // TaskDetailPanel just to delete a task.
+  const [contextDeleteTarget, setContextDeleteTarget] = useState<TrackerTask | null>(null);
   // AllTasksView owns its own task list (a cross-board query the board view
   // has no use for), so it can't be refreshed via `refreshTasks` above -
   // bumping this instead tells it to refetch whenever a task changes while
@@ -143,6 +149,35 @@ export function TrackerView({
     onBoardsChanged();
   }
 
+  // Right-click "Change Status"/"Change Priority" on a Kanban card or an
+  // All Tasks row - same underlying calls as the detail panel's own status/
+  // priority pickers, just reachable without opening it first.
+  async function handleContextChangeStatus(task: TrackerTask, statusId: string) {
+    try {
+      await moveTrackerTask(task.id, statusId, [task.id]);
+      refreshCurrentList();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  async function handleContextChangePriority(task: TrackerTask, priorityId: string) {
+    try {
+      await updateTrackerTask(task.id, { priorityId });
+      refreshCurrentList();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  async function handleContextDelete() {
+    if (!contextDeleteTarget) return;
+    await deleteTrackerTask(contextDeleteTarget.id);
+    setContextDeleteTarget(null);
+    if (selectedTaskId === contextDeleteTarget.id) setSelectedTaskId(null);
+    refreshCurrentList();
+  }
+
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden">
       {view.kind === "board" && board ? (
@@ -188,6 +223,7 @@ export function TrackerView({
           <BoardKanban
             statuses={statuses}
             tasks={tasks}
+            priorities={priorities}
             cardSize={board.cardSize}
             columnHasMore={columnHasMore}
             columnLoadingMore={columnLoadingMore}
@@ -196,6 +232,9 @@ export function TrackerView({
             onMove={handleMove}
             onQuickAdd={handleQuickAdd}
             onOpenBoardSettings={() => setBoardSettingsOpen(true)}
+            onChangeStatus={handleContextChangeStatus}
+            onChangePriority={handleContextChangePriority}
+            onDeleteRequest={setContextDeleteTarget}
           />
         </>
       ) : view.kind === "board" && !board ? (
@@ -223,6 +262,9 @@ export function TrackerView({
             onSortChange={(f, d) => updateUiState({ allTasksSortField: f, allTasksSortDir: d })}
             onOpenTask={(task) => setSelectedTaskId(task.id)}
             refreshSignal={allTasksRefreshSignal}
+            onChangeStatus={handleContextChangeStatus}
+            onChangePriority={handleContextChangePriority}
+            onDeleteRequest={setContextDeleteTarget}
           />
         </>
       )}
@@ -285,6 +327,14 @@ export function TrackerView({
           setExportOpen(false);
           showToast({ title: t("tracker.export.success"), variant: "success" });
         }}
+      />
+
+      <DeleteModal
+        open={contextDeleteTarget !== null}
+        title={t("tracker.deleteTaskTitle")}
+        message={t("tracker.deleteTaskMessage")}
+        onCancel={() => setContextDeleteTarget(null)}
+        onConfirm={handleContextDelete}
       />
     </div>
   );

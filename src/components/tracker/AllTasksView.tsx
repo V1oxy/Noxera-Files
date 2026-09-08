@@ -2,9 +2,10 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDownWideNarrow, ArrowUpWideNarrow, Paperclip, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { ContextMenu } from "@/components/ContextMenu";
 import { EmptyState } from "@/components/EmptyState";
 import { Select } from "@/components/Select";
-import { PriorityBadge, StatusPill, UpdateIndicator } from "@/components/tracker/shared";
+import { PriorityBadge, StatusPill, UpdateIndicator, taskContextMenuItems } from "@/components/tracker/shared";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useProjects } from "@/hooks/useProjects";
 import { useAllTrackerTasks, useTrackerBoards } from "@/hooks/useTracker";
@@ -22,6 +23,9 @@ interface AllTasksViewProps {
    * archived, deleted, duplicated) so this list re-fetches - it can't see
    * those changes on its own since it holds a separate cross-board query. */
   refreshSignal?: number;
+  onChangeStatus: (task: TrackerTask, statusId: string) => void;
+  onChangePriority: (task: TrackerTask, priorityId: string) => void;
+  onDeleteRequest: (task: TrackerTask) => void;
 }
 
 const SORT_KEYS: Partial<Record<TaskSortField, string>> = {
@@ -33,11 +37,23 @@ const SORT_KEYS: Partial<Record<TaskSortField, string>> = {
   title: "tracker.sort.title",
 };
 
-export function AllTasksView({ filter, onFilterChange, sortField, sortDir, onSortChange, onOpenTask, refreshSignal }: AllTasksViewProps) {
+export function AllTasksView({
+  filter,
+  onFilterChange,
+  sortField,
+  sortDir,
+  onSortChange,
+  onOpenTask,
+  refreshSignal,
+  onChangeStatus,
+  onChangePriority,
+  onDeleteRequest,
+}: AllTasksViewProps) {
   const { t } = useLanguage();
   const { boards } = useTrackerBoards();
   const { projects } = useProjects();
   const { tasks, loading, loadingMore, hasMore, refresh, loadMore } = useAllTrackerTasks({ ...filter, sortField, sortDir });
+  const [contextMenu, setContextMenu] = useState<{ task: TrackerTask; x: number; y: number } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
@@ -199,6 +215,10 @@ export function AllTasksView({ filter, onFilterChange, sortField, sortDir, onSor
                 >
                   <button
                     onClick={() => onOpenTask(task)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({ task, x: e.clientX, y: e.clientY });
+                    }}
                     className="flex w-full items-center gap-3 rounded-apple-sm px-3 py-2.5 text-left transition-colors hover:bg-surface-card-hover"
                   >
                     <div className="min-w-0 flex-[2]">
@@ -228,6 +248,21 @@ export function AllTasksView({ filter, onFilterChange, sortField, sortDir, onSor
         )}
         {loadingMore && <p className="px-2 py-3 text-center text-[11px] text-label-tertiary">{t("files.loading")}</p>}
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          items={taskContextMenuItems(
+            contextMenu.task,
+            statusOptions.filter((s) => s.boardId === contextMenu.task.boardId),
+            priorityOptions.filter((p) => p.boardId === contextMenu.task.boardId),
+            t,
+            { onChangeStatus, onChangePriority, onDeleteRequest },
+          )}
+        />
+      )}
     </div>
   );
 }

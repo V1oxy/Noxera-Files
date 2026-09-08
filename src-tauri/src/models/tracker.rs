@@ -147,8 +147,24 @@ pub struct TaskFile {
     pub added_at: String,
 }
 
+/// One version of a local file attachment - see `TaskLocalFile` below.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskLocalFileVersion {
+    pub id: String,
+    pub local_file_id: String,
+    pub version_number: i64,
+    pub file_size: i64,
+    pub mime_type: Option<String>,
+    pub added_at: String,
+}
+
 /// A file attached "from the computer" rather than picked from the app's own
-/// storage - its bytes exist only for this task and are never versioned.
+/// storage. Versioned like the file manager's own files, but simpler: no
+/// "always latest" toggle - the most recently added (or restored) version is
+/// always `current_version_id`. `file_size`/`mime_type` mirror the current
+/// version's, so existing UI that only cares about "the file as it is now"
+/// doesn't need to look inside `versions`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskLocalFile {
@@ -158,6 +174,12 @@ pub struct TaskLocalFile {
     pub file_size: i64,
     pub mime_type: Option<String>,
     pub added_at: String,
+    pub current_version_id: Option<String>,
+    pub version_count: i64,
+    /// Every version, newest first - empty for callers that only need
+    /// current-version metadata (see `tracker_task_local_files::list_for_task`).
+    #[serde(default)]
+    pub versions: Vec<TaskLocalFileVersion>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

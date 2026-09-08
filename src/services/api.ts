@@ -343,10 +343,16 @@ export const setTrackerTaskFilePin = (taskFileId: string, alwaysLatest: boolean,
   call<TrackerTaskDetail>("set_tracker_task_file_pin", { taskFileId, alwaysLatest, versionId: versionId ?? null });
 export const addTrackerTaskLocalFile = (taskId: string, sourcePath: string) =>
   call<TrackerTaskDetail>("add_tracker_task_local_file", { taskId, sourcePath });
+export const addTrackerTaskLocalFileVersion = (localFileId: string, sourcePath: string) =>
+  call<TrackerTaskDetail>("add_tracker_task_local_file_version", { localFileId, sourcePath });
+export const restoreTrackerTaskLocalFileVersion = (localFileId: string, versionId: string) =>
+  call<TrackerTaskDetail>("restore_tracker_task_local_file_version", { localFileId, versionId });
 export const removeTrackerTaskLocalFile = (localFileId: string) =>
   call<TrackerTaskDetail>("remove_tracker_task_local_file", { localFileId });
 export const openTrackerTaskLocalFile = (localFileId: string) =>
   call<void>("open_tracker_task_local_file", { localFileId });
+export const openTrackerTaskLocalFileVersion = (versionId: string) =>
+  call<void>("open_tracker_task_local_file_version", { versionId });
 export const addTrackerTaskComment = (taskId: string, text: string) =>
   call<TrackerTaskEvent>("add_tracker_task_comment", { taskId, text });
 export const deleteTrackerTaskComment = (eventId: string) =>

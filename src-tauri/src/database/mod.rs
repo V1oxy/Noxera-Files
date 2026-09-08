@@ -20,6 +20,7 @@ pub mod versions;
 
 use std::path::Path;
 
+use rusqlite::functions::FunctionFlags;
 use rusqlite::Connection;
 
 /// Opens (creating if necessary) the SQLite database at `db_path`, applies
@@ -33,5 +34,21 @@ pub fn open(db_path: &Path) -> rusqlite::Result<Connection> {
     conn.execute_batch(schema::TABLES_SQL)?;
     schema::migrate(&conn)?;
     conn.execute_batch(schema::INDEXES_SQL)?;
+    register_functions(&conn)?;
     Ok(conn)
+}
+
+/// Registers a `lower_unicode` SQL scalar function backed by Rust's
+/// Unicode-aware `str::to_lowercase` - SQLite's built-in `LOWER()`/`NOCASE`
+/// only case-folds ASCII, so e.g. Cyrillic "СПАМ" never matches "спам" under
+/// plain `LOWER(x) LIKE ?`. Used in place of `LOWER()` wherever a query needs
+/// to stay SQL-side (for `LIMIT`/`OFFSET` pagination or joined subqueries)
+/// instead of fetching every row and filtering in Rust.
+fn register_functions(conn: &Connection) -> rusqlite::Result<()> {
+    conn.create_scalar_function(
+        "lower_unicode",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| Ok(ctx.get::<String>(0)?.to_lowercase()),
+    )
 }

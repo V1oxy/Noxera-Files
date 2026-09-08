@@ -1,8 +1,10 @@
-import { Paperclip, Pin, RefreshCw } from "lucide-react";
+import { Flag, ListChecks, Paperclip, Pin, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import type { ContextMenuItem } from "@/components/ContextMenu";
 import { useLanguage } from "@/hooks/useLanguage";
 import { formatFullDateTime } from "@/utils/format";
+import type { TrackerPriority, TrackerStatus, TrackerTask } from "@/types";
 
 /** The fixed palette every status/priority/label picks from - shared so the
  * "edit color" swatch picker (below) always matches what a newly-created
@@ -112,4 +114,55 @@ export function PinIndicator({ size = 11, className = "" }: { size?: number; cla
 
 export function formatEventTime(iso: string, locale: string): string {
   return formatFullDateTime(iso, locale);
+}
+
+/**
+ * Builds the "Change Status" / "Change Priority" / "Delete Task" items a
+ * right-click context menu shows for a task - shared by the Kanban card and
+ * the All Tasks row so both stay in lockstep instead of maintaining two
+ * copies of the same menu. `statuses`/`priorities` must belong to the task's
+ * own board (each board has its own set) - the caller is responsible for
+ * scoping them (see `AllTasksView`, which already loads them per board for
+ * its filter dropdowns).
+ */
+export function taskContextMenuItems(
+  task: TrackerTask,
+  statuses: TrackerStatus[],
+  priorities: TrackerPriority[],
+  t: (key: string) => string,
+  actions: {
+    onChangeStatus: (task: TrackerTask, statusId: string) => void;
+    onChangePriority: (task: TrackerTask, priorityId: string) => void;
+    onDeleteRequest: (task: TrackerTask) => void;
+  },
+): ContextMenuItem[] {
+  return [
+    {
+      label: t("tracker.changeStatus"),
+      icon: ListChecks,
+      submenu: statuses.map((status) => ({
+        label: status.name,
+        icon: ListChecks,
+        active: status.id === task.statusId,
+        onClick: () => actions.onChangeStatus(task, status.id),
+      })),
+    },
+    {
+      label: t("tracker.changePriority"),
+      icon: Flag,
+      submenu: priorities.map((priority) => ({
+        label: priority.name,
+        icon: Flag,
+        active: priority.id === task.priorityId,
+        onClick: () => actions.onChangePriority(task, priority.id),
+      })),
+    },
+    {
+      label: t("tracker.deleteTask"),
+      icon: Trash2,
+      danger: true,
+      dividerBefore: true,
+      onClick: () => actions.onDeleteRequest(task),
+    },
+  ];
 }

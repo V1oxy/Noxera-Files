@@ -222,7 +222,7 @@ export function FilePickerModal({ open, onCancel, onConfirm }: FilePickerModalPr
             </label>
 
             {!alwaysLatest && (
-              <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+              <div className="mt-2 max-h-48 space-y-1 overflow-y-auto p-1">
                 {pickedFile.versions.map((v) => (
                   <label
                     key={v.id}

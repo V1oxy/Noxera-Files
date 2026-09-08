@@ -191,13 +191,30 @@ export interface TrackerFieldValue {
   value: string | null;
 }
 
+export interface TrackerTaskLocalFileVersion {
+  id: string;
+  localFileId: string;
+  versionNumber: number;
+  fileSize: number;
+  mimeType: string | null;
+  addedAt: string;
+}
+
 export interface TrackerTaskLocalFile {
   id: string;
   taskId: string;
   fileName: string;
+  /** Current version's size/type - kept alongside `versions` so a caller
+   * that only cares about "the file as it is now" doesn't need to look
+   * inside the version list. */
   fileSize: number;
   mimeType: string | null;
   addedAt: string;
+  currentVersionId: string | null;
+  versionCount: number;
+  /** Every version, newest first. Empty for callers that only fetch
+   * current-version metadata. */
+  versions: TrackerTaskLocalFileVersion[];
 }
 
 export interface TrackerTaskFile {

@@ -1,15 +1,27 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FolderClosed } from "lucide-react";
+import { useState } from "react";
 
-import { FileCountBadge, PinIndicator, PriorityBadge, UpdateIndicator } from "@/components/tracker/shared";
-import type { CardDisplayConfig, TrackerTask } from "@/types";
+import { ContextMenu } from "@/components/ContextMenu";
+import { FileCountBadge, PinIndicator, PriorityBadge, UpdateIndicator, taskContextMenuItems } from "@/components/tracker/shared";
+import { useLanguage } from "@/hooks/useLanguage";
+import type { CardDisplayConfig, TrackerPriority, TrackerStatus, TrackerTask } from "@/types";
 
 interface TaskCardProps {
   task: TrackerTask;
   compact: boolean;
   display?: CardDisplayConfig;
   onOpen: (task: TrackerTask) => void;
+  statuses: TrackerStatus[];
+  priorities: TrackerPriority[];
+  onChangeStatus: (task: TrackerTask, statusId: string) => void;
+  onChangePriority: (task: TrackerTask, priorityId: string) => void;
+  onDeleteRequest: (task: TrackerTask) => void;
+  /** Disables drag-and-drop reordering - set while a search/status filter is
+   * active, since a column then only holds a subset of its real tasks and
+   * reordering it would silently reshuffle the hidden ones too. */
+  dndDisabled?: boolean;
 }
 
 const DEFAULT_DISPLAY: CardDisplayConfig = {
@@ -75,8 +87,21 @@ function TaskCardPlaceholder({ compact, setNodeRef, style }: { compact: boolean;
   );
 }
 
-export function TaskCard({ task, compact, display = DEFAULT_DISPLAY, onOpen }: TaskCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+export function TaskCard({
+  task,
+  compact,
+  display = DEFAULT_DISPLAY,
+  onOpen,
+  statuses,
+  priorities,
+  onChangeStatus,
+  onChangePriority,
+  onDeleteRequest,
+  dndDisabled = false,
+}: TaskCardProps) {
+  const { t } = useLanguage();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, disabled: dndDisabled });
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition: transition ?? "transform 200ms cubic-bezier(0.25, 1, 0.5, 1)",
@@ -93,11 +118,23 @@ export function TaskCard({ task, compact, display = DEFAULT_DISPLAY, onOpen }: T
       {...attributes}
       {...listeners}
       onClick={() => onOpen(task)}
-      className={`group cursor-grab touch-none select-none active:cursor-grabbing ${CARD_SHELL} hover:border-surface-border hover:bg-surface-card-hover hover:shadow-popover ${
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY });
+      }}
+      className={`group touch-none select-none ${dndDisabled ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${CARD_SHELL} hover:border-surface-border hover:bg-surface-card-hover hover:shadow-popover ${
         compact ? "px-2.5 py-2" : "p-3"
       } ${task.archived ? "opacity-50" : ""}`}
     >
       <TaskCardBody task={task} compact={compact} display={display} />
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={taskContextMenuItems(task, statuses, priorities, t, { onChangeStatus, onChangePriority, onDeleteRequest })}
+        />
+      )}
     </div>
   );
 }

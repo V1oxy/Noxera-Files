@@ -1,6 +1,6 @@
 [package]
 name = "noxera-files"
-version = "0.6.4"
+version = "0.6.6"
 description = "Noxera Files - local-first project & file version manager"
 authors = ["Noxera"]
 edition = "2021"
@@ -25,7 +25,7 @@ tauri-plugin-process = "2.3"
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled", "functions"] }
 uuid = { version = "1.26", features = ["v4", "serde"] }
 sha2 = "0.11"
 chrono = { version = "0.4", features = ["serde"] }

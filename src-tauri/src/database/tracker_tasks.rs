@@ -167,14 +167,17 @@ pub fn list_all(conn: &Connection, filter: &TaskFilter) -> rusqlite::Result<Vec<
     let mut args: Vec<Box<dyn ToSql>> = Vec::new();
 
     if let Some(term) = filter.search.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        // `lower_unicode` (registered in `database::open`) rather than SQLite's
+        // built-in `LOWER()`, which only case-folds ASCII and would miss e.g.
+        // Cyrillic "Клиентский" matching "кли".
         let pattern = format!("%{}%", term.to_lowercase());
         clauses.push(
-            "(LOWER(t.title) LIKE ? \
-              OR LOWER(COALESCE(t.description, '')) LIKE ? \
-              OR LOWER(COALESCE(p.name, '')) LIKE ? \
-              OR LOWER(COALESCE(t.customer, '')) LIKE ? \
-              OR EXISTS (SELECT 1 FROM tracker_task_files tf WHERE tf.task_id = t.id AND LOWER(COALESCE(tf.cached_file_name, '')) LIKE ?) \
-              OR EXISTS (SELECT 1 FROM tracker_field_values fv WHERE fv.task_id = t.id AND fv.value IS NOT NULL AND LOWER(fv.value) LIKE ?))"
+            "(lower_unicode(t.title) LIKE ? \
+              OR lower_unicode(COALESCE(t.description, '')) LIKE ? \
+              OR lower_unicode(COALESCE(p.name, '')) LIKE ? \
+              OR lower_unicode(COALESCE(t.customer, '')) LIKE ? \
+              OR EXISTS (SELECT 1 FROM tracker_task_files tf WHERE tf.task_id = t.id AND lower_unicode(COALESCE(tf.cached_file_name, '')) LIKE ?) \
+              OR EXISTS (SELECT 1 FROM tracker_field_values fv WHERE fv.task_id = t.id AND fv.value IS NOT NULL AND lower_unicode(fv.value) LIKE ?))"
                 .to_string(),
         );
         for _ in 0..6 {
@@ -194,7 +197,7 @@ pub fn list_all(conn: &Connection, filter: &TaskFilter) -> rusqlite::Result<Vec<
         args.push(Box::new(status_id.clone()));
     }
     if let Some(customer) = filter.customer.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        clauses.push("LOWER(COALESCE(t.customer, '')) LIKE ?".to_string());
+        clauses.push("lower_unicode(COALESCE(t.customer, '')) LIKE ?".to_string());
         args.push(Box::new(format!("%{}%", customer.to_lowercase())));
     }
     if let Some(priority_id) = &filter.priority_id {
@@ -489,6 +492,33 @@ mod tests {
 
         let sorted = list_all(&f.conn, &TaskFilter { sort_field: Some(TaskSortField::ReceivedAt), sort_dir: Some(SortDirection::Asc), ..Default::default() }).unwrap();
         assert_eq!(ids(&sorted), vec!["t1", "t2", "t3"]);
+
+        teardown(f);
+    }
+
+    /// Reproduces a reported bug: searching "кли" found nothing for a task
+    /// titled "Клиентский возврат" because SQLite's built-in `LOWER()` only
+    /// case-folds ASCII, so `LOWER('Клиентский')` stays capitalized and never
+    /// matches a lowercase pattern - `lower_unicode()` (a Rust-backed scalar
+    /// function) must be used instead so Cyrillic case-folds correctly, and a
+    /// search must match a substring anywhere in the title, not just at the
+    /// start of a word.
+    #[test]
+    fn list_all_search_is_unicode_case_insensitive_and_matches_mid_word() {
+        let f = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        create(&f.conn, "t1", &f.board_id, &f.status_a, "Отчёт Агента СТОКМАНН.docx", None, None, None, &f.priority_low, "2026-01-01", now).unwrap();
+        create(&f.conn, "t2", &f.board_id, &f.status_a, "Автоматическое уведомление по перенесённым заказам", None, None, None, &f.priority_low, "2026-01-02", now).unwrap();
+        create(&f.conn, "t3", &f.board_id, &f.status_b, "Клиентский возврат", None, None, None, &f.priority_low, "2026-01-03", now).unwrap();
+
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("кли".into()), ..Default::default() }).unwrap()), vec!["t3"]);
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("возв".into()), ..Default::default() }).unwrap()), vec!["t3"]);
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("агент".into()), ..Default::default() }).unwrap()), vec!["t1"]);
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("уведом".into()), ..Default::default() }).unwrap()), vec!["t2"]);
+        // Uppercase query against a lowercase-starting title, and a match
+        // mid-word rather than at a word boundary.
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("КЛИЕНТ".into()), ..Default::default() }).unwrap()), vec!["t3"]);
+        assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("тский".into()), ..Default::default() }).unwrap()), vec!["t3"]);
 
         teardown(f);
     }

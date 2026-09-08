@@ -10,16 +10,18 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Plus, Settings as SettingsIcon, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, ChevronDown, Plus, Search, Settings as SettingsIcon, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { TaskCard, TaskCardOverlay } from "@/components/tracker/TaskCard";
 import { useLanguage } from "@/hooks/useLanguage";
-import type { CardDisplayConfig, CardSize, TrackerStatus, TrackerTask } from "@/types";
+import type { CardDisplayConfig, CardSize, TrackerPriority, TrackerStatus, TrackerTask } from "@/types";
 
 interface BoardKanbanProps {
   statuses: TrackerStatus[];
   tasks: TrackerTask[];
+  priorities: TrackerPriority[];
   cardSize: CardSize;
   display?: CardDisplayConfig;
   /** Keyed by statusId - whether that column has more tasks past what's
@@ -31,6 +33,100 @@ interface BoardKanbanProps {
   onMove: (taskId: string, statusId: string, orderedIds: string[]) => void;
   onQuickAdd: (statusId: string, title: string) => void;
   onOpenBoardSettings: () => void;
+  onChangeStatus: (task: TrackerTask, statusId: string) => void;
+  onChangePriority: (task: TrackerTask, priorityId: string) => void;
+  onDeleteRequest: (task: TrackerTask) => void;
+}
+
+/** Multi-select "which status columns are shown" dropdown - checkboxes plus
+ * select-all/none, portal-rendered like `Select` so it's never clipped by
+ * the board's own horizontally-scrolling column strip. */
+function StatusFilterDropdown({
+  statuses,
+  hiddenStatusIds,
+  onToggle,
+  onSelectAll,
+  onSelectNone,
+}: {
+  statuses: TrackerStatus[];
+  hiddenStatusIds: Set<string>;
+  onToggle: (statusId: string) => void;
+  onSelectAll: () => void;
+  onSelectNone: () => void;
+}) {
+  const { t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
+  const visibleCount = statuses.length - hiddenStatusIds.size;
+
+  function openMenu() {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setPos({ left: rect.left, top: rect.bottom + 4, width: Math.max(rect.width, 200) });
+    setOpen(true);
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        ref={triggerRef}
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        className={`flex h-8 shrink-0 items-center gap-1.5 rounded-apple-sm border border-surface-border bg-black/[0.03] px-2.5 text-[12.5px] text-label-primary dark:bg-white/[0.05] ${
+          hiddenStatusIds.size > 0 ? "border-accent/50 text-accent" : ""
+        }`}
+      >
+        {t("tracker.filterStatuses")}
+        <span className="tabular-nums text-label-tertiary">
+          {visibleCount}/{statuses.length}
+        </span>
+        <ChevronDown size={13} className="shrink-0 text-label-tertiary" />
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[95]" onMouseDown={() => setOpen(false)} onContextMenu={() => setOpen(false)} />
+            <div
+              style={{ left: pos.left, top: pos.top, minWidth: pos.width }}
+              className="animate-scale-in fixed z-[96] max-h-72 overflow-y-auto rounded-apple border border-surface-border bg-surface-modal p-1 shadow-popover backdrop-blur-apple"
+            >
+              <div className="flex items-center gap-1 border-b border-surface-border px-1.5 pb-1">
+                <button onClick={onSelectAll} className="rounded-apple-sm px-2 py-1 text-[11.5px] text-accent hover:bg-accent/[0.12]">
+                  {t("common.selectAll")}
+                </button>
+                <button onClick={onSelectNone} className="rounded-apple-sm px-2 py-1 text-[11.5px] text-accent hover:bg-accent/[0.12]">
+                  {t("common.selectNone")}
+                </button>
+              </div>
+              {statuses.map((status) => {
+                const checked = !hiddenStatusIds.has(status.id);
+                return (
+                  <button
+                    key={status.id}
+                    type="button"
+                    onClick={() => onToggle(status.id)}
+                    className="flex w-full items-center gap-2 rounded-apple-sm px-2.5 py-1.5 text-left text-[12.5px] text-label-primary transition-colors hover:bg-accent hover:text-white"
+                  >
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                        checked ? "border-accent bg-accent text-white" : "border-surface-border"
+                      }`}
+                    >
+                      {checked && <Check size={11} strokeWidth={3} />}
+                    </span>
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: status.color }} />
+                    <span className="min-w-0 flex-1 truncate">{status.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
+  );
 }
 
 type Columns = Record<string, TrackerTask[]>;
@@ -89,6 +185,8 @@ function QuickAddRow({ onSubmit, onCancel }: { onSubmit: (title: string) => void
 
 function Column({
   status,
+  statuses,
+  priorities,
   tasks,
   cardSize,
   display,
@@ -101,8 +199,14 @@ function Column({
   onQuickAddOpen,
   onQuickAddSubmit,
   onQuickAddCancel,
+  onChangeStatus,
+  onChangePriority,
+  onDeleteRequest,
+  dndDisabled,
 }: {
   status: TrackerStatus;
+  statuses: TrackerStatus[];
+  priorities: TrackerPriority[];
   tasks: TrackerTask[];
   cardSize: CardSize;
   display?: CardDisplayConfig;
@@ -115,6 +219,10 @@ function Column({
   onQuickAddOpen: () => void;
   onQuickAddSubmit: (title: string) => void;
   onQuickAddCancel: () => void;
+  onChangeStatus: (task: TrackerTask, statusId: string) => void;
+  onChangePriority: (task: TrackerTask, priorityId: string) => void;
+  onDeleteRequest: (task: TrackerTask) => void;
+  dndDisabled: boolean;
 }) {
   const { setNodeRef } = useDroppable({ id: status.id });
 
@@ -155,7 +263,19 @@ function Column({
       >
         <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} compact={cardSize === "compact"} display={display} onOpen={onOpenTask} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              compact={cardSize === "compact"}
+              display={display}
+              onOpen={onOpenTask}
+              statuses={statuses}
+              priorities={priorities}
+              onChangeStatus={onChangeStatus}
+              onChangePriority={onChangePriority}
+              onDeleteRequest={onDeleteRequest}
+              dndDisabled={dndDisabled}
+            />
           ))}
         </SortableContext>
         {loadingMore && <p className="py-1.5 text-center text-[10.5px] text-label-tertiary">…</p>}
@@ -168,6 +288,7 @@ function Column({
 export function BoardKanban({
   statuses,
   tasks,
+  priorities,
   cardSize,
   display,
   columnHasMore,
@@ -177,6 +298,9 @@ export function BoardKanban({
   onMove,
   onQuickAdd,
   onOpenBoardSettings,
+  onChangeStatus,
+  onChangePriority,
+  onDeleteRequest,
 }: BoardKanbanProps) {
   const { t } = useLanguage();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -184,6 +308,22 @@ export function BoardKanban({
   const [quickAddStatusId, setQuickAddStatusId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<TrackerTask | null>(null);
   const [overContainerId, setOverContainerId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  // Ids of statuses hidden by the column filter below - empty means "every
+  // status is shown" (the default), so a newly created status shows up on
+  // the board without the user having to opt it in.
+  const [hiddenStatusIds, setHiddenStatusIds] = useState<Set<string>>(new Set());
+
+  const query = searchQuery.trim().toLowerCase();
+  const visibleStatuses = statuses.filter((s) => !hiddenStatusIds.has(s.id));
+  // Case-insensitive, Unicode-aware (JS `toLowerCase()` handles Cyrillic
+  // correctly, unlike SQLite's `LOWER()` - see the backend fix for the same
+  // bug in tracker task search) substring match against the title, scoped to
+  // whichever statuses are currently visible.
+  const isFiltered = query !== "" || hiddenStatusIds.size > 0;
+  const filteredTasks = isFiltered
+    ? tasks.filter((task) => !hiddenStatusIds.has(task.statusId) && (query === "" || task.title.toLowerCase().includes(query)))
+    : tasks;
 
   useEffect(() => {
     // A drag in progress owns `columns` as local, optimistic state - only
@@ -191,10 +331,10 @@ export function BoardKanban({
     // dragged, so a mid-drag refetch (e.g. another task's "file updated"
     // sync) can never yank a card out from under the pointer.
     if (!activeTask) {
-      setColumns(groupByStatus(statuses, tasks));
+      setColumns(groupByStatus(visibleStatuses, filteredTasks));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statuses, tasks]);
+  }, [statuses, tasks, hiddenStatusIds, searchQuery]);
 
   function findContainer(id: string): string | undefined {
     if (columns[id]) return id;
@@ -240,7 +380,7 @@ export function BoardKanban({
     setActiveTask(null);
     setOverContainerId(null);
     if (!over) {
-      setColumns(groupByStatus(statuses, tasks));
+      setColumns(groupByStatus(visibleStatuses, filteredTasks));
       return;
     }
     const activeContainer = findContainer(active.id as string);
@@ -262,15 +402,47 @@ export function BoardKanban({
   function handleDragCancel() {
     setActiveTask(null);
     setOverContainerId(null);
-    setColumns(groupByStatus(statuses, tasks));
+    setColumns(groupByStatus(visibleStatuses, filteredTasks));
   }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-end px-6 pb-2 pt-1">
+      <div className="no-drag flex shrink-0 items-center gap-2 px-6 pb-2 pt-1">
+        <div className="relative min-w-[160px] max-w-xs flex-1">
+          <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-label-tertiary" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("tracker.boardSearchPlaceholder")}
+            className="h-8 w-full rounded-apple-sm border border-surface-border bg-black/[0.03] pl-7 pr-7 text-[12.5px] text-label-primary outline-none placeholder:text-label-tertiary focus:border-accent/50 dark:bg-white/[0.05]"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-apple-sm p-1 text-label-tertiary hover:bg-black/[0.06] hover:text-label-primary dark:hover:bg-white/[0.1]"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <StatusFilterDropdown
+          statuses={statuses}
+          hiddenStatusIds={hiddenStatusIds}
+          onToggle={(statusId) =>
+            setHiddenStatusIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(statusId)) next.delete(statusId);
+              else next.add(statusId);
+              return next;
+            })
+          }
+          onSelectAll={() => setHiddenStatusIds(new Set())}
+          onSelectNone={() => setHiddenStatusIds(new Set(statuses.map((s) => s.id)))}
+        />
+        <div className="flex-1" />
         <button
           onClick={onOpenBoardSettings}
-          className="no-drag flex items-center gap-1.5 rounded-apple-sm px-2 py-1 text-[12px] text-label-secondary transition-colors hover:bg-black/[0.05] hover:text-label-primary dark:hover:bg-white/[0.08]"
+          className="flex items-center gap-1.5 rounded-apple-sm px-2 py-1 text-[12px] text-label-secondary transition-colors hover:bg-black/[0.05] hover:text-label-primary dark:hover:bg-white/[0.08]"
         >
           <SettingsIcon size={13} />
           {t("tracker.boardSettings")}
@@ -285,10 +457,12 @@ export function BoardKanban({
         autoScroll={{ acceleration: 12, threshold: { x: 0.15, y: 0.2 } }}
       >
         <div className="flex flex-1 items-start gap-4 overflow-x-auto px-6 pb-6">
-          {statuses.map((status) => (
+          {visibleStatuses.map((status) => (
             <Column
               key={status.id}
               status={status}
+              statuses={statuses}
+              priorities={priorities}
               tasks={columns[status.id] ?? []}
               cardSize={cardSize}
               display={display}
@@ -304,6 +478,10 @@ export function BoardKanban({
                 setQuickAddStatusId(null);
               }}
               onQuickAddCancel={() => setQuickAddStatusId(null)}
+              onChangeStatus={onChangeStatus}
+              onChangePriority={onChangePriority}
+              onDeleteRequest={onDeleteRequest}
+              dndDisabled={isFiltered}
             />
           ))}
         </div>

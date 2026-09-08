@@ -72,7 +72,7 @@ export function PinFileVersionModal({ open, taskFile, onCancel, onConfirm }: Pin
       <ModalBody>
         {loading && <p className="py-4 text-center text-[12.5px] text-label-secondary">{t("files.loading")}</p>}
         {!loading && detail && (
-          <div className="max-h-72 space-y-1 overflow-y-auto">
+          <div className="max-h-72 space-y-1 overflow-y-auto p-1">
             {detail.versions.map((v) => (
               <label
                 key={v.id}

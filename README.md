@@ -73,6 +73,29 @@ See `.github/workflows/build.yml` for a ready-to-use GitHub Actions workflow
 that builds installers for Windows and macOS (Intel + Apple Silicon) on their
 native runners whenever you push a version tag.
 
+### Cutting a release (auto-updater correctness)
+
+The in-app updater (`src/hooks/useUpdater.tsx`, `tauri-plugin-updater`)
+decides whether an update exists by comparing the running app's *embedded*
+version (`src-tauri/tauri.conf.json`'s `version`, baked into the binary at
+build time) against the `version` field in `latest.json`, which
+`tauri-action` generates from that same embedded value - **not** from the
+git tag name. So the tag and the embedded version must agree, and the order
+matters:
+
+1. Bump `version` in `package.json`, `src-tauri/tauri.conf.json`, and
+   `src-tauri/Cargo.toml` (`Cargo.lock`'s own `noxera-files` entry follows
+   automatically on the next `cargo build`/`check`) to the *new* number, in
+   its own commit (`Bump version to X.Y.Z`).
+2. Only **after** that commit lands, tag *that exact commit* `vX.Y.Z` and
+   push the tag.
+
+Tagging a commit that hasn't had its version bumped yet (or tagging one
+commit too early/late relative to the bump) ships a release whose binary
+still reports the *previous* version number - `latest.json` then matches
+whatever a user already has installed, so `check()` reports "up to date"
+even though a newer build exists, and the update silently never surfaces.
+
 ## Project structure
 
 ```

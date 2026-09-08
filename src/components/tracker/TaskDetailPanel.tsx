@@ -6,6 +6,7 @@ import {
   FileText,
   FolderClosed,
   HardDrive,
+  History,
   MessageSquare,
   Pin,
   PinOff,
@@ -23,6 +24,7 @@ import { Select } from "@/components/Select";
 import { CustomFieldInputs, fieldInputClass, fieldLabelClass } from "@/components/tracker/CustomFieldInputs";
 import { DuplicateTaskModal } from "@/components/tracker/DuplicateTaskModal";
 import { FilePickerModal, type FilePickerResult } from "@/components/tracker/FilePickerModal";
+import { LocalFileVersionHistoryModal } from "@/components/tracker/LocalFileVersionHistoryModal";
 import { PinFileVersionModal } from "@/components/tracker/PinFileVersionModal";
 import { LabelChip, formatEventTime } from "@/components/tracker/shared";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -32,15 +34,18 @@ import {
   ApiError,
   addTrackerTaskComment,
   addTrackerTaskLocalFile,
+  addTrackerTaskLocalFileVersion,
   attachTrackerTaskFile,
   deleteTrackerTask,
   deleteTrackerTaskComment,
   detachTrackerTaskFile,
   openTrackerTaskLocalFile,
+  openTrackerTaskLocalFileVersion,
   openVersion,
   pathIsDirectory,
   pickFilesToUpload,
   removeTrackerTaskLocalFile,
+  restoreTrackerTaskLocalFileVersion,
   setTrackerTaskArchived,
   setTrackerTaskFieldValues,
   setTrackerTaskFilePin,
@@ -49,7 +54,7 @@ import {
   updateTrackerTask,
   moveTrackerTask,
 } from "@/services/api";
-import type { TrackerTaskEvent, TrackerTaskFile, TrackerTaskLocalFile, TrackerTaskUpdateInput } from "@/types";
+import type { TrackerTaskEvent, TrackerTaskFile, TrackerTaskLocalFile, TrackerTaskLocalFileVersion, TrackerTaskUpdateInput } from "@/types";
 import { formatBytes } from "@/utils/format";
 
 interface TaskDetailPanelProps {
@@ -80,6 +85,12 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [pinVersionTarget, setPinVersionTarget] = useState<TrackerTaskFile | null>(null);
+  // Stored as an id (not the object itself) and re-resolved against `detail`
+  // below on every render, so the modal always shows the version list as it
+  // is right now - adding or restoring a version refreshes `detail`, and a
+  // stale snapshot object would otherwise keep showing the list from before
+  // that action.
+  const [localFileHistoryId, setLocalFileHistoryId] = useState<string | null>(null);
   const [tab, setTab] = useState<"files" | "comments" | "history">("files");
   const [isDragActive, setIsDragActive] = useState(false);
 
@@ -159,6 +170,8 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   const [deleteCommentTarget, setDeleteCommentTarget] = useState<TrackerTaskEvent | null>(null);
 
   if (!detail) return null;
+
+  const localFileHistoryTarget = detail.localFiles.find((lf) => lf.id === localFileHistoryId) ?? null;
 
   async function patch(update: TrackerTaskUpdateInput) {
     try {
@@ -287,6 +300,32 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   async function handleOpenLocalFile(localFile: TrackerTaskLocalFile) {
     try {
       await openTrackerTaskLocalFile(localFile.id);
+    } catch (e) {
+      showToast({ title: t("toast.openFileError"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  async function handleAddLocalFileVersion(localFile: TrackerTaskLocalFile) {
+    const paths = await pickFilesToUpload(false);
+    if (paths.length === 0) return;
+    try {
+      await addTrackerTaskLocalFileVersion(localFile.id, paths[0]);
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  async function handleRestoreLocalFileVersion(localFile: TrackerTaskLocalFile, version: TrackerTaskLocalFileVersion) {
+    await restoreTrackerTaskLocalFileVersion(localFile.id, version.id);
+    await refresh();
+    onChanged();
+  }
+
+  async function handleOpenLocalFileVersion(version: TrackerTaskLocalFileVersion) {
+    try {
+      await openTrackerTaskLocalFileVersion(version.id);
     } catch (e) {
       showToast({ title: t("toast.openFileError"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
     }
@@ -561,28 +600,39 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                       )}
                     </div>
                   ))}
-                  {detail.localFiles.map((lf) => (
-                    <div key={lf.id} className="group rounded-apple border border-surface-border bg-surface-card p-2.5 shadow-card">
-                      <div className="flex items-start gap-2">
-                        <HardDrive size={15} className="mt-0.5 shrink-0 text-label-secondary" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[12.5px] font-medium text-label-primary">{lf.fileName}</p>
-                          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-label-secondary">
-                            <span className="text-label-tertiary">{formatBytes(lf.fileSize)}</span>
-                            <span className="text-label-tertiary">·</span>
-                            <span className="text-label-tertiary">{t("tracker.localFileBadge")}</span>
-                          </p>
+                  {detail.localFiles.map((lf) => {
+                    const currentVersion = lf.versions.find((v) => v.id === lf.currentVersionId);
+                    return (
+                      <div key={lf.id} className="group rounded-apple border border-surface-border bg-surface-card p-2.5 shadow-card">
+                        <div className="flex items-start gap-2">
+                          <HardDrive size={15} className="mt-0.5 shrink-0 text-label-secondary" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[12.5px] font-medium text-label-primary">{lf.fileName}</p>
+                            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-label-secondary">
+                              {currentVersion && <span className="font-medium">v{currentVersion.versionNumber}</span>}
+                              <span className="text-label-tertiary">·</span>
+                              <span className="text-label-tertiary">{formatBytes(lf.fileSize)}</span>
+                              <span className="text-label-tertiary">·</span>
+                              <span className="text-label-tertiary">{t("tracker.localFileBadge")}</span>
+                            </p>
+                          </div>
+                          <button onClick={() => handleRemoveLocalFile(lf)} title={t("tracker.removeFile")} className="shrink-0 rounded-apple-sm p-0.5 text-label-tertiary opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100">
+                            <X size={12} />
+                          </button>
                         </div>
-                        <button onClick={() => handleRemoveLocalFile(lf)} title={t("tracker.removeFile")} className="shrink-0 rounded-apple-sm p-0.5 text-label-tertiary opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100">
-                          <X size={12} />
-                        </button>
+                        <div className="mt-1.5 flex items-center gap-2.5">
+                          <button onClick={() => handleOpenLocalFile(lf)} className="flex items-center gap-1 text-[11px] font-medium text-accent hover:underline">
+                            <ExternalLink size={11} />
+                            {t("menu.open")}
+                          </button>
+                          <button onClick={() => setLocalFileHistoryId(lf.id)} className="flex items-center gap-1 text-[11px] font-medium text-accent hover:underline">
+                            <History size={11} />
+                            {t("menu.versionHistory")} ({lf.versionCount})
+                          </button>
+                        </div>
                       </div>
-                      <button onClick={() => handleOpenLocalFile(lf)} className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-accent hover:underline">
-                        <ExternalLink size={11} />
-                        {t("menu.open")}
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <div className="flex flex-col gap-1.5">
                     <button
                       onClick={() => setPickerOpen(true)}
@@ -647,6 +697,15 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
         onConfirm={handleConfirmPinVersion}
       />
 
+      <LocalFileVersionHistoryModal
+        open={localFileHistoryTarget !== null}
+        localFile={localFileHistoryTarget}
+        onClose={() => setLocalFileHistoryId(null)}
+        onView={handleOpenLocalFileVersion}
+        onRestore={(version) => (localFileHistoryTarget ? handleRestoreLocalFileVersion(localFileHistoryTarget, version) : Promise.resolve())}
+        onAddVersion={() => localFileHistoryTarget && handleAddLocalFileVersion(localFileHistoryTarget)}
+      />
+
       <DeleteModal
         open={deleteOpen}
         title={t("tracker.deleteTaskTitle")}
@@ -693,6 +752,10 @@ function eventText(event: TrackerTaskEvent, t: (key: string, vars?: Record<strin
       return { title: t("tracker.event.localFileAddedTitle"), detail: String(payload.fileName ?? "") };
     case "local_file_removed":
       return { title: t("tracker.event.localFileRemovedTitle"), detail: String(payload.fileName ?? "") };
+    case "local_file_version_added":
+      return { title: t("tracker.event.localFileVersionAddedTitle"), detail: `${String(payload.fileName ?? "")} · v${String(payload.versionNumber ?? "")}` };
+    case "local_file_version_restored":
+      return { title: t("tracker.event.localFileVersionRestoredTitle"), detail: `${String(payload.fileName ?? "")} · v${String(payload.versionNumber ?? "")}` };
     case "file_pin_changed":
       return {
         title: t(payload.alwaysLatest ? "tracker.event.filePinnedToLatestTitle" : "tracker.event.filePinnedToVersionTitle"),

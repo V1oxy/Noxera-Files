@@ -606,7 +606,10 @@ pub fn set_tracker_task_file_pin(
     })
 }
 
-// ---- Local files (attached "from the computer", never versioned) --------------
+// ---- Local files (attached "from the computer") --------------------------------
+// Versioned like the file manager's own files, but simpler: no "always
+// latest" toggle - see `TaskLocalFile`'s doc comment and
+// `tracker_task_local_files::add_version`/`restore_version`.
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -618,6 +621,20 @@ struct LocalFileAddedPayload<'a> {
 #[serde(rename_all = "camelCase")]
 struct LocalFileRemovedPayload<'a> {
     file_name: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalFileVersionAddedPayload<'a> {
+    file_name: &'a str,
+    version_number: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalFileVersionRestoredPayload<'a> {
+    file_name: &'a str,
+    version_number: i64,
 }
 
 #[tauri::command]
@@ -641,15 +658,74 @@ pub fn add_tracker_task_local_file(state: State<AppState>, task_id: String, sour
     })
 }
 
+/// Adds a new version to an already-attached local file (spec: "Версия 1" ->
+/// pick the same slot again -> "Версия 2") - it becomes current
+/// automatically, nothing about the earlier versions changes.
+#[tauri::command]
+pub fn add_tracker_task_local_file_version(state: State<AppState>, local_file_id: String, source_path: String) -> AppResult<TaskDetail> {
+    let source = PathBuf::from(&source_path);
+    let source_name = source.file_name().and_then(|n| n.to_str()).unwrap_or("Untitled").to_string();
+    with_ready(&state, |conn, storage| {
+        let lf = local_files_db::get(conn, &local_file_id)?
+            .ok_or_else(|| AppError::user("This attachment no longer exists."))?;
+        let now = now_iso();
+        let dir = storage.task_attachment_dir(&lf.file.task_id)?;
+        let version_id = new_id();
+        let final_path = dir.join(format!("{version_id}_{}", sanitize_filename(&source_name)));
+        let copy_result = copy_with_checksum(&source, &final_path, &storage.temp_dir(), |_, _| {})?;
+        let relative = storage.relative_path(&final_path)?;
+        let mime = guess_mime_type(&source_name);
+        let version_number = local_files_db::add_version(
+            conn, &local_file_id, &version_id, &relative, copy_result.size as i64, mime.as_deref(), &now,
+        )?;
+        tracker_events::log(
+            conn, &lf.file.task_id, "local_file_version_added",
+            &LocalFileVersionAddedPayload { file_name: &lf.file.file_name, version_number },
+            None, &now,
+        )?;
+        tasks_db::get_detail(conn, &lf.file.task_id, &now)?.ok_or_else(|| AppError::user("This task no longer exists."))
+    })
+}
+
+/// Makes an earlier version current again, without deleting or renumbering
+/// anything - a version added after the restored one stays exactly where it
+/// is in the history (spec: "версия 3 не должна удаляться").
+#[tauri::command]
+pub fn restore_tracker_task_local_file_version(state: State<AppState>, local_file_id: String, version_id: String) -> AppResult<TaskDetail> {
+    with_ready(&state, |conn, _| {
+        let lf = local_files_db::get(conn, &local_file_id)?
+            .ok_or_else(|| AppError::user("This attachment no longer exists."))?;
+        let version = local_files_db::get_version(conn, &version_id)?
+            .ok_or_else(|| AppError::user("This version no longer exists."))?;
+        if version.version.local_file_id != local_file_id {
+            return Err(AppError::user("That version doesn't belong to this file."));
+        }
+        let now = now_iso();
+        local_files_db::restore_version(conn, &local_file_id, &version_id)?;
+        tracker_events::log(
+            conn, &lf.file.task_id, "local_file_version_restored",
+            &LocalFileVersionRestoredPayload { file_name: &lf.file.file_name, version_number: version.version.version_number },
+            None, &now,
+        )?;
+        tasks_db::get_detail(conn, &lf.file.task_id, &now)?.ok_or_else(|| AppError::user("This task no longer exists."))
+    })
+}
+
 #[tauri::command]
 pub fn remove_tracker_task_local_file(state: State<AppState>, local_file_id: String) -> AppResult<TaskDetail> {
     with_ready(&state, |conn, storage| {
         let lf = local_files_db::get(conn, &local_file_id)?
             .ok_or_else(|| AppError::user("This attachment no longer exists."))?;
         let now = now_iso();
+        // Every version's file needs removing, not just the current one - the
+        // DB rows themselves cascade via the FK once the parent row is gone,
+        // but nothing removes their on-disk bytes automatically.
+        let version_paths = local_files_db::list_version_paths(conn, &local_file_id)?;
         local_files_db::delete(conn, &local_file_id)?;
-        if let Ok(abs) = storage.resolve_existing(&lf.storage_path) {
-            let _ = std::fs::remove_file(abs);
+        for path in version_paths {
+            if let Ok(abs) = storage.resolve_existing(&path) {
+                let _ = std::fs::remove_file(abs);
+            }
         }
         tracker_events::log(conn, &lf.file.task_id, "local_file_removed", &LocalFileRemovedPayload { file_name: &lf.file.file_name }, None, &now)?;
         tasks_db::get_detail(conn, &lf.file.task_id, &now)?.ok_or_else(|| AppError::user("This task no longer exists."))
@@ -662,6 +738,21 @@ pub fn open_tracker_task_local_file(app: AppHandle, state: State<AppState>, loca
         let lf = local_files_db::get(conn, &local_file_id)?
             .ok_or_else(|| AppError::user("This attachment no longer exists."))?;
         storage.resolve_existing(&lf.storage_path)
+    })?;
+    app.opener()
+        .open_path(path.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| AppError::with_details("Unable to open the file.", e))
+}
+
+/// Opens one specific version of a local file attachment, not necessarily
+/// the current one - lets the user view an older version without restoring
+/// it first.
+#[tauri::command]
+pub fn open_tracker_task_local_file_version(app: AppHandle, state: State<AppState>, version_id: String) -> AppResult<()> {
+    let path = with_ready(&state, |conn, storage| {
+        let v = local_files_db::get_version(conn, &version_id)?
+            .ok_or_else(|| AppError::user("This version no longer exists."))?;
+        storage.resolve_existing(&v.storage_path)
     })?;
     app.opener()
         .open_path(path.to_string_lossy().to_string(), None::<&str>)
