@@ -21,11 +21,17 @@ export function Modal({ open, onClose, children, width = 420 }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in"
+      className="no-drag fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      {/* A page's own header can sit underneath this overlay (centered
+          modals routinely land on top of it), and without an explicit
+          `no-drag` here the OS reads the modal's content as still inside
+          that header's `drag-region` - a click-drag meant to select an
+          input's text (e.g. the rename/delete confirmation fields below)
+          would move the window instead. */}
       <div
         className="animate-scale-in rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple"
         style={{ width }}

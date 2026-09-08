@@ -117,6 +117,9 @@ textarea {
   background: var(--label-secondary);
   background-clip: padding-box;
 }
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
 
 *:focus-visible {
   outline: 2px solid var(--accent);

@@ -97,11 +97,16 @@ export function VersionHistory({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in"
+      className="no-drag fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      {/* See TaskDetailPanel's identical comment - this overlay centers over
+          whichever page opened it and can land on that page's own
+          `drag-region` header, so it needs its own `no-drag` to keep the
+          version descriptions below selectable instead of dragging the
+          window. */}
       <div
         className="animate-scale-in flex max-h-[80vh] w-[480px] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple"
         onMouseDown={(e) => e.stopPropagation()}

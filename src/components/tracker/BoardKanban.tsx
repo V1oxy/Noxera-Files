@@ -363,6 +363,14 @@ export function BoardKanban({
           (query === "" || (searchMatchIds?.has(task.id) ?? task.title.toLowerCase().includes(query))),
       )
     : tasks;
+  // Hiding whole status columns never touches which tasks belong to a column
+  // that's still shown, so drag-and-drop inside/between visible columns stays
+  // perfectly safe - `ordered_ids` sent to the backend for a visible column
+  // is still that column's *complete* membership. A text search, though,
+  // hides individual cards *within* a column, so a drag during search would
+  // hand the backend a partial order and clobber the positions of the cards
+  // it can't see - that's the one case DnD still has to sit out.
+  const dndDisabled = query !== "";
   // While actively searching, a column with zero matches is noise - hide it
   // entirely rather than showing an empty column. Only search does this
   // (not the status checkbox filter above): that filter is the user's own
@@ -526,7 +534,7 @@ export function BoardKanban({
               onChangeStatus={onChangeStatus}
               onChangePriority={onChangePriority}
               onDeleteRequest={onDeleteRequest}
-              dndDisabled={isFiltered}
+              dndDisabled={dndDisabled}
             />
           ))}
         </div>

@@ -472,7 +472,13 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
 
   return (
     <>
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in" onMouseDown={(e) => e.target === e.currentTarget && handleRequestClose()}>
+      {/* `no-drag` here (and on the panel below) matters more than it does on
+          most overlays: this modal centers itself over whichever page opened
+          it, which routinely puts its header - the task title input first
+          among them - right on top of that page's own `drag-region` toolbar.
+          Without an explicit override the window reads a click-drag meant to
+          select/copy the title as a titlebar drag and moves itself instead. */}
+      <div className="no-drag fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in" onMouseDown={(e) => e.target === e.currentTarget && handleRequestClose()}>
         <div className="animate-scale-in relative flex h-[82vh] w-[830px] max-w-[95vw] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple" onMouseDown={(e) => e.stopPropagation()}>
           {isDragActive && !localFileHistoryId && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-apple-lg border-2 border-dashed border-accent bg-accent/[0.08] backdrop-blur-[1px]">

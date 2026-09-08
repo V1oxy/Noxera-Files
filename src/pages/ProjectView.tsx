@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Info, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { Breadcrumb, type BreadcrumbEntry } from "@/components/Breadcrumb";
+import type { BreadcrumbEntry } from "@/components/Breadcrumb";
 import { Button } from "@/components/Button";
 import { DeleteModal } from "@/components/DeleteModal";
 import { FileList } from "@/components/FileList";
@@ -551,7 +551,7 @@ export function ProjectView({
     });
   }
 
-  async function handleMoveFile(fileId: string, targetFolderId: string) {
+  async function handleMoveFile(fileId: string, targetFolderId: string | null) {
     try {
       await moveFile(fileId, targetFolderId);
       await Promise.all([refreshFiles(), refreshFolders()]);
@@ -565,7 +565,7 @@ export function ProjectView({
     }
   }
 
-  async function handleMoveFolder(folderId: string, targetFolderId: string) {
+  async function handleMoveFolder(folderId: string, targetFolderId: string | null) {
     try {
       await moveFolder(folderId, targetFolderId);
       await refreshFolders();
@@ -638,9 +638,9 @@ export function ProjectView({
         </div>
       </div>
 
-      <Breadcrumb entries={breadcrumb} onNavigate={navigateBreadcrumb} />
-
       <FileList
+        breadcrumb={breadcrumb}
+        onNavigateBreadcrumb={navigateBreadcrumb}
         folders={search ? [] : folders}
         files={files}
         loading={filesLoading}

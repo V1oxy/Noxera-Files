@@ -1,17 +1,19 @@
 import {
   DndContext,
+  DragOverlay,
   type DragEndEvent,
   type DragOverEvent,
+  type DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDownWideNarrow, ArrowUpWideNarrow, ChevronDown, FolderPlus, SearchX, Upload } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpWideNarrow, ChevronDown, File as FileIcon, FolderPlus, Folder as FolderIcon, SearchX, Upload } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 
+import { Breadcrumb, parseCrumbDroppableId, type BreadcrumbEntry } from "@/components/Breadcrumb";
 import { Button } from "@/components/Button";
 import { ContextMenu } from "@/components/ContextMenu";
 import { DraggableRow } from "@/components/DraggableRow";
@@ -34,6 +36,8 @@ const SORT_KEYS: Record<SortField, string> = {
 };
 
 interface FileListProps {
+  breadcrumb: BreadcrumbEntry[];
+  onNavigateBreadcrumb: (id: string | null) => void;
   folders: Folder[];
   files: FileEntry[];
   loading: boolean;
@@ -67,13 +71,18 @@ interface FileListProps {
   onRenameFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
   onReorderFiles: (orderedIds: string[]) => void;
-  onMoveFile: (fileId: string, targetFolderId: string) => void;
-  onMoveFolder: (folderId: string, targetFolderId: string) => void;
+  /** `targetFolderId` is `null` when the drop target is the project root -
+   * only reachable via the breadcrumb's first crumb (see the `crumb:root`
+   * drop id resolved in `handleDragEnd`), since folder rows are never null. */
+  onMoveFile: (fileId: string, targetFolderId: string | null) => void;
+  onMoveFolder: (folderId: string, targetFolderId: string | null) => void;
   /** Fires around the whole lifetime of an in-app drag - see ProjectView's inAppDragActiveRef. */
   onDragStateChange: (active: boolean) => void;
 }
 
 export function FileList({
+  breadcrumb,
+  onNavigateBreadcrumb,
   folders,
   files,
   loading,
@@ -161,12 +170,25 @@ export function FileList({
   // dropping anything onto a folder unconditionally means "move into it,"
   // so this needs no position math, just "is a folder being hovered."
   const [moveIntoFolderId, setMoveIntoFolderId] = useState<string | null>(null);
+  // The row currently being dragged, kept only so the DragOverlay below has
+  // something to render - the rows themselves live inside the scrollable,
+  // clipped list area, so once a drag crosses that area's edge (heading for
+  // the breadcrumb above it) the real row would otherwise vanish under
+  // `overflow-y-auto` instead of following the cursor.
+  const [activeItem, setActiveItem] = useState<{ type: "file" | "folder"; name: string } | null>(null);
 
-  function handleDragStart() {
+  function handleDragStart(event: DragStartEvent) {
     onDragStateChange(true);
     // Text selection can otherwise survive into the drag on some engines and
     // visually look like the app is "selecting files" instead of dragging.
     window.getSelection()?.removeAllRanges();
+    const folder = folders.find((f) => f.id === event.active.id);
+    if (folder) {
+      setActiveItem({ type: "folder", name: folder.name });
+      return;
+    }
+    const file = fileOrder.find((f) => f.id === event.active.id);
+    if (file) setActiveItem({ type: "file", name: file.name });
   }
 
   function handleDragOver(event: DragOverEvent) {
@@ -183,9 +205,22 @@ export function FileList({
     const { active, over } = event;
     onDragStateChange(false);
     setMoveIntoFolderId(null);
+    setActiveItem(null);
     if (!over || active.id === over.id) return;
 
     const activeIsFolder = folders.some((f) => f.id === active.id);
+
+    // Dropped on a breadcrumb crumb - move the dragged file/folder up to
+    // that ancestor folder (or the project root, for the first crumb). The
+    // current folder's own crumb is never a droppable target (see
+    // `Breadcrumb`), so every id resolved here is a genuine ancestor.
+    const crumbTarget = typeof over.id === "string" ? parseCrumbDroppableId(over.id) : undefined;
+    if (crumbTarget !== undefined) {
+      if (activeIsFolder) onMoveFolder(active.id as string, crumbTarget);
+      else onMoveFile(active.id as string, crumbTarget);
+      return;
+    }
+
     const overIsFolder = folders.some((f) => f.id === over.id);
 
     if (overIsFolder) {
@@ -211,6 +246,7 @@ export function FileList({
   function handleDragCancel() {
     onDragStateChange(false);
     setMoveIntoFolderId(null);
+    setActiveItem(null);
   }
 
   useEffect(() => {
@@ -225,7 +261,15 @@ export function FileList({
   }, []);
 
   return (
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
     <div className="relative isolate flex min-h-0 flex-1 flex-col">
+      <Breadcrumb entries={breadcrumb} onNavigate={onNavigateBreadcrumb} />
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 pt-1">
         <div className="min-w-[100px] max-w-xs flex-1 basis-40">
           <SearchBar ref={searchRef} value={search} onChange={onSearchChange} placeholder={t("files.searchPlaceholder")} />
@@ -343,49 +387,40 @@ export function FileList({
         )}
 
         {!loading && !isEmpty && reorderable && (
-          <DndContext
-            sensors={sensors}
-            modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <div className="space-y-0.5" onContextMenu={handleEmptySpaceContextMenu}>
-              {folders.map((folder) => (
-                <DraggableRow key={folder.id} id={folder.id}>
-                  <FolderRow
-                    folder={folder}
-                    onOpen={onOpenFolder}
-                    onRename={onRenameFolder}
-                    onDelete={onDeleteFolder}
-                    isDropTarget={moveIntoFolderId === folder.id}
+          <div className="space-y-0.5" onContextMenu={handleEmptySpaceContextMenu}>
+            {folders.map((folder) => (
+              <DraggableRow key={folder.id} id={folder.id} dragOverlayActive>
+                <FolderRow
+                  folder={folder}
+                  onOpen={onOpenFolder}
+                  onRename={onRenameFolder}
+                  onDelete={onDeleteFolder}
+                  isDropTarget={moveIntoFolderId === folder.id}
+                />
+              </DraggableRow>
+            ))}
+            {/* Folder ids must be included here even though folders render via
+                DraggableRow, not SortableRow - dnd-kit's sortable strategy only
+                gives the actively-dragged item its own pointer-following transform
+                when `over` resolves to a valid index within *this* items list.
+                Without folders in the list, dragging a file onto a folder makes
+                `overIndex` invalid, which zeroes the dragged file's transform and
+                it visually stops following the cursor mid-drag. */}
+            <SortableContext
+              items={[...folders.map((f) => f.id), ...fileOrder.map((f) => f.id)]}
+              strategy={verticalListSortingStrategy}
+            >
+              {fileOrder.map((file) => (
+                <SortableRow key={file.id} id={file.id} dragOverlayActive>
+                  <FileRow
+                    file={file}
+                    isDropTarget={dropTarget?.type === "file" && dropTarget.id === file.id}
+                    {...rowActions}
                   />
-                </DraggableRow>
+                </SortableRow>
               ))}
-              {/* Folder ids must be included here even though folders render via
-                  DraggableRow, not SortableRow - dnd-kit's sortable strategy only
-                  gives the actively-dragged item its own pointer-following transform
-                  when `over` resolves to a valid index within *this* items list.
-                  Without folders in the list, dragging a file onto a folder makes
-                  `overIndex` invalid, which zeroes the dragged file's transform and
-                  it visually stops following the cursor mid-drag. */}
-              <SortableContext
-                items={[...folders.map((f) => f.id), ...fileOrder.map((f) => f.id)]}
-                strategy={verticalListSortingStrategy}
-              >
-                {fileOrder.map((file) => (
-                  <SortableRow key={file.id} id={file.id}>
-                    <FileRow
-                      file={file}
-                      isDropTarget={dropTarget?.type === "file" && dropTarget.id === file.id}
-                      {...rowActions}
-                    />
-                  </SortableRow>
-                ))}
-              </SortableContext>
-            </div>
-          </DndContext>
+            </SortableContext>
+          </div>
         )}
         {!loading && !isEmpty && reorderable && loadingMore && (
           <p className="px-2 py-3 text-center text-[11px] text-label-tertiary">{t("files.loading")}</p>
@@ -457,5 +492,18 @@ export function FileList({
         </div>
       )}
     </div>
+    <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.25, 1, 0.5, 1)" }}>
+      {activeItem && (
+        <div className="flex max-w-[260px] items-center gap-2 rounded-apple border border-accent/40 bg-surface-card px-3 py-2 shadow-modal">
+          {activeItem.type === "folder" ? (
+            <FolderIcon size={16} strokeWidth={1.5} className="shrink-0 fill-accent/15 text-accent" />
+          ) : (
+            <FileIcon size={16} strokeWidth={1.5} className="shrink-0 text-label-secondary" />
+          )}
+          <span className="truncate text-[12.5px] font-medium text-label-primary">{activeItem.name}</span>
+        </div>
+      )}
+    </DragOverlay>
+    </DndContext>
   );
 }
