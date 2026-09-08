@@ -245,6 +245,7 @@ pub struct Task {
     pub created_at: String,
     pub updated_at: String,
     pub file_count: i64,
+    pub link_count: i64,
     pub has_unseen_update: bool,
     pub label_ids: Vec<String>,
 }

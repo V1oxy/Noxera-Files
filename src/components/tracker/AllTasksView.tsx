@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDownWideNarrow, ArrowUpWideNarrow, Paperclip, X } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpWideNarrow, Link2, Paperclip, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { ContextMenu } from "@/components/ContextMenu";
@@ -234,6 +234,12 @@ export function AllTasksView({
                         <span className="flex items-center gap-0.5 text-[11px] text-label-tertiary">
                           <Paperclip size={11} />
                           {task.fileCount}
+                        </span>
+                      )}
+                      {task.linkCount > 0 && (
+                        <span className="flex items-center gap-0.5 text-[11px] text-label-tertiary">
+                          <Link2 size={11} />
+                          {task.linkCount}
                         </span>
                       )}
                       {task.hasUnseenUpdate && <UpdateIndicator />}

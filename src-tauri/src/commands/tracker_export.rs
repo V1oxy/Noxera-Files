@@ -210,6 +210,7 @@ mod tests {
             created_at: "2026-09-01T10:00:00+00:00".to_string(),
             updated_at: "2026-09-02T11:30:00+00:00".to_string(),
             file_count: 0,
+            link_count: 0,
             has_unseen_update: false,
             label_ids: Vec::new(),
         }

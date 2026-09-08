@@ -502,7 +502,7 @@ export function BoardKanban({
         autoScroll={{ acceleration: 12, threshold: { x: 0.15, y: 0.2 } }}
       >
         <div className="flex flex-1 items-start gap-4 overflow-x-auto px-6 pb-6">
-          {visibleStatuses.map((status) => (
+          {displayedStatuses.map((status) => (
             <Column
               key={status.id}
               status={status}

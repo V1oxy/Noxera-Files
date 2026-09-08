@@ -4,7 +4,7 @@ import { FolderClosed } from "lucide-react";
 import { useState } from "react";
 
 import { ContextMenu } from "@/components/ContextMenu";
-import { FileCountBadge, PinIndicator, PriorityBadge, UpdateIndicator, taskContextMenuItems } from "@/components/tracker/shared";
+import { FileCountBadge, LinkCountBadge, PinIndicator, PriorityBadge, UpdateIndicator, taskContextMenuItems } from "@/components/tracker/shared";
 import { useLanguage } from "@/hooks/useLanguage";
 import type { CardDisplayConfig, TrackerPriority, TrackerStatus, TrackerTask } from "@/types";
 
@@ -29,6 +29,7 @@ const DEFAULT_DISPLAY: CardDisplayConfig = {
   showPriority: true,
   showFileCount: true,
   showUpdateIndicator: true,
+  showLinkCount: true,
 };
 
 /** The card's actual content - shared by the real (sortable) card and the
@@ -62,11 +63,13 @@ function TaskCardBody({ task, compact, display }: { task: TrackerTask; compact: 
         </div>
       )}
 
-      {!compact && display.showFileCount && task.fileCount > 0 && (
-        <div className="mt-1.5 flex items-center justify-end">
-          <FileCountBadge count={task.fileCount} />
-        </div>
-      )}
+      {!compact &&
+        ((display.showFileCount && task.fileCount > 0) || (display.showLinkCount && task.linkCount > 0)) && (
+          <div className="mt-1.5 flex items-center justify-end gap-2">
+            {display.showFileCount && <FileCountBadge count={task.fileCount} />}
+            {display.showLinkCount && <LinkCountBadge count={task.linkCount} />}
+          </div>
+        )}
     </>
   );
 }

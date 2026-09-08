@@ -289,6 +289,7 @@ export interface TrackerTask {
   createdAt: string;
   updatedAt: string;
   fileCount: number;
+  linkCount: number;
   hasUnseenUpdate: boolean;
   labelIds: string[];
 }
@@ -409,6 +410,7 @@ export interface CardDisplayConfig {
   showPriority: boolean;
   showFileCount: boolean;
   showUpdateIndicator: boolean;
+  showLinkCount: boolean;
 }
 
 // ---- Links ----------------------------------------------------------------------

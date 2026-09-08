@@ -14,7 +14,9 @@ const SELECT_BASE: &str = "SELECT t.id, t.board_id, b.name AS board_name, t.stat
     t.customer, t.priority AS priority_id, pr.name AS priority_name, pr.color AS priority_color, \
     pr.position AS priority_position, t.pinned, t.archived, t.position, t.received_at, t.completed_at, \
     t.created_at, t.updated_at, \
-    (SELECT COUNT(*) FROM tracker_task_files tf WHERE tf.task_id = t.id) AS file_count, \
+    ((SELECT COUNT(*) FROM tracker_task_files tf WHERE tf.task_id = t.id) + \
+     (SELECT COUNT(*) FROM tracker_task_local_files lf WHERE lf.task_id = t.id)) AS file_count, \
+    (SELECT COUNT(*) FROM tracker_task_links tl WHERE tl.task_id = t.id) AS link_count, \
     (SELECT COUNT(*) FROM tracker_task_files tf WHERE tf.task_id = t.id AND tf.unseen_update = 1) AS unseen_count, \
     (SELECT GROUP_CONCAT(label_id) FROM tracker_task_labels WHERE task_id = t.id) AS label_ids_concat \
     FROM tracker_tasks t \
@@ -55,6 +57,7 @@ fn map_row(row: &Row) -> rusqlite::Result<Task> {
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
         file_count: row.get("file_count")?,
+        link_count: row.get("link_count")?,
         has_unseen_update: unseen_count > 0,
         label_ids,
     })
@@ -526,6 +529,34 @@ mod tests {
         assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("инструкция".into()), ..Default::default() }).unwrap()), vec!["t1"]);
         assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("design".into()), ..Default::default() }).unwrap()), vec!["t2"]);
         assert_eq!(ids(&list_all(&f.conn, &TaskFilter { search: Some("docs.example.com".into()), ..Default::default() }).unwrap()), vec!["t2"]);
+
+        teardown(f);
+    }
+
+    /// `file_count` must count both kinds of file attachment a task can have
+    /// (a project file picked from storage, and one dropped in "from the
+    /// computer") added together, not just one of them - otherwise the card's
+    /// attachment badge silently misses local files. `link_count` is its own
+    /// separate column, covering both a link attached from the Links section
+    /// and an ad-hoc URL typed straight into the task.
+    #[test]
+    fn list_all_file_count_and_link_count_cover_both_attachment_kinds() {
+        let f = setup();
+        let now = "2026-01-02T00:00:00+00:00";
+        create(&f.conn, "t1", &f.board_id, &f.status_a, "Task", None, None, None, &f.priority_low, "2026-01-01", now).unwrap();
+
+        tracker_task_local_files::create(&f.conn, "lf1", "t1", "Инструкция.docx", "path/v1", 100, None, now).unwrap();
+
+        let project_id = "link-project-1".to_string();
+        link_projects::create(&f.conn, &project_id, "Bookmarks", now).unwrap();
+        let link_id = "link-1".to_string();
+        links::create(&f.conn, &link_id, &project_id, None, "Design spec", "https://docs.example.com/spec", None, now).unwrap();
+        tracker_task_links::attach(&f.conn, "tl1", "t1", &link_id, "Design spec", "https://docs.example.com/spec", now).unwrap();
+        tracker_task_links::add_adhoc(&f.conn, "tl2", "t1", "Ad-hoc", "https://example.org", now).unwrap();
+
+        let task = list_all(&f.conn, &TaskFilter::default()).unwrap().into_iter().find(|t| t.id == "t1").unwrap();
+        assert_eq!(task.file_count, 1);
+        assert_eq!(task.link_count, 2);
 
         teardown(f);
     }

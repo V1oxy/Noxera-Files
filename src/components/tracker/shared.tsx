@@ -1,4 +1,4 @@
-import { Flag, ListChecks, Paperclip, Pin, RefreshCw, Trash2 } from "lucide-react";
+import { Flag, Link2, ListChecks, Paperclip, Pin, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import type { ContextMenuItem } from "@/components/ContextMenu";
@@ -93,6 +93,16 @@ export function FileCountBadge({ count, className = "" }: { count: number; class
   return (
     <span className={`inline-flex items-center gap-1 text-[11px] text-label-tertiary ${className}`}>
       <Paperclip size={11} />
+      {count}
+    </span>
+  );
+}
+
+export function LinkCountBadge({ count, className = "" }: { count: number; className?: string }) {
+  if (count === 0) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] text-label-tertiary ${className}`}>
+      <Link2 size={11} />
       {count}
     </span>
   );
