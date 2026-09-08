@@ -106,22 +106,33 @@ export function NewTaskModal({ open, defaultBoardId, defaultStatusId, initialFil
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, boards]);
 
+  // Reads/writes statusId via the functional updater form (not the `statusId`
+  // closure) deliberately: this effect and the reset effect above both fire
+  // in the same commit whenever the modal opens (both list `open` as a
+  // dependency), and the reset effect's own `setStatusId(defaultStatusId ??
+  // "")` call hasn't actually applied yet at the point this effect's body
+  // runs - reading the outer `statusId` variable here would alternate
+  // between seeing that queued reset (every other open) and not, since
+  // React only re-runs this effect when `statuses`/`open` change, not on
+  // every `statusId` update. The functional updater instead resolves against
+  // whatever the queued state actually ends up being once React applies
+  // both updates, so this reliably fires exactly once per open regardless of
+  // ordering (this was the root cause of the default status "randomly"
+  // being picked on some opens of the New Task modal and not others).
   useEffect(() => {
-    if (!open) return;
-    if (!statusId && statuses.length > 0) {
-      const def = statuses.find((s) => s.isDefault) ?? statuses[0];
-      setStatusId(def.id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!open || statuses.length === 0) return;
+    setStatusId((prev) => {
+      if (prev) return prev;
+      return (statuses.find((s) => s.isDefault) ?? statuses[0]).id;
+    });
   }, [statuses, open]);
 
   useEffect(() => {
-    if (!open) return;
-    if (!priorityId && priorities.length > 0) {
-      const def = priorities.find((p) => p.isDefault) ?? priorities[0];
-      setPriorityId(def.id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!open || priorities.length === 0) return;
+    setPriorityId((prev) => {
+      if (prev) return prev;
+      return (priorities.find((p) => p.isDefault) ?? priorities[0]).id;
+    });
   }, [priorities, open]);
 
   // Custom fields default from the board's own field defaults (spec section
