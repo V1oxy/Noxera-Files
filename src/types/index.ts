@@ -237,6 +237,20 @@ export interface TrackerTaskFile {
   addedAt: string;
 }
 
+export interface TrackerTaskLink {
+  id: string;
+  taskId: string;
+  /** Set when this points at a row in the Links section; null for a plain
+   * URL typed straight into the task, never stored there. */
+  linkId: string | null;
+  /** False only when linkId pointed at a Links-section row that's since
+   * been deleted - always true for an ad-hoc link. */
+  linkExists: boolean;
+  title: string;
+  url: string;
+  addedAt: string;
+}
+
 export interface TrackerTaskEventPayload {
   [key: string]: unknown;
 }
@@ -283,6 +297,7 @@ export interface TrackerTaskDetail extends TrackerTask {
   fieldValues: TrackerFieldValue[];
   files: TrackerTaskFile[];
   localFiles: TrackerTaskLocalFile[];
+  links: TrackerTaskLink[];
   events: TrackerTaskEvent[];
 }
 

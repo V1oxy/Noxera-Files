@@ -13,7 +13,7 @@ use super::with_ready;
 /// whatever a user (or corrupted data) happens to have typed, which is what
 /// stops this from ever being able to "open" something other than a web
 /// page (a local file, a custom app-launching scheme, etc).
-fn validate_url(url: &str) -> AppResult<()> {
+pub(crate) fn validate_url(url: &str) -> AppResult<()> {
     let lower = url.trim().to_ascii_lowercase();
     if !lower.starts_with("http://") && !lower.starts_with("https://") {
         return Err(AppError::user("Link must start with http:// or https://"));

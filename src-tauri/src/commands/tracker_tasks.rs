@@ -6,10 +6,10 @@ use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::database::{
-    files as files_db, tracker_boards as boards_db, tracker_events, tracker_field_values as field_values_db,
-    tracker_labels as labels_db, tracker_priorities as priorities_db, tracker_statuses as statuses_db,
-    tracker_task_files as task_files_db, tracker_task_local_files as local_files_db, tracker_tasks as tasks_db,
-    versions as versions_db,
+    files as files_db, links as links_db, tracker_boards as boards_db, tracker_events,
+    tracker_field_values as field_values_db, tracker_labels as labels_db, tracker_priorities as priorities_db,
+    tracker_statuses as statuses_db, tracker_task_files as task_files_db, tracker_task_links as task_links_db,
+    tracker_task_local_files as local_files_db, tracker_tasks as tasks_db, versions as versions_db,
 };
 use crate::models::{
     DuplicateOptions, FieldValue, NewTaskFile, Task, TaskDetail, TaskEvent, TaskFilter, TaskInput,
@@ -757,6 +757,76 @@ pub fn open_tracker_task_local_file_version(app: AppHandle, state: State<AppStat
     app.opener()
         .open_path(path.to_string_lossy().to_string(), None::<&str>)
         .map_err(|e| AppError::with_details("Unable to open the file.", e))
+}
+
+// ---- Links (from the Links section, or a plain ad-hoc URL) --------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LinkAddedPayload<'a> {
+    title: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LinkRemovedPayload<'a> {
+    title: &'a str,
+}
+
+/// Attaches an existing Links-section link - `title`/`url` are cached at
+/// this moment (see the `tracker_task_links` table comment for why: shown
+/// once/if that link is later deleted, but the live row is preferred for as
+/// long as it still exists, so an edit to the link elsewhere still shows up).
+#[tauri::command]
+pub fn attach_tracker_task_link(state: State<AppState>, task_id: String, link_id: String) -> AppResult<TaskDetail> {
+    with_ready(&state, |conn, _| {
+        if tasks_db::get(conn, &task_id)?.is_none() {
+            return Err(AppError::user("This task no longer exists."));
+        }
+        let link = links_db::get(conn, &link_id)?.ok_or_else(|| AppError::user("This link no longer exists."))?;
+        let now = now_iso();
+        let id = new_id();
+        task_links_db::attach(conn, &id, &task_id, &link_id, &link.title, &link.url, &now)?;
+        tracker_events::log(conn, &task_id, "link_added", &LinkAddedPayload { title: &link.title }, None, &now)?;
+        tasks_db::get_detail(conn, &task_id, &now)?.ok_or_else(|| AppError::user("This task no longer exists."))
+    })
+}
+
+/// Adds a plain URL straight to the task - never stored in the Links
+/// section, so it doesn't show up there and isn't affected by anything
+/// happening in it.
+#[tauri::command]
+pub fn add_tracker_task_adhoc_link(state: State<AppState>, task_id: String, title: String, url: String) -> AppResult<TaskDetail> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err(AppError::user("Give this link a title."));
+    }
+    let url = url.trim().to_string();
+    crate::commands::links::validate_url(&url)?;
+    with_ready(&state, |conn, _| {
+        if tasks_db::get(conn, &task_id)?.is_none() {
+            return Err(AppError::user("This task no longer exists."));
+        }
+        let now = now_iso();
+        let id = new_id();
+        task_links_db::add_adhoc(conn, &id, &task_id, &title, &url, &now)?;
+        tracker_events::log(conn, &task_id, "link_added", &LinkAddedPayload { title: &title }, None, &now)?;
+        tasks_db::get_detail(conn, &task_id, &now)?.ok_or_else(|| AppError::user("This task no longer exists."))
+    })
+}
+
+/// Removes the task's link to it - the underlying row in the Links section
+/// (if any) is untouched, same as detaching a file never touches the file.
+#[tauri::command]
+pub fn detach_tracker_task_link(state: State<AppState>, task_link_id: String) -> AppResult<TaskDetail> {
+    with_ready(&state, |conn, _| {
+        let link = task_links_db::get(conn, &task_link_id)?
+            .ok_or_else(|| AppError::user("This link is no longer attached."))?;
+        let now = now_iso();
+        task_links_db::detach(conn, &task_link_id)?;
+        tracker_events::log(conn, &link.task_id, "link_removed", &LinkRemovedPayload { title: &link.title }, None, &now)?;
+        tasks_db::get_detail(conn, &link.task_id, &now)?.ok_or_else(|| AppError::user("This task no longer exists."))
+    })
 }
 
 // ---- Comments -----------------------------------------------------------------

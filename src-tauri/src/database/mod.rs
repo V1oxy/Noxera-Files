@@ -14,6 +14,7 @@ pub mod tracker_labels;
 pub mod tracker_priorities;
 pub mod tracker_statuses;
 pub mod tracker_task_files;
+pub mod tracker_task_links;
 pub mod tracker_task_local_files;
 pub mod tracker_tasks;
 pub mod versions;

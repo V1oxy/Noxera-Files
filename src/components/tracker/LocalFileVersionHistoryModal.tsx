@@ -1,4 +1,4 @@
-import { ExternalLink, Plus, RotateCcw } from "lucide-react";
+import { ExternalLink, FileUp, Plus, RotateCcw } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/Button";
@@ -11,6 +11,11 @@ import { formatBytes, formatFullDateTime } from "@/utils/format";
 interface LocalFileVersionHistoryModalProps {
   open: boolean;
   localFile: TrackerTaskLocalFile | null;
+  /** True while an OS-level drag is over the window - this modal's backdrop
+   * covers the whole window while open, so (like the file manager's own
+   * Version History) any drop anywhere is unambiguously a new version of
+   * this one file (see TaskDetailPanel's drop handler). */
+  isDragActive: boolean;
   onClose: () => void;
   onView: (version: TrackerTaskLocalFileVersion) => void;
   onRestore: (version: TrackerTaskLocalFileVersion) => Promise<void>;
@@ -27,6 +32,7 @@ interface LocalFileVersionHistoryModalProps {
 export function LocalFileVersionHistoryModal({
   open,
   localFile,
+  isDragActive,
   onClose,
   onView,
   onRestore,
@@ -52,7 +58,14 @@ export function LocalFileVersionHistoryModal({
     <Modal open={open} onClose={onClose} width={420}>
       <ModalHeader title={localFile?.fileName ?? t("menu.versionHistory")} subtitle={t("menu.versionHistory")} />
       <ModalBody>
-        <div className="max-h-96 space-y-2 overflow-y-auto p-1">
+        <div className="relative max-h-96 space-y-2 overflow-y-auto p-1">
+          {isDragActive && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-apple border-2 border-dashed border-accent bg-surface-modal/95 text-accent backdrop-blur-sm">
+              <FileUp size={24} strokeWidth={1.75} />
+              <p className="text-[13px] font-semibold">{t("history.dropZoneTitle")}</p>
+              <p className="text-[12px] text-label-secondary">{t("history.dropZoneSubtitle")}</p>
+            </div>
+          )}
           {localFile?.versions.map((v) => {
             const isCurrent = v.id === localFile.currentVersionId;
             return (

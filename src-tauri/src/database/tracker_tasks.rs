@@ -2,7 +2,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row, ToSql};
 
 use crate::models::{SortDirection, Task, TaskDetail, TaskFilter, TaskSortField, TaskUpdateInput, TrackerExportFilter};
 
-use super::{tracker_events, tracker_field_values, tracker_task_files, tracker_task_local_files};
+use super::{tracker_events, tracker_field_values, tracker_task_files, tracker_task_links, tracker_task_local_files};
 
 /// Every column `Task` needs, including three correlated-but-indexed
 /// subqueries (`tracker_task_files.task_id` and the
@@ -285,12 +285,13 @@ pub fn get_detail(conn: &Connection, id: &str, now: &str) -> rusqlite::Result<Op
     let field_values = tracker_field_values::list_for_task(conn, id)?;
     let files = tracker_task_files::list_for_task(conn, id)?;
     let local_files = tracker_task_local_files::list_for_task(conn, id)?;
+    let links = tracker_task_links::list_for_task(conn, id)?;
     let events = tracker_events::list_for_task(conn, id)?;
     // Opening the task is the acknowledgement point for "file updated"
     // badges (spec section 9) - clear it *after* building `files` above so
     // this exact response still shows the badge that brought the user here.
     tracker_task_files::clear_unseen(conn, id)?;
-    Ok(Some(TaskDetail { task, field_values, files, local_files, events }))
+    Ok(Some(TaskDetail { task, field_values, files, local_files, links, events }))
 }
 
 pub fn next_position(conn: &Connection, status_id: &str) -> rusqlite::Result<i64> {

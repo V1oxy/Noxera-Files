@@ -182,6 +182,28 @@ pub struct TaskLocalFile {
     pub versions: Vec<TaskLocalFileVersion>,
 }
 
+/// A link attached to a task - either pointing at a row in the Links
+/// section (`link_id` set) or a plain URL typed straight into the task
+/// (`link_id` None, never stored in the Links section). See the
+/// `tracker_task_links` table comment for why `link_id` is deliberately not
+/// a foreign key.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskLink {
+    pub id: String,
+    pub task_id: String,
+    pub link_id: Option<String>,
+    /// False only when `link_id` pointed at a Links-section row that's since
+    /// been deleted - always true for an ad-hoc link, which never had one to
+    /// begin with. `title`/`url` still show something either way (the cached
+    /// values once the source is gone), this just tells the UI whether to
+    /// show a "no longer in Links" hint.
+    pub link_exists: bool,
+    pub title: String,
+    pub url: String,
+    pub added_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskEvent {
@@ -235,6 +257,7 @@ pub struct TaskDetail {
     pub field_values: Vec<FieldValue>,
     pub files: Vec<TaskFile>,
     pub local_files: Vec<TaskLocalFile>,
+    pub links: Vec<TaskLink>,
     pub events: Vec<TaskEvent>,
 }
 

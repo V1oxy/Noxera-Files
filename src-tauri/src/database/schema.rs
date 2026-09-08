@@ -250,6 +250,26 @@ CREATE TABLE IF NOT EXISTS links (
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
+
+-- A task's attached links, two independent kinds in one table: `link_id` set
+-- means "points at a row in `links` above" (deliberately no FK constraint,
+-- same reasoning as `tracker_task_files.file_id` - deleting a link from the
+-- Links section must never fail or cascade just because a task happens to
+-- reference it); `link_id` NULL means an ad-hoc URL typed straight into the
+-- task, never stored in the Links section at all. `cached_title`/
+-- `cached_url` are always set at attach time and are what's shown once a
+-- referenced link no longer exists (or always, for an ad-hoc one) - the live
+-- `links` row is preferred over them for as long as it's still there, so
+-- editing a link's title/url in the Links section is reflected here too.
+CREATE TABLE IF NOT EXISTS tracker_task_links (
+    id            TEXT PRIMARY KEY,
+    task_id       TEXT NOT NULL REFERENCES tracker_tasks(id) ON DELETE CASCADE,
+    link_id       TEXT,
+    cached_title  TEXT NOT NULL,
+    cached_url    TEXT NOT NULL,
+    position      INTEGER NOT NULL DEFAULT 0,
+    added_at      TEXT NOT NULL
+);
 "#;
 
 /// Index definitions only. Run last (after `TABLES_SQL` and `migrate()`),
@@ -287,6 +307,8 @@ CREATE INDEX IF NOT EXISTS idx_tracker_task_local_file_versions_local_file_id ON
 CREATE INDEX IF NOT EXISTS idx_link_groups_project_id ON link_groups(project_id);
 CREATE INDEX IF NOT EXISTS idx_links_project_id ON links(project_id);
 CREATE INDEX IF NOT EXISTS idx_links_group_id ON links(group_id);
+CREATE INDEX IF NOT EXISTS idx_tracker_task_links_task_id ON tracker_task_links(task_id);
+CREATE INDEX IF NOT EXISTS idx_tracker_task_links_link_id ON tracker_task_links(link_id);
 "#;
 
 /// True if `table`'s current schema (as recorded by SQLite) contains the

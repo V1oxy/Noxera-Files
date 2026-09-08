@@ -7,6 +7,7 @@ import {
   FolderClosed,
   HardDrive,
   History,
+  Link as LinkIcon,
   MessageSquare,
   Pin,
   PinOff,
@@ -24,6 +25,7 @@ import { Select } from "@/components/Select";
 import { CustomFieldInputs, fieldInputClass, fieldLabelClass } from "@/components/tracker/CustomFieldInputs";
 import { DuplicateTaskModal } from "@/components/tracker/DuplicateTaskModal";
 import { FilePickerModal, type FilePickerResult } from "@/components/tracker/FilePickerModal";
+import { LinkPickerModal } from "@/components/tracker/LinkPickerModal";
 import { LocalFileVersionHistoryModal } from "@/components/tracker/LocalFileVersionHistoryModal";
 import { PinFileVersionModal } from "@/components/tracker/PinFileVersionModal";
 import { LabelChip, formatEventTime } from "@/components/tracker/shared";
@@ -32,13 +34,17 @@ import { useToast } from "@/hooks/useToast";
 import { useTrackerFields, useTrackerLabels, useTrackerPriorities, useTrackerStatuses, useTrackerTaskDetail } from "@/hooks/useTracker";
 import {
   ApiError,
+  addTrackerTaskAdhocLink,
   addTrackerTaskComment,
   addTrackerTaskLocalFile,
   addTrackerTaskLocalFileVersion,
   attachTrackerTaskFile,
+  attachTrackerTaskLink,
   deleteTrackerTask,
   deleteTrackerTaskComment,
   detachTrackerTaskFile,
+  detachTrackerTaskLink,
+  openLink,
   openTrackerTaskLocalFile,
   openTrackerTaskLocalFileVersion,
   openVersion,
@@ -54,7 +60,15 @@ import {
   updateTrackerTask,
   moveTrackerTask,
 } from "@/services/api";
-import type { TrackerTaskEvent, TrackerTaskFile, TrackerTaskLocalFile, TrackerTaskLocalFileVersion, TrackerTaskUpdateInput } from "@/types";
+import type {
+  Link,
+  TrackerTaskEvent,
+  TrackerTaskFile,
+  TrackerTaskLink,
+  TrackerTaskLocalFile,
+  TrackerTaskLocalFileVersion,
+  TrackerTaskUpdateInput,
+} from "@/types";
 import { formatBytes } from "@/utils/format";
 
 interface TaskDetailPanelProps {
@@ -91,7 +105,11 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
   // stale snapshot object would otherwise keep showing the list from before
   // that action.
   const [localFileHistoryId, setLocalFileHistoryId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"files" | "comments" | "history">("files");
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
+  const [adhocLinkFormOpen, setAdhocLinkFormOpen] = useState(false);
+  const [adhocTitle, setAdhocTitle] = useState("");
+  const [adhocUrl, setAdhocUrl] = useState("");
+  const [tab, setTab] = useState<"files" | "links" | "comments" | "history">("files");
   const [isDragActive, setIsDragActive] = useState(false);
 
   useEffect(() => {
@@ -121,13 +139,29 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
       unlisten.then((f) => f());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId]);
+  }, [taskId, localFileHistoryId]);
 
   async function handleDropPaths(paths: string[]) {
     if (paths.length === 0) return;
     const kinds = await Promise.all(paths.map((p) => pathIsDirectory(p).catch(() => false)));
     const filePaths = paths.filter((_, i) => !kinds[i]);
     if (filePaths.length === 0) return;
+
+    // The version-history modal's own backdrop covers the whole window, so
+    // a drop can never land on anything else while it's open - like the
+    // file manager's own Version History, every drop while it's open is a
+    // new version of that one file, not a new attachment.
+    if (localFileHistoryId) {
+      try {
+        await addTrackerTaskLocalFileVersion(localFileHistoryId, filePaths[0]);
+        await refresh();
+        onChanged();
+      } catch (e) {
+        showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+      }
+      return;
+    }
+
     let succeeded = 0;
     for (const p of filePaths) {
       try {
@@ -331,6 +365,49 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
     }
   }
 
+  async function handleAttachLink(link: Link) {
+    setLinkPickerOpen(false);
+    try {
+      await attachTrackerTaskLink(taskId, link.id);
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  async function handleAddAdhocLink() {
+    if (!adhocTitle.trim() || !adhocUrl.trim()) return;
+    try {
+      await addTrackerTaskAdhocLink(taskId, adhocTitle.trim(), adhocUrl.trim());
+      setAdhocTitle("");
+      setAdhocUrl("");
+      setAdhocLinkFormOpen(false);
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  async function handleRemoveTaskLink(link: TrackerTaskLink) {
+    try {
+      await detachTrackerTaskLink(link.id);
+      await refresh();
+      onChanged();
+    } catch (e) {
+      showToast({ title: t("common.actionErrorFallback"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
+  async function handleOpenTaskLink(link: TrackerTaskLink) {
+    try {
+      await openLink(link.url);
+    } catch (e) {
+      showToast({ title: t("links.openError"), description: e instanceof ApiError ? translateError(e.message) : undefined, variant: "error" });
+    }
+  }
+
   async function handleAddComment() {
     if (!comment.trim()) return;
     try {
@@ -397,7 +474,7 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
     <>
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px] animate-fade-in" onMouseDown={(e) => e.target === e.currentTarget && handleRequestClose()}>
         <div className="animate-scale-in relative flex h-[82vh] w-[760px] max-w-[95vw] flex-col rounded-apple-lg border border-surface-border bg-surface-modal shadow-modal backdrop-blur-apple" onMouseDown={(e) => e.stopPropagation()}>
-          {isDragActive && (
+          {isDragActive && !localFileHistoryId && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-apple-lg border-2 border-dashed border-accent bg-accent/[0.08] backdrop-blur-[1px]">
               <div className="flex flex-col items-center gap-2 text-accent">
                 <HardDrive size={28} />
@@ -532,16 +609,20 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
 
             {/* Sidebar: files + history */}
             <div className="flex w-80 shrink-0 flex-col border-l border-surface-border bg-black/[0.012] dark:bg-white/[0.015]">
-              <div className="flex shrink-0 gap-4 border-b border-surface-border px-4 pt-3">
-                <button onClick={() => setTab("files")} className={`relative pb-2.5 text-[12px] font-medium transition-colors ${tab === "files" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
+              <div className="flex shrink-0 gap-4 overflow-x-auto border-b border-surface-border px-4 pt-3">
+                <button onClick={() => setTab("files")} className={`relative shrink-0 pb-2.5 text-[12px] font-medium transition-colors ${tab === "files" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
                   {t("tracker.tabFiles")} {detail.files.length + detail.localFiles.length > 0 && `(${detail.files.length + detail.localFiles.length})`}
                   {tab === "files" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}
                 </button>
-                <button onClick={() => setTab("comments")} className={`relative pb-2.5 text-[12px] font-medium transition-colors ${tab === "comments" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
+                <button onClick={() => setTab("links")} className={`relative shrink-0 pb-2.5 text-[12px] font-medium transition-colors ${tab === "links" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
+                  {t("tracker.tabLinks")} {detail.links.length > 0 && `(${detail.links.length})`}
+                  {tab === "links" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}
+                </button>
+                <button onClick={() => setTab("comments")} className={`relative shrink-0 pb-2.5 text-[12px] font-medium transition-colors ${tab === "comments" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
                   {t("tracker.tabComments")} {commentEvents.length > 0 && `(${commentEvents.length})`}
                   {tab === "comments" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}
                 </button>
-                <button onClick={() => setTab("history")} className={`relative pb-2.5 text-[12px] font-medium transition-colors ${tab === "history" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
+                <button onClick={() => setTab("history")} className={`relative shrink-0 pb-2.5 text-[12px] font-medium transition-colors ${tab === "history" ? "text-accent" : "text-label-secondary hover:text-label-primary"}`}>
                   {t("tracker.tabHistory")}
                   {tab === "history" && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-accent" />}
                 </button>
@@ -650,6 +731,86 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
                     </button>
                   </div>
                 </div>
+              ) : tab === "links" ? (
+                <div className="flex-1 space-y-2 overflow-y-auto p-3">
+                  {detail.links.map((link) => (
+                    <div key={link.id} className="group rounded-apple border border-surface-border bg-surface-card p-2.5 shadow-card">
+                      <div className="flex items-start gap-2">
+                        <LinkIcon size={15} className="mt-0.5 shrink-0 text-label-secondary" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[12.5px] font-medium text-label-primary">{link.title}</p>
+                          <p className="mt-0.5 truncate text-[11px] text-label-secondary">{link.url}</p>
+                          {!link.linkExists && <p className="mt-1 text-[11px] text-danger">{t("tracker.linkGone")}</p>}
+                        </div>
+                        <button onClick={() => handleRemoveTaskLink(link)} title={t("tracker.removeFile")} className="shrink-0 rounded-apple-sm p-0.5 text-label-tertiary opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100">
+                          <X size={12} />
+                        </button>
+                      </div>
+                      <button onClick={() => handleOpenTaskLink(link)} className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-accent hover:underline">
+                        <ExternalLink size={11} />
+                        {t("menu.open")}
+                      </button>
+                    </div>
+                  ))}
+
+                  {adhocLinkFormOpen ? (
+                    <div className="rounded-apple border border-accent/40 bg-surface-card p-2">
+                      <input
+                        autoFocus
+                        value={adhocTitle}
+                        onChange={(e) => setAdhocTitle(e.target.value)}
+                        placeholder={t("tracker.linkTitlePlaceholder")}
+                        className="w-full bg-transparent text-[12.5px] text-label-primary outline-none placeholder:text-label-tertiary"
+                      />
+                      <input
+                        value={adhocUrl}
+                        onChange={(e) => setAdhocUrl(e.target.value)}
+                        placeholder={t("tracker.linkUrlPlaceholder")}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddAdhocLink();
+                          else if (e.key === "Escape") setAdhocLinkFormOpen(false);
+                        }}
+                        className="mt-1 w-full bg-transparent text-[12.5px] text-label-primary outline-none placeholder:text-label-tertiary"
+                      />
+                      <div className="mt-1.5 flex justify-end gap-1">
+                        <button
+                          onClick={() => {
+                            setAdhocLinkFormOpen(false);
+                            setAdhocTitle("");
+                            setAdhocUrl("");
+                          }}
+                          className="rounded-apple-sm p-1 text-label-tertiary hover:bg-black/[0.06] dark:hover:bg-white/[0.1]"
+                        >
+                          <X size={13} />
+                        </button>
+                        <button
+                          disabled={!adhocTitle.trim() || !adhocUrl.trim()}
+                          onClick={handleAddAdhocLink}
+                          className="rounded-apple-sm bg-accent px-2 py-1 text-[11.5px] font-medium text-white disabled:opacity-40"
+                        >
+                          {t("common.create")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      <button
+                        onClick={() => setLinkPickerOpen(true)}
+                        className="flex items-center justify-center gap-1.5 rounded-apple-sm border border-dashed border-surface-border py-2 text-[11.5px] text-label-secondary transition-colors hover:border-accent/40 hover:text-accent"
+                      >
+                        <LinkIcon size={13} />
+                        {t("tracker.attachFromLinks")}
+                      </button>
+                      <button
+                        onClick={() => setAdhocLinkFormOpen(true)}
+                        className="flex items-center justify-center gap-1.5 rounded-apple-sm border border-dashed border-surface-border py-2 text-[11.5px] text-label-secondary transition-colors hover:border-accent/40 hover:text-accent"
+                      >
+                        <Plus size={13} />
+                        {t("tracker.addPlainLink")}
+                      </button>
+                    </div>
+                  )}
+                </div>
               ) : tab === "comments" ? (
                 <div className="flex flex-1 flex-col overflow-hidden">
                   <div className="flex-1 overflow-y-auto px-4 py-3">
@@ -700,11 +861,14 @@ export function TaskDetailPanel({ taskId, onClose, onChanged, onOpenProject, onD
       <LocalFileVersionHistoryModal
         open={localFileHistoryTarget !== null}
         localFile={localFileHistoryTarget}
+        isDragActive={isDragActive}
         onClose={() => setLocalFileHistoryId(null)}
         onView={handleOpenLocalFileVersion}
         onRestore={(version) => (localFileHistoryTarget ? handleRestoreLocalFileVersion(localFileHistoryTarget, version) : Promise.resolve())}
         onAddVersion={() => localFileHistoryTarget && handleAddLocalFileVersion(localFileHistoryTarget)}
       />
+
+      <LinkPickerModal open={linkPickerOpen} onCancel={() => setLinkPickerOpen(false)} onConfirm={handleAttachLink} />
 
       <DeleteModal
         open={deleteOpen}
@@ -756,6 +920,10 @@ function eventText(event: TrackerTaskEvent, t: (key: string, vars?: Record<strin
       return { title: t("tracker.event.localFileVersionAddedTitle"), detail: `${String(payload.fileName ?? "")} · v${String(payload.versionNumber ?? "")}` };
     case "local_file_version_restored":
       return { title: t("tracker.event.localFileVersionRestoredTitle"), detail: `${String(payload.fileName ?? "")} · v${String(payload.versionNumber ?? "")}` };
+    case "link_added":
+      return { title: t("tracker.event.linkAddedTitle"), detail: String(payload.title ?? "") };
+    case "link_removed":
+      return { title: t("tracker.event.linkRemovedTitle"), detail: String(payload.title ?? "") };
     case "file_pin_changed":
       return {
         title: t(payload.alwaysLatest ? "tracker.event.filePinnedToLatestTitle" : "tracker.event.filePinnedToVersionTitle"),

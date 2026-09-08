@@ -353,6 +353,12 @@ export const openTrackerTaskLocalFile = (localFileId: string) =>
   call<void>("open_tracker_task_local_file", { localFileId });
 export const openTrackerTaskLocalFileVersion = (versionId: string) =>
   call<void>("open_tracker_task_local_file_version", { versionId });
+export const attachTrackerTaskLink = (taskId: string, linkId: string) =>
+  call<TrackerTaskDetail>("attach_tracker_task_link", { taskId, linkId });
+export const addTrackerTaskAdhocLink = (taskId: string, title: string, url: string) =>
+  call<TrackerTaskDetail>("add_tracker_task_adhoc_link", { taskId, title, url });
+export const detachTrackerTaskLink = (taskLinkId: string) =>
+  call<TrackerTaskDetail>("detach_tracker_task_link", { taskLinkId });
 export const addTrackerTaskComment = (taskId: string, text: string) =>
   call<TrackerTaskEvent>("add_tracker_task_comment", { taskId, text });
 export const deleteTrackerTaskComment = (eventId: string) =>
