@@ -1,6 +1,6 @@
 [package]
 name = "noxera-files"
-version = "0.6.11"
+version = "0.6.12"
 description = "Noxera Files - local-first project & file version manager"
 authors = ["Noxera"]
 edition = "2021"
